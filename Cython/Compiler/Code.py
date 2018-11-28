@@ -2069,6 +2069,8 @@ class CCodeWriter(object):
                 self.putln("%s = NULL;" % decl)
             elif type.is_memoryviewslice:
                 self.putln("%s = %s;" % (decl, type.literal_code(type.default_value)))
+            elif type.is_struct and type.is_extension_type and type.nogil:
+                self.putln("%s;" % decl)
             else:
                 self.putln("%s%s;" % (static and "static " or "", decl))
 

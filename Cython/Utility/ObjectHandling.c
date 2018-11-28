@@ -1878,6 +1878,51 @@ try_unpack:
     return 0;
 }
 
+/////////////// CythonReferenceCounting.proto ///////////////
+
+#include <stdlib.h>
+#include <stddef.h>
+
+#if !defined(__GNUC__)
+#define GCC_VERSION (__GNUC__ * 10000 \
+                     + __GNUC_MINOR__ * 100 \
+                     + __GNUC_PATCHLEVEL__)
+/* Test for GCC > 4.9.0 */
+#if GCC_VERSION < 40900
+#error atomic.h works only with GCC newer than version 4.9
+#endif /* GNUC >= 4.9 */
+
+#endif /* Has GCC */
+
+// #include <stdatomic.h>
+
+/* CyObject_HEAD defines the initial segment of every CyObject. */
+#define CyObject_HEAD                   \
+    int ob_refcnt;               \
+    void (*cdealloc)();
+
+struct CyObject {
+  CyObject_HEAD
+};
+
+/* Cast argument to PyObject* type. */
+#define _CyObject_CAST(op) ((struct CyObject*)(op))
+
+// XXX: Without scope analysis this is useless...
+/*
+static inline void _Cy_DECREF(struct CyObject *op) {
+  if (atomic_fetch_sub(&(op->ob_refcnt), 1) == 1) {
+    op->cdealloc(op);
+  }
+}
+
+static inline void _Cy_INCREF(struct CyObject *op) {
+  atomic_fetch_add(&(op->ob_refcnt), 1);
+}
+
+#define Cy_INCREF(op) _Cy_INCREF(_CyObject_CAST(op))
+#define Cy_DECREF(op) _Cy_DECREF(_CyObject_CAST(op))
+*/
 
 /////////////// UnpackUnboundCMethod.proto ///////////////
 

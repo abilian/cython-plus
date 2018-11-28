@@ -2247,7 +2247,7 @@ def p_statement(s, ctx, first_statement = 0):
     elif s.sy == 'IF':
         return p_IF_statement(s, ctx)
     elif s.sy == '@':
-        if ctx.level not in ('module', 'class', 'c_class', 'function', 'property', 'module_pxd', 'c_class_pxd', 'other'):
+        if ctx.level not in ('module', 'class', 'c_class', 'class_nogil', 'function', 'property', 'module_pxd', 'c_class_pxd', 'other'):
             s.error('decorator not allowed here')
         s.level = ctx.level
         decorators = p_decorators(s)
@@ -2265,11 +2265,14 @@ def p_statement(s, ctx, first_statement = 0):
         cdef_flag = 1
         s.next()
     elif s.sy == 'cpdef':
+        if ctx.level == 'c_class_nogil':
+            s.error('cpdef statement not allowed in nogil extension type')
+        s.level = ctx.level
         cdef_flag = 1
         overridable = 1
         s.next()
     if cdef_flag:
-        if ctx.level not in ('module', 'module_pxd', 'function', 'c_class', 'c_class_pxd'):
+        if ctx.level not in ('module', 'module_pxd', 'function', 'c_class', 'c_class_nogil', 'c_class_pxd'):
             s.error('cdef statement not allowed here')
         s.level = ctx.level
         node = p_cdef_statement(s, ctx(overridable=overridable))
@@ -2289,6 +2292,8 @@ def p_statement(s, ctx, first_statement = 0):
             # as part of a cdef class
             if ('pxd' in ctx.level) and (ctx.level != 'c_class_pxd'):
                 s.error('def statement not allowed here')
+            if ctx.level == 'c_class_nogil':
+               s.error('def statement not allowed in nogil extension type, only cdef with nogil is allowed')
             s.level = ctx.level
             return p_def_statement(s, decorators)
         elif s.sy == 'class':
@@ -2299,7 +2304,7 @@ def p_statement(s, ctx, first_statement = 0):
             if ctx.level not in ('module', 'module_pxd'):
                 s.error("include statement not allowed here")
             return p_include_statement(s, ctx)
-        elif ctx.level == 'c_class' and s.sy == 'IDENT' and s.systring == 'property':
+        elif ctx.level in ('c_class', 'c_class_nogil') and s.sy == 'IDENT' and s.systring == 'property':
             return p_property_decl(s)
         elif s.sy == 'pass' and ctx.level != 'property':
             return p_pass_statement(s, with_newline=True)
@@ -3318,7 +3323,7 @@ def p_c_modifiers(s):
     return []
 
 def p_c_func_or_var_declaration(s, pos, ctx):
-    cmethod_flag = ctx.level in ('c_class', 'c_class_pxd')
+    cmethod_flag = ctx.level in ('c_class', 'c_class_pxd', 'c_class_nogil')
     modifiers = p_c_modifiers(s)
     base_type = p_c_base_type(s, nonempty = 1, templates = ctx.templates)
     declarator = p_c_declarator(s, ctx(modifiers=modifiers), cmethod_flag = cmethod_flag,
@@ -3337,8 +3342,13 @@ def p_c_func_or_var_declaration(s, pos, ctx):
             fatal=False)
         s.next()
         p_test(s)  # Keep going, but ignore result.
+    if s.sy == 'nogil':
+        nogil = p_nogil(s)
+        s.next()
+        if ctx.level == 'c_class_nogil' and not nogil:
+            s.error("Only C function with nogil allowed in nogil extension")
     if s.sy == ':':
-        if ctx.level not in ('module', 'c_class', 'module_pxd', 'c_class_pxd', 'cpp_class') and not ctx.templates:
+        if ctx.level not in ('module', 'c_class', 'module_pxd', 'c_class_pxd', 'cpp_class', 'c_class_nogil') and not ctx.templates:
             s.error("C function definition not allowed here")
         doc, suite = p_suite_with_docstring(s, Ctx(level='function'))
         result = Nodes.CFuncDefNode(pos,
@@ -3366,7 +3376,7 @@ def p_c_func_or_var_declaration(s, pos, ctx):
             declarators.append(declarator)
         doc_line = s.start_line + 1
         s.expect_newline("Syntax error in C variable declaration", ignore_semicolon=True)
-        if ctx.level in ('c_class', 'c_class_pxd') and s.start_line == doc_line:
+        if ctx.level in ('c_class', 'c_class_pxd', 'c_class_nogil') and s.start_line == doc_line:
             doc = p_doc_string(s)
         else:
             doc = None
@@ -3567,9 +3577,12 @@ def p_c_class_definition(s, pos,  ctx):
         if ctx.visibility not in ('public', 'extern') and not ctx.api:
             error(s.position(), "Name options only allowed for 'public', 'api', or 'extern' C class")
         objstruct_name, typeobj_name, check_size = p_c_class_options(s)
+    nogil = p_nogil(s)
     if s.sy == ':':
         if ctx.level == 'module_pxd':
             body_level = 'c_class_pxd'
+        elif nogil:
+            body_level = 'c_class_nogil'
         else:
             body_level = 'c_class'
         doc, body = p_suite_with_docstring(s, Ctx(level=body_level))
@@ -3608,7 +3621,8 @@ def p_c_class_definition(s, pos,  ctx):
         check_size = check_size,
         in_pxd = ctx.level == 'module_pxd',
         doc = doc,
-        body = body)
+        body = body,
+        nogil = nogil or ctx.nogil)
 
 
 def p_c_class_options(s):

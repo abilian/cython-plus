@@ -1202,6 +1202,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             self.sue_header_footer(type, "struct", type.objstruct_cname)
         code.putln(header)
         base_type = type.base_type
+        nogil = type.nogil
         if base_type:
             basestruct_cname = base_type.objstruct_cname
             if basestruct_cname == "PyTypeObject":
@@ -1212,6 +1213,16 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     ("struct ", "")[base_type.typedef_flag],
                     basestruct_cname,
                     Naming.obj_base_cname))
+        elif nogil:
+            # Extension type with nogil keyword indicate it is a CPython-free struct
+            code.globalstate.use_utility_code(
+                UtilityCode.load_cached("CythonReferenceCounting", "ObjectHandling.c"))
+            code.putln(
+                "// nogil"
+            )
+            code.putln(
+                "int ob_refcnt;" # "CyObject_HEAD;" Sometimes the CythonReferenceCounting was put after the nogil extension declaration, WTF!!!
+            )
         else:
             code.putln(
                 "PyObject_HEAD")

@@ -1580,7 +1580,7 @@ class ModuleScope(Scope):
     def declare_c_class(self, name, pos, defining=0, implementing=0,
             module_name=None, base_type=None, objstruct_cname=None,
             typeobj_cname=None, typeptr_cname=None, visibility='private',
-            typedef_flag=0, api=0, check_size=None,
+            typedef_flag=0, api=0, nogil=0, check_size=None,
             buffer_defaults=None, shadow=0):
         # If this is a non-extern typedef class, expose the typedef, but use
         # the non-typedef struct internally to avoid needing forward
@@ -1613,8 +1613,15 @@ class ModuleScope(Scope):
         #  Make a new entry if needed
         #
         if not entry or shadow:
-            type = PyrexTypes.PyExtensionType(
-                name, typedef_flag, base_type, visibility == 'extern', check_size=check_size)
+            if nogil:
+                pass
+            if nogil:
+                type = PyrexTypes.CythonExtensionType(
+                        name, typedef_flag, base_type, visibility == 'extern', check_size=check_size)
+            else:
+                type = PyrexTypes.PyExtensionType(
+                        name, typedef_flag, base_type, visibility == 'extern', check_size=check_size)
+            type.nogil = nogil
             type.pos = pos
             type.buffer_defaults = buffer_defaults
             if objtypedef_cname is not None:
@@ -2334,7 +2341,8 @@ class CClassScope(ClassScope):
                           defining=0, modifiers=(), utility_code=None, overridable=False):
         name = self.mangle_class_private_name(name)
         if get_special_method_signature(name) and not self.parent_type.is_builtin_type:
-            error(pos, "Special methods must be declared with 'def', not 'cdef'")
+            if not(hasattr(self.parent_type, "nogil") and self.parent_type.nogil and self.parent_type.is_struct_or_union):
+                error(pos, "Special methods must be declared with 'def', not 'cdef'")
         args = type.args
         if not type.is_static_method:
             if not args:

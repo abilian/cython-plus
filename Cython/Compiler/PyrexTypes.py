@@ -246,6 +246,7 @@ class PyrexType(BaseType):
     is_cfunction = 0
     is_struct_or_union = 0
     is_cpp_class = 0
+    is_cyp_class = 0
     is_cpp_string = 0
     is_struct = 0
     is_enum = 0
@@ -1330,215 +1331,6 @@ class PyObjectType(PyrexType):
     def nullcheck_string(self, cname):
         return cname
 
-
-class CythonObjectType(PyrexType):
-    #
-    #  Base class for all nogil extension object types (reference-counted).
-    #
-
-    name = "cythonobject"
-    is_pyobject = 0
-    default_value = "0"
-    declaration_value = "0"
-    buffer_defaults = None
-    is_extern = False
-    is_subclassed = False
-    is_gc_simple = False
-
-    def __str__(self):
-        return "Cython object"
-
-    def __repr__(self):
-        return "<CythonObjectType>"
-
-    def can_coerce_to_pyobject(self, env):
-        return False
-
-    def can_coerce_from_pyobject(self, env):
-        return False
-
-    def default_coerced_ctype(self):
-        """The default C type that this Python type coerces to, or None."""
-        return None
-
-    def assignable_from(self, src_type):
-        # except for pointers, conversion will be attempted
-        # return not src_type.is_ptr or src_type.is_string or src_type.is_pyunicode_ptr
-        return False
-
-    def declaration_code(self, entity_code,
-            for_display = 0, dll_linkage = None, pyrex = 0):
-        raise NotImplementedError("Calling declartion_code on Cython object")
-        if pyrex or for_display:
-            base_code = "object"
-        else:
-            base_code = public_decl("PyObject", dll_linkage)
-            entity_code = "*%s" % entity_code
-        return self.base_declaration_code(base_code, entity_code)
-
-    def as_pyobject(self, cname):
-        raise NotImplementedError("Calling as_pyobject on Cython object")
-        if (not self.is_complete()) or self.is_extension_type:
-            return "(PyObject *)" + cname
-        else:
-            return cname
-
-    def py_type_name(self):
-        raise NotImplementedError("Calling py_type_name on Cython object")
-        return "cythonobject"
-
-    def __lt__(self, other):
-        """
-        Make sure we sort highest, as instance checking on py_type_name
-        ('object') is always true
-        """
-        return False
-
-    def global_init_code(self, entry, code):
-        raise NotImplementedError("Calling global_init_code on Cython object")
-        code.put_init_var_to_py_none(entry, nanny=False)
-
-    def check_for_null_code(self, cname):
-        raise NotImplementedError("Calling check_for_null_code on Cython object")
-        return cname
-
-
-class CythonExtensionType(CythonObjectType):
-    #
-    #  A Cython extension type with nogil flag
-    # TODO: This type may need big amend
-    #
-    #  name             string
-    #  scope            CClassScope      Attribute namespace
-    #  visibility       string
-    #  typedef_flag     boolean
-    #  base_type        PyExtensionType or None
-    #  nogil            boolean
-    #  module_name      string or None   Qualified name of defining module
-    #  objstruct_cname  string           Name of PyObject struct
-    #  objtypedef_cname string           Name of PyObject struct typedef
-    #  typeobj_cname    string or None   C code fragment referring to type object
-    #  typeptr_cname    string or None   Name of pointer to external type object
-    #  vtabslot_cname   string           Name of C method table member
-    #  vtabstruct_cname string           Name of C method table struct
-    #  vtabptr_cname    string           Name of pointer to C method table
-    #  vtable_cname     string           Name of C method table definition
-    #  early_init       boolean          Whether to initialize early (as opposed to during module execution).
-    #  defered_declarations [thunk]      Used to declare class hierarchies in order
-    #  check_size       'warn', 'error', 'ignore'    What to do if tp_basicsize does not match
-
-    is_extension_type = 1
-    is_struct = 1
-    is_struct_or_union = 1
-    nogil = 1
-    is_pyobject = 0
-    has_attributes = 1
-    early_init = 1
-
-    objtypedef_cname = None
-
-    def __init__(self, name, typedef_flag, base_type, is_external=0, check_size=None):
-        self.name = name
-        self.scope = None
-        self.typedef_flag = typedef_flag
-        if base_type is not None:
-            base_type.is_subclassed = True
-        self.base_type = base_type
-        self.nogil = False
-        self.module_name = None
-        self.objstruct_cname = None
-        self.typeobj_cname = None
-        self.typeptr_cname = None
-        self.vtabslot_cname = None
-        self.vtabstruct_cname = None
-        self.vtabptr_cname = None
-        self.vtable_cname = None
-        self.is_external = is_external
-        self.check_size = check_size or 'warn'
-        self.defered_declarations = []
-
-    def set_scope(self, scope):
-        self.scope = scope
-        if scope:
-            scope.parent_type = self
-
-    def needs_nonecheck(self):
-        return True
-
-    def subtype_of_resolved_type(self, other_type):
-        if other_type.is_extension_type or other_type.is_builtin_type:
-            return self is other_type or (
-                self.base_type and self.base_type.subtype_of(other_type))
-        else:
-            return other_type is py_object_type
-
-    def typeobj_is_available(self):
-        # Do we have a pointer to the type object?
-        return self.typeptr_cname
-
-    def typeobj_is_imported(self):
-        # If we don't know the C name of the type object but we do
-        # know which module it's defined in, it will be imported.
-        return self.typeobj_cname is None and self.module_name is not None
-
-    def assignable_from(self, src_type):
-        if self == src_type:
-            return True
-        if isinstance(src_type, PyExtensionType):
-            if src_type.base_type is not None:
-                return self.assignable_from(src_type.base_type)
-        if isinstance(src_type, BuiltinObjectType):
-            # FIXME: This is an ugly special case that we currently
-            # keep supporting.  It allows users to specify builtin
-            # types as external extension types, while keeping them
-            # compatible with the real builtin types.  We already
-            # generate a warning for it.  Big TODO: remove!
-            return (self.module_name == '__builtin__' and
-                    self.name == src_type.name)
-        return False
-
-    def declaration_code(self, entity_code,
-            for_display = 0, dll_linkage = None, pyrex = 0, deref = 0):
-        if pyrex or for_display:
-            base_code = self.name
-        else:
-            if self.typedef_flag:
-                objstruct = self.objstruct_cname
-            else:
-                objstruct = "struct %s" % self.objstruct_cname
-            base_code = public_decl(objstruct, dll_linkage)
-            if deref:
-                assert not entity_code
-            else:
-                entity_code = "*%s" % entity_code
-        return self.base_declaration_code(base_code, entity_code)
-
-    def type_test_code(self, py_arg, notnone=False):
-
-        none_check = "((%s) == Py_None)" % py_arg
-        type_check = "likely(__Pyx_TypeTest(%s, %s))" % (
-            py_arg, self.typeptr_cname)
-        if notnone:
-            return type_check
-        else:
-            return "likely(%s || %s)" % (none_check, type_check)
-
-    def attributes_known(self):
-        return self.scope is not None
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        return "<CythonExtensionType %s%s>" % (self.scope.class_name,
-            ("", " typedef")[self.typedef_flag])
-
-    def py_type_name(self):
-        if not self.module_name:
-            return self.name
-
-        return "__import__(%r, None, None, ['']).%s" % (self.module_name,
-                                                        self.name)
 
 builtin_types_that_cannot_create_refcycles = set([
     'object', 'bool', 'int', 'long', 'float', 'complex',
@@ -2922,8 +2714,9 @@ class CPtrType(CPointerBaseType):
                 return self.base_type.pointer_assignable_from_resolved_type(other_type)
             else:
                 return 0
-        if (self.base_type.is_cpp_class and other_type.is_ptr
-                and other_type.base_type.is_cpp_class and other_type.base_type.is_subclass(self.base_type)):
+        if (self.base_type.is_cpp_class and (other_type.is_ptr
+                and other_type.base_type.is_cpp_class and other_type.base_type.is_subclass(self.base_type)
+                or other_type.is_cyp_class and other_type.is_subclass(self.base_type))):
             return 1
         if other_type.is_array or other_type.is_ptr:
             return self.base_type.is_void or self.base_type.same_as(other_type.base_type)
@@ -3901,7 +3694,7 @@ class CppClassType(CType):
 
     subtypes = ['templates']
 
-    def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None):
+    def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0):
         self.name = name
         self.cname = cname
         self.scope = scope
@@ -3915,6 +3708,7 @@ class CppClassType(CType):
         else:
             self.specializations = {}
         self.is_cpp_string = cname in cpp_string_conversions
+        self.nogil=nogil
 
     def use_conversion_utility(self, from_or_to):
         pass
@@ -4073,7 +3867,9 @@ class CppClassType(CType):
             return self.specializations[key]
         template_values = [t.specialize(values) for t in self.templates]
         specialized = self.specializations[key] = \
-            CppClassType(self.name, None, self.cname, [], template_values, template_type=self)
+            CppClassType(self.name, None, self.cname, [], template_values, template_type=self)\
+            if not self.is_cyp_class else\
+            CypClassType(self.name, None, self.cname, [], template_values, template_type=self)
         # Need to do these *after* self.specializations[key] is set
         # to avoid infinite recursion on circular references.
         specialized.base_classes = [b.specialize(values) for b in self.base_classes]
@@ -4226,6 +4022,8 @@ class CppClassType(CType):
         # Make it "nogil" if the base classes allow it.
         nogil = True
         for base in self.base_classes:
+            if base is cy_object_type:
+                continue
             base_constructor = base.scope.lookup('<init>')
             if base_constructor and not base_constructor.type.nogil:
                 nogil = False
@@ -4305,6 +4103,50 @@ class CppScopedEnumType(CType):
             outer_module_scope=env.global_scope())
 
         env.use_utility_code(rst)
+
+
+class CypClassType(CppClassType):
+    is_cyp_class = 1
+
+    def declaration_code(self, entity_code,
+            for_display = 0, dll_linkage = None, pyrex = 0,
+            template_params = None):
+        if entity_code:
+            entity_code = "*%s" % entity_code
+        return super(CypClassType, self).declaration_code(entity_code,
+                for_display=for_display, dll_linkage=dll_linkage,
+                pyrex=pyrex, template_params=template_params)
+
+    def check_nullary_constructor(self, pos, msg="stack allocated"):
+        # We are wrapping the constructor => we manipulate the object through pointers like PyExtTypes => don't care about this check
+        return
+
+    def cast_code(self, expr_code):
+        return "((%s)%s)" % (self.declaration_code(''), expr_code)
+
+    def assignable_from_resolved_type(self, other_type):
+        if other_type.is_ptr and other_type.base_type.is_cpp_class and other_type.base_type.is_subclass(self):
+            return 1
+        return super(CypClassType, self).assignable_from_resolved_type(other_type)
+
+    def get_constructor(self, pos):
+        # This is (currently) only called by new statements.
+        # In cypclass, it means direct memory allocation:
+        # regardless of __init__ presence/absence,
+        # new is forced to be called without any arguments,
+        # and doesn't call any __init__
+        # (the mapping from cython __init__ to c++ constructors isn't done
+        # for cypclass, instead a default empty constructor is declared,
+        # and calls to __init__ are performed by wrappers)
+        # As we do not care about declared __init__ in the scope,
+        # we just return a correct but fake entry.
+        from . import Symtab
+        init_type = CFuncType(c_void_type, [], nogil=1)
+        init_cname = "__unused__"
+        init_name = "<unused>"
+        init_entry = Symtab.Entry(init_name, init_cname, init_type, pos = pos)
+        init_entry.is_cfunction = 1
+        return init_entry
 
 
 class TemplatePlaceholderType(CType):
@@ -4566,6 +4408,8 @@ error_type =    ErrorType()
 unspecified_type = UnspecifiedType()
 
 py_object_type = PyObjectType()
+
+cy_object_type = CypClassType('cyobject', None, "CyObject", None)
 
 c_void_type =        CVoidType()
 

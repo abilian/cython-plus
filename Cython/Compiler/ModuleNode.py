@@ -6,7 +6,7 @@ from __future__ import absolute_import
 
 import cython
 cython.declare(Naming=object, Options=object, PyrexTypes=object, TypeSlots=object,
-               error=object, warning=object, py_object_type=object, UtilityCode=object,
+               error=object, warning=object, py_object_type=object, cy_object_type=object, UtilityCode=object,
                EncodedString=object, re=object)
 
 from collections import defaultdict
@@ -28,7 +28,7 @@ from . import PyrexTypes
 from . import Pythran
 
 from .Errors import error, warning
-from .PyrexTypes import py_object_type
+from .PyrexTypes import py_object_type, cy_object_type
 from ..Utils import open_new_file, replace_suffix, decode_filename, build_hex_version
 from .Code import UtilityCode, IncludeCode, TempitaUtilityCode
 from .StringEncoding import EncodedString, encoded_string_or_bytes_literal
@@ -981,17 +981,21 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             # Just let everything be public.
             code.put("struct %s" % type.cname)
             if type.base_classes:
-                base_class_decl = ", public ".join(
-                    [base_class.empty_declaration_code() for base_class in type.base_classes])
+                base_class_list = [base_class.empty_declaration_code() for base_class in type.base_classes]
+                if type.is_cyp_class and type.base_classes[-1] is cy_object_type:
+                    base_class_list[-1] = "virtual " + base_class_list[-1]
+                base_class_decl = ", public ".join(base_class_list)
                 code.put(" : public %s" % base_class_decl)
             code.putln(" {")
             self.generate_type_header_code(scope.type_entries, code)
+            self.generate_cyp_class_wrapper_definitions(scope.sue_entries, code)
             py_attrs = [e for e in scope.entries.values()
                         if e.type.is_pyobject and not e.is_inherited]
             has_virtual_methods = False
             constructor = None
             destructor = None
             for attr in scope.var_entries:
+                cname = attr.cname
                 if attr.type.is_cfunction and attr.type.is_static_method:
                     code.put("static ")
                 elif attr.name == "<init>":
@@ -1002,7 +1006,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 elif attr.type.is_cfunction:
                     code.put("virtual ")
                     has_virtual_methods = True
-                code.putln("%s;" % attr.type.declaration_code(attr.cname))
+                elif attr.type.is_cyp_class:
+                    cname = "%s = NULL" % cname
+                code.putln("%s;" % attr.type.declaration_code(cname))
             is_implementing = 'init_module' in code.globalstate.parts
 
             def generate_cpp_constructor_code(arg_decls, arg_names, is_implementing, py_attrs, constructor):
@@ -1084,6 +1090,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     code.putln("%s(const %s& __Pyx_other);" % (type.cname, type.cname))
                     code.putln("%s& operator=(const %s& __Pyx_other);" % (type.cname, type.cname))
             code.putln("};")
+
+        if type.is_cyp_class:
+            code.globalstate.use_utility_code(
+                UtilityCode.load("CyObjects", "CyObjects.cpp", proto_block="utility_code_proto_before_types"))
 
     def generate_enum_definition(self, entry, code):
         code.mark_pos(entry.pos)
@@ -1202,7 +1212,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             self.sue_header_footer(type, "struct", type.objstruct_cname)
         code.putln(header)
         base_type = type.base_type
-        nogil = type.nogil
         if base_type:
             basestruct_cname = base_type.objstruct_cname
             if basestruct_cname == "PyTypeObject":
@@ -1213,16 +1222,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     ("struct ", "")[base_type.typedef_flag],
                     basestruct_cname,
                     Naming.obj_base_cname))
-        elif nogil:
-            # Extension type with nogil keyword indicate it is a CPython-free struct
-            code.globalstate.use_utility_code(
-                UtilityCode.load_cached("CythonReferenceCounting", "ObjectHandling.c"))
-            code.putln(
-                "// nogil"
-            )
-            code.putln(
-                "int ob_refcnt;" # "CyObject_HEAD;" Sometimes the CythonReferenceCounting was put after the nogil extension declaration, WTF!!!
-            )
         else:
             code.putln(
                 "PyObject_HEAD")

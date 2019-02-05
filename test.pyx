@@ -31,7 +31,7 @@ from libc.stdio cimport printf
 
 
 # cdef class SomeMemory:
-cdef class SomeMemory nogil:
+ccdef class SomeMemory:
   """
   This is a cdef class which is also called
   a extensino type. It is a kind of C struct

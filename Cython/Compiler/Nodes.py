@@ -7,7 +7,7 @@ from __future__ import absolute_import
 import cython
 cython.declare(sys=object, os=object, copy=object,
                Builtin=object, error=object, warning=object, Naming=object, PyrexTypes=object,
-               py_object_type=object, ModuleScope=object, LocalScope=object, ClosureScope=object,
+               py_object_type=object, cy_object_type=object, ModuleScope=object, LocalScope=object, ClosureScope=object,
                StructOrUnionScope=object, PyClassScope=object,
                CppClassScope=object, UtilityCode=object, EncodedString=object,
                error_type=object, _py_int_types=object)
@@ -20,7 +20,7 @@ from .Errors import error, warning, InternalError, CompileError
 from . import Naming
 from . import PyrexTypes
 from . import TypeSlots
-from .PyrexTypes import py_object_type, error_type
+from .PyrexTypes import py_object_type, cy_object_type, error_type
 from .Symtab import (ModuleScope, LocalScope, ClosureScope, PropertyScope,
                      StructOrUnionScope, PyClassScope, CppClassScope, TemplateScope,
                      CppScopedEnumScope, punycodify_name)
@@ -957,7 +957,10 @@ class CArgDeclNode(Node):
         default.make_owned_reference(code)
         result = default.result() if overloaded_assignment else default.result_as(self.type)
         code.putln("%s = %s;" % (target, result))
-        code.put_giveref(default.result(), self.type)
+        if self.type.is_cyp_class:
+            code.put_cygiveref(default.result())
+        else:
+            code.put_giveref(default.result(), self.type)
         default.generate_post_assignment_code(code)
         default.free_temps(code)
 
@@ -1009,6 +1012,9 @@ class CSimpleBaseTypeNode(CBaseTypeNode):
                 error(self.pos, "Unrecognised type modifier combination")
         elif self.name == "object" and not self.module_path:
             type = py_object_type
+        elif self.name == "cyobject":
+            type = cy_object_type
+            self.arg_name = EncodedString(self.name)
         elif self.name is None:
             if self.is_self_arg and env.is_c_class_scope:
                 #print "CSimpleBaseTypeNode.analyse: defaulting to parent type" ###
@@ -1473,7 +1479,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                 error(self.pos, "Required template parameters must precede optional template parameters.")
         self.entry = env.declare_cpp_class(
             self.name, None, self.pos, self.cname,
-            base_classes=[], visibility=self.visibility, templates=template_types)
+            base_classes=[], visibility=self.visibility, templates=template_types, cypclass=self.cypclass)
 
     def analyse_declarations(self, env):
         if self.templates is None:
@@ -1490,10 +1496,24 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                 return True
             else:
                 error(self.pos, "Base class '%s' not a struct or class." % base_class)
-        base_class_types = filter(base_ok, [b.analyse(scope or env) for b in self.base_classes])
+        base_types_list = [b.analyse(scope or env) for b in self.base_classes]
+        if self.cypclass:
+            cyobject_base = False
+            for base_type in base_types_list:
+                cyobject_base = cyobject_base or base_type is cy_object_type or base_type.is_cyp_class
+            if not cyobject_base:
+                cyobject_class = CSimpleBaseTypeNode(self.pos,
+                    name = "cyobject", module_path = [],
+                    is_basic_c_type = 0, signed = 0,
+                    complex = 0, longness = 0,
+                    is_self_arg = 0, templates = None
+                )
+                self.base_classes.append(cyobject_class)
+                base_types_list.append(cyobject_class.analyse(scope or env))
+        base_class_types = filter(base_ok, base_types_list)
         self.entry = env.declare_cpp_class(
             self.name, scope, self.pos,
-            self.cname, base_class_types, visibility=self.visibility, templates=template_types)
+            self.cname, base_class_types, visibility=self.visibility, templates=template_types, cypclass=self.cypclass)
         if self.entry is None:
             return
         self.entry.is_cpp_class = 1
@@ -1857,7 +1877,7 @@ class FuncDefNode(StatNode, BlockNode):
         init = ""
         return_type = self.return_type
         if not return_type.is_void:
-            if return_type.is_pyobject:
+            if return_type.is_pyobject or return_type.is_cyp_class:
                 init = " = NULL"
             elif return_type.is_memoryviewslice:
                 init = ' = ' + return_type.literal_code(return_type.default_value)
@@ -1991,6 +2011,9 @@ class FuncDefNode(StatNode, BlockNode):
             elif is_cdef and entry.cf_is_reassigned:
                 code.put_var_incref_memoryviewslice(entry,
                                     have_gil=code.funcstate.gil_owned)
+            # We have to Cy_INCREF the nogil classes (ccdef'ed ones)
+            elif entry.type.is_cyp_class and len(entry.cf_assignments) > 1:
+                code.put_cyincref(entry.cname)
         for entry in lenv.var_entries:
             if entry.is_arg and entry.cf_is_reassigned and not entry.in_closure:
                 if entry.xdecref_cleanup:
@@ -2173,13 +2196,16 @@ class FuncDefNode(StatNode, BlockNode):
             if not entry.used or entry.in_closure:
                 continue
 
-            if entry.type.is_pyobject:
+            if entry.type.is_pyobject or entry.type.is_cyp_class:
                 if entry.is_arg and not entry.cf_is_reassigned:
                     continue
             if entry.type.needs_refcounting:
                 assure_gil('success')
-            # FIXME ideally use entry.xdecref_cleanup but this currently isn't reliable
-            code.put_var_xdecref(entry, have_gil=gil_owned['success'])
+            if entry.type.is_cyp_class:
+                code.put_cyxdecref(entry.cname)
+            else:
+                # FIXME ideally use entry.xdecref_cleanup but this currently isn't reliable
+                code.put_var_xdecref(entry, have_gil=gil_owned['success'])
 
         # Decref any increfed args
         for entry in lenv.arg_entries:
@@ -2195,9 +2221,13 @@ class FuncDefNode(StatNode, BlockNode):
                     continue
                 if entry.type.needs_refcounting:
                     assure_gil('success')
-
-            # FIXME use entry.xdecref_cleanup - del arg seems to be the problem
-            code.put_var_xdecref(entry, have_gil=gil_owned['success'])
+            if entry.type.is_cyp_class:
+                # We must check for NULL because it is possible to have
+                # NULL as a valid cypclass (with a typecast)
+                code.put_cyxdecref(entry.cname)
+            else:
+                # FIXME use entry.xdecref_cleanup - del arg seems to be the problem
+                code.put_var_xdecref(entry, have_gil=gil_owned['success'])
         if self.needs_closure:
             assure_gil('success')
             code.put_decref(Naming.cur_scope_cname, lenv.scope_class.type)
@@ -2210,6 +2240,9 @@ class FuncDefNode(StatNode, BlockNode):
             if err_val is None and default_retval:
                 err_val = default_retval  # FIXME: why is err_val not used?
             code.put_xgiveref(Naming.retval_cname, return_type)
+        # We can always return a CythonExtensionType as it is nogil-compliant
+        if self.return_type.is_cyp_class:
+            code.put_cyxgiveref(Naming.retval_cname)
 
         if self.entry.is_special and self.entry.name == "__hash__":
             # Returning -1 for __hash__ is supposed to signal an error
@@ -3401,8 +3434,6 @@ class DefNodeWrapper(FuncDefNode):
         # different code types.
         for arg in self.args:
             if not arg.type.is_pyobject:
-                if arg.type is PyrexTypes.PyExtensionType and arg.type.nogil:
-                    continue # XXX maybe here is not the correct place to put it...
                 if not arg.type.create_from_py_utility_code(env):
                     pass  # will fail later
             elif arg.hdr_type and not arg.hdr_type.is_pyobject:
@@ -4933,7 +4964,6 @@ class CClassDefNode(ClassDefNode):
     #  doc                string or None
     #  body               StatNode or None
     #  entry              Symtab.Entry
-    #  nogil              boolean
     #  base_type          PyExtensionType or None
     #  buffer_defaults_node DictNode or None Declares defaults for a buffer
     #  buffer_defaults_pos
@@ -4943,7 +4973,6 @@ class CClassDefNode(ClassDefNode):
     buffer_defaults_pos = None
     typedef_flag = False
     api = False
-    nogil = False
     objstruct_name = None
     typeobj_name = None
     check_size = None
@@ -4988,7 +5017,6 @@ class CClassDefNode(ClassDefNode):
             typedef_flag=self.typedef_flag,
             check_size = self.check_size,
             api=self.api,
-            nogil=self.nogil,
             buffer_defaults=self.buffer_defaults(env),
             shadow=self.shadow)
 
@@ -5077,7 +5105,6 @@ class CClassDefNode(ClassDefNode):
             visibility=self.visibility,
             typedef_flag=self.typedef_flag,
             api=self.api,
-            nogil=self.nogil,
             buffer_defaults=self.buffer_defaults(env),
             shadow=self.shadow)
 
@@ -6221,8 +6248,6 @@ class DelStatNode(StatNode):
                     error(arg.pos, "Deletion of global C variable")
             elif arg.type.is_ptr and arg.type.base_type.is_cpp_class:
                 self.cpp_check(env)
-            elif arg.type.is_struct_or_union and arg.type.nogil:
-                pass # del nogil extension
             elif arg.type.is_cpp_class:
                 error(arg.pos, "Deletion of non-heap C++ object")
             elif arg.is_subscript and arg.base.type is Builtin.bytearray_type:
@@ -6252,8 +6277,6 @@ class DelStatNode(StatNode):
                 code.putln("delete %s;" % arg.result())
                 arg.generate_disposal_code(code)
                 arg.free_temps(code)
-            elif arg.type.is_struct_or_union and hasattr(arg.type, "nogil") and arg.type.nogil:
-                code.putln("free(&%s);" % arg.result())
             # else error reported earlier
 
     def annotate(self, code):
@@ -6370,6 +6393,9 @@ class ReturnStatNode(StatNode):
             if value and value.is_none:
                 # Use specialised default handling for "return None".
                 value = None
+
+        if self.return_type.is_cyp_class:
+            code.put_cyxdecref(Naming.retval_cname)
 
         if value:
             value.generate_evaluation_code(code)

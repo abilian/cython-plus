@@ -17,7 +17,7 @@ from .Errors import warning, error, InternalError
 from .StringEncoding import EncodedString
 from . import Options, Naming
 from . import PyrexTypes
-from .PyrexTypes import py_object_type, unspecified_type
+from .PyrexTypes import py_object_type, cy_object_type, unspecified_type
 from .TypeSlots import (
     pyfunction_signature, pymethod_signature, richcmp_special_methods,
     get_special_method_signature, get_property_accessor_signature)
@@ -628,7 +628,7 @@ class Scope(object):
 
     def declare_cpp_class(self, name, scope,
             pos, cname = None, base_classes = (),
-            visibility = 'extern', templates = None):
+            visibility = 'extern', templates = None, cypclass=0):
         if cname is None:
             if self.in_cinclude or (visibility != 'private'):
                 cname = name
@@ -637,8 +637,12 @@ class Scope(object):
         base_classes = list(base_classes)
         entry = self.lookup_here(name)
         if not entry:
-            type = PyrexTypes.CppClassType(
-                name, scope, cname, base_classes, templates = templates)
+            if cypclass:
+                type = PyrexTypes.CypClassType(
+                    name, scope, cname, base_classes, templates = templates)
+            else:
+                type = PyrexTypes.CppClassType(
+                    name, scope, cname, base_classes, templates = templates)
             entry = self.declare_type(name, type, pos, cname,
                 visibility = visibility, defining = scope is not None)
             self.sue_entries.append(entry)
@@ -666,7 +670,7 @@ class Scope(object):
 
         def declare_inherited_attributes(entry, base_classes):
             for base_class in base_classes:
-                if base_class is PyrexTypes.error_type:
+                if base_class is PyrexTypes.error_type or base_class is PyrexTypes.cy_object_type:
                     continue
                 if base_class.scope is None:
                     error(pos, "Cannot inherit from incomplete type")
@@ -1580,7 +1584,7 @@ class ModuleScope(Scope):
     def declare_c_class(self, name, pos, defining=0, implementing=0,
             module_name=None, base_type=None, objstruct_cname=None,
             typeobj_cname=None, typeptr_cname=None, visibility='private',
-            typedef_flag=0, api=0, nogil=0, check_size=None,
+            typedef_flag=0, api=0, check_size=None,
             buffer_defaults=None, shadow=0):
         # If this is a non-extern typedef class, expose the typedef, but use
         # the non-typedef struct internally to avoid needing forward
@@ -1613,15 +1617,8 @@ class ModuleScope(Scope):
         #  Make a new entry if needed
         #
         if not entry or shadow:
-            if nogil:
-                pass
-            if nogil:
-                type = PyrexTypes.CythonExtensionType(
-                        name, typedef_flag, base_type, visibility == 'extern', check_size=check_size)
-            else:
-                type = PyrexTypes.PyExtensionType(
-                        name, typedef_flag, base_type, visibility == 'extern', check_size=check_size)
-            type.nogil = nogil
+            type = PyrexTypes.PyExtensionType(
+                name, typedef_flag, base_type, visibility == 'extern', check_size=check_size)
             type.pos = pos
             type.buffer_defaults = buffer_defaults
             if objtypedef_cname is not None:
@@ -2341,8 +2338,7 @@ class CClassScope(ClassScope):
                           defining=0, modifiers=(), utility_code=None, overridable=False):
         name = self.mangle_class_private_name(name)
         if get_special_method_signature(name) and not self.parent_type.is_builtin_type:
-            if not(hasattr(self.parent_type, "nogil") and self.parent_type.nogil and self.parent_type.is_struct_or_union):
-                error(pos, "Special methods must be declared with 'def', not 'cdef'")
+            error(pos, "Special methods must be declared with 'def', not 'cdef'")
         args = type.args
         if not type.is_static_method:
             if not args:
@@ -2578,6 +2574,8 @@ class CppClassScope(Scope):
             type.return_type = PyrexTypes.c_void_type
         if name in ('<init>', '<del>') and type.nogil:
             for base in self.type.base_classes:
+                if base is cy_object_type:
+                    continue
                 base_entry = base.scope.lookup(name)
                 if base_entry and not base_entry.type.nogil:
                     error(pos, "Constructor cannot be called without GIL unless all base constructors can also be called without GIL")

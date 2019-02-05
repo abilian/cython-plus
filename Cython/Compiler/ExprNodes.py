@@ -784,7 +784,10 @@ class ExprNode(Node):
         If the result is in a temp, it is already a new reference.
         """
         if not self.result_in_temp():
-            code.put_incref(self.result(), self.ctype())
+            if self.type.is_cyp_class and "NULL" not in self.result():
+                code.put_cyincref(self.result())
+            else:
+                code.put_incref(self.result(), self.ctype())
 
     def make_owned_memoryviewslice(self, code):
         """
@@ -826,7 +829,10 @@ class ExprNode(Node):
                 self.generate_subexpr_disposal_code(code)
                 self.free_subexpr_temps(code)
             if self.result():
-                code.put_decref_clear(self.result(), self.ctype(),
+                if self.type.is_cyp_class:
+                    code.put_cyxdecref(self.result())
+                else:
+                    code.put_decref_clear(self.result(), self.ctype(),
                                         have_gil=not self.in_nogil_context)
             if self.has_temp_moved:
                 code.globalstate.use_utility_code(
@@ -848,6 +854,8 @@ class ExprNode(Node):
                 self.generate_subexpr_disposal_code(code)
                 self.free_subexpr_temps(code)
             elif self.type.is_pyobject:
+                code.putln("%s = 0;" % self.result())
+            elif self.type.is_cyp_class:
                 code.putln("%s = 0;" % self.result())
             elif self.type.is_memoryviewslice:
                 code.putln("%s.memview = NULL;" % self.result())
@@ -1843,7 +1851,10 @@ class ImagNode(AtomicExprNode):
                     self.result(),
                     float(self.value),
                     code.error_goto_if_null(self.result(), self.pos)))
-            self.generate_gotref(code)
+            if self.type.is_cyp_class:
+                code.put_cygotref(self.result())
+            else:
+                self.generate_gotref(code)
 
 
 class NewExprNode(AtomicExprNode):
@@ -2324,8 +2335,9 @@ class NameNode(AtomicExprNode):
                         code.error_goto_if_null(self.result(), self.pos)))
             self.generate_gotref(code)
 
-        elif entry.is_local and isinstance(entry.type, PyrexTypes.CythonExtensionType):
-            pass
+        elif entry.is_local and entry.type.is_cyp_class:
+            code.put_cygotref(self.result())
+            #pass
             # code.putln(entry.cname)
         elif entry.is_local or entry.in_closure or entry.from_closure or entry.type.is_memoryviewslice:
             # Raise UnboundLocalError for objects and memoryviewslices
@@ -2423,6 +2435,10 @@ class NameNode(AtomicExprNode):
                             assigned = False
                     if is_external_ref:
                         rhs.generate_giveref(code)
+            elif self.type.is_cyp_class:
+                code.put_cyxdecref(self.result())
+                if isinstance(rhs, NameNode):
+                    rhs.make_owned_reference(code)
             if not self.type.is_memoryviewslice:
                 if not assigned:
                     if overloaded_assignment:
@@ -2534,6 +2550,22 @@ class NameNode(AtomicExprNode):
                 else:
                     code.put_decref_clear(self.result(), self.ctype(),
                                           have_gil=not self.nogil)
+        elif self.entry.type.is_cyp_class:
+            if not self.cf_is_null:
+                if self.cf_maybe_null and not ignore_nonexisting:
+                    code.put_error_if_unbound(self.pos, self.entry)
+
+                if self.entry.in_closure:
+                    # generator
+                    if ignore_nonexisting and self.cf_maybe_null:
+                        code.put_cyxgotref(self.result())
+                    else:
+                        code.put_cygotref(self.result())
+                if ignore_nonexisting and self.cf_maybe_null:
+                    code.put_cyxdecref(self.result())
+                else:
+                    code.put_cydecref(self.result())
+                code.putln('%s = NULL;' % self.result())
         else:
             error(self.pos, "Deletion of C names not supported")
 
@@ -4186,6 +4218,8 @@ class IndexNode(_IndexingBaseNode):
                     code.error_goto_if(error_check % self.result(), self.pos)))
         if self.type.is_pyobject:
             self.generate_gotref(code)
+        elif self.type.is_cyp_class:
+            code.put_cygotref(self.result())
 
     def generate_setitem_code(self, value_code, code):
         if self.index.type.is_int:
@@ -5606,18 +5640,6 @@ class CallNode(ExprNode):
             self.analyse_c_function_call(env)
             self.type = type
             return True
-        elif type and type.is_struct and type.nogil:
-            args, kwds = self.explicit_args_kwds()
-            items = []
-            for arg, member in zip(args, type.scope.var_entries):
-                items.append(DictItemNode(pos=arg.pos, key=StringNode(pos=arg.pos, value=member.name), value=arg))
-            if kwds:
-                items += kwds.key_value_pairs
-            self.key_value_pairs = items
-            self.__class__ = DictNode
-            self.analyse_types(env)    # FIXME
-            self.coerce_to(type, env)
-            return True
 
     def is_lvalue(self):
         return self.type.is_reference
@@ -6125,6 +6147,8 @@ class SimpleCallNode(CallNode):
                     code.putln("%s%s; %s" % (lhs, rhs, goto_error))
                 if self.type.is_pyobject and self.result():
                     self.generate_gotref(code)
+                elif self.type.is_cyp_class and self.result():
+                    code.put_cygotref(self.result())
             if self.has_optional_args:
                 code.funcstate.release_temp(self.opt_arg_struct)
 
@@ -7128,6 +7152,8 @@ class AttributeNode(ExprNode):
             self.op = "->"
         elif obj_type.is_reference and obj_type.is_fake_reference:
             self.op = "->"
+        elif obj_type.is_cyp_class:
+            self.op = "->"
         else:
             self.op = "."
         if obj_type.has_attributes:
@@ -7278,12 +7304,9 @@ class AttributeNode(ExprNode):
                     # (AnalyseExpressionsTransform)
                     self.member = self.entry.cname
 
-                if obj.type.nogil:
-                    return "%s" % self.entry.func_cname
-                else:
-                    return "((struct %s *)%s%s%s)->%s" % (
-                        obj.type.vtabstruct_cname, obj_code, self.op,
-                        obj.type.vtabslot_cname, self.member)
+                return "((struct %s *)%s%s%s)->%s" % (
+                    obj.type.vtabstruct_cname, obj_code, self.op,
+                    obj.type.vtabslot_cname, self.member)
             elif self.result_is_used:
                 return self.member
             # Generating no code at all for unused access to optimised builtin
@@ -7386,6 +7409,11 @@ class AttributeNode(ExprNode):
                 from . import MemoryView
                 MemoryView.put_assign_to_memviewslice(
                         select_code, rhs, rhs.result(), self.type, code)
+            elif self.type.is_cyp_class:
+                rhs.make_owned_reference(code)
+                code.put_cygiveref(rhs.result())
+                code.put_cygotref(select_code)
+                code.put_cyxdecref(select_code)
 
             if not self.type.is_memoryviewslice:
                 code.putln(
@@ -8882,8 +8910,6 @@ class DictNode(ExprNode):
         #  pairs are evaluated and used one at a time.
         code.mark_pos(self.pos)
         self.allocate_temp_result(code)
-        if hasattr(self.type, 'nogil') and self.type.nogil:
-            code.putln("%s = (struct %s *)malloc(sizeof(struct %s));" % (self.result(), self.type.objstruct_cname, self.type.objstruct_cname))
 
         is_dict = self.type.is_pyobject
         if is_dict:
@@ -8941,11 +8967,6 @@ class DictNode(ExprNode):
                     code.putln('}')
                 if self.exclude_null_values:
                     code.putln('}')
-            elif self.type.nogil:
-                code.putln("%s->%s = %s;" % (
-                        self.result(),
-                        item.key.value,
-                        item.value.result()))
             else:
                 code.putln("%s.%s = %s;" % (
                         self.result(),
@@ -13579,7 +13600,10 @@ class CoerceToTempNode(CoercionNode):
             self.result(), self.arg.result_as(self.ctype())))
         if self.use_managed_ref:
             if not self.type.is_memoryviewslice:
-                code.put_incref(self.result(), self.ctype())
+                if self.type.is_cyp_class:
+                    code.put_cyincref(self.result())
+                else:
+                    code.put_incref(self.result(), self.ctype())
             else:
                 code.put_incref_memoryviewslice(self.result(), self.type,
                                             have_gil=not self.in_nogil_context)

@@ -2058,7 +2058,7 @@ class CCodeWriter(object):
             entry.cname, dll_linkage=dll_linkage))
         if entry.init is not None:
             self.put_safe(" = %s" % entry.type.literal_code(entry.init))
-        elif entry.type.is_pyobject:
+        elif entry.type.is_pyobject or entry.type.is_cyp_class:
             self.put(" = NULL")
         self.putln(";")
 
@@ -2069,8 +2069,8 @@ class CCodeWriter(object):
                 self.putln("%s = NULL;" % decl)
             elif type.is_memoryviewslice:
                 self.putln("%s = %s;" % (decl, type.literal_code(type.default_value)))
-            elif type.is_struct and type.is_extension_type and type.nogil:
-                self.putln("%s;" % decl)
+            elif type.is_cyp_class:
+                self.putln("%s = NULL;" % decl)
             else:
                 self.putln("%s%s;" % (static and "static " or "", decl))
 
@@ -2102,6 +2102,29 @@ class CCodeWriter(object):
         if not modifiers:
             return ''
         return '%s ' % ' '.join([mapper(m,m) for m in modifiers])
+
+    # CyObjects reference counting
+
+    def put_cygotref(self, cname):
+        self.putln("Cy_GOTREF(%s);" % cname)
+
+    def put_cygiveref(self, cname):
+        self.putln("Cy_GIVEREF(%s);" % cname)
+
+    def put_cyxgiveref(self, cname):
+        self.putln("Cy_XGIVEREF(%s);" % cname)
+
+    def put_cyxgotref(self, cname):
+        self.putln("Cy_XGOTREF(%s);" % cname)
+
+    def put_cyincref(self, cname):
+        self.putln("Cy_INCREF(%s);" % cname)
+
+    def put_cydecref(self, cname):
+        self.putln("Cy_DECREF(%s);" % cname)
+
+    def put_cyxdecref(self, cname):
+        self.putln("Cy_XDECREF(%s);" % cname)
 
     # Python objects and reference counting
 

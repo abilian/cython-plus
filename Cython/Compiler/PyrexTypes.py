@@ -4108,10 +4108,15 @@ class CppScopedEnumType(CType):
 class CypClassType(CppClassType):
     is_cyp_class = 1
 
+    def empty_declaration_code(self):
+        if self._empty_declaration is None:
+            self._empty_declaration = self.declaration_code('', deref=1)
+        return self._empty_declaration
+
     def declaration_code(self, entity_code,
             for_display = 0, dll_linkage = None, pyrex = 0,
-            template_params = None):
-        if entity_code:
+            template_params = None, deref = 0):
+        if not deref:
             entity_code = "*%s" % entity_code
         return super(CypClassType, self).declaration_code(entity_code,
                 for_display=for_display, dll_linkage=dll_linkage,

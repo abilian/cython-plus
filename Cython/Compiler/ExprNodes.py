@@ -10991,7 +10991,7 @@ class SizeofTypeNode(SizeofNode):
             error(self.pos, "Cannot take sizeof incomplete type '%s'" % arg_type)
 
     def calculate_result_code(self):
-        if self.arg_type.is_extension_type:
+        if self.arg_type.is_extension_type or self.arg_type.is_cyp_class:
             # the size of the pointer is boring
             # we want the size of the actual struct
             arg_code = self.arg_type.declaration_code("", deref=1)

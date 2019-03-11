@@ -5899,6 +5899,10 @@ class SimpleCallNode(CallNode):
                     if i > 0:  # first argument doesn't matter
                         some_args_in_temps = True
                     arg = arg.coerce_to_temp(env)
+            elif arg.type.is_cyp_class:
+                if i > 0:
+                    some_args_in_temps = True
+                arg = arg.coerce_to_temp(env)
             args[i] = arg
 
         # handle additional varargs parameters
@@ -5966,6 +5970,8 @@ class SimpleCallNode(CallNode):
         elif self.type.is_memoryviewslice:
             self.is_temp = 1
             # func_type.exception_check = True
+        elif self.type.is_cyp_class:
+            self.is_temp = 1
 
         if self.is_temp and self.type.is_reference:
             self.type = PyrexTypes.CFakeReferenceType(self.type.ref_base_type)
@@ -6337,6 +6343,10 @@ class InlinedDefNodeCallNode(CallNode):
                     if i > 0:  # first argument doesn't matter
                         some_args_in_temps = True
                     arg = arg.coerce_to_temp(env)
+            elif arg.type.is_cyp_class:
+                if i > 0: # first argument doesn't matter
+                    some_args_in_temps = True
+                arg = arg.coerce_to_temp(env)
             self.args[i] = arg
 
         if some_args_in_temps:

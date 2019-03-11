@@ -5737,7 +5737,7 @@ class SingleAssignmentNode(AssignmentNode):
 
         if use_temp or rhs.is_attribute or (
                 not rhs.is_name and not rhs.is_literal and
-                rhs.type.is_pyobject):
+                (rhs.type.is_pyobject or rhs.type.is_cyp_class)):
             # things like (cdef) attribute access are not safe (traverses pointers)
             rhs = rhs.coerce_to_temp(env)
         elif rhs.type.is_pyobject:
@@ -5945,7 +5945,7 @@ class CascadedAssignmentNode(AssignmentNode):
                 rhs = rhs.coerce_to(lhs_types.pop(), env)
 
         if not rhs.is_name and not rhs.is_literal and (
-                use_temp or rhs.is_attribute or rhs.type.is_pyobject):
+                use_temp or rhs.is_attribute or rhs.type.is_pyobject or rhs.type.is_cyp_class):
             rhs = rhs.coerce_to_temp(env)
         else:
             rhs = rhs.coerce_to_simple(env)

@@ -11508,6 +11508,8 @@ class NumBinopNode(BinopNode):
                 result1, result2 = self.operand1.pythran_result(), self.operand2.pythran_result()
             else:
                 result1, result2 = self.operand1.result(), self.operand2.result()
+            if self.operand1.type.is_cyp_class:
+                result1 = '*' + result1
             return "(%s %s %s)" % (result1, self.operator, result2)
         else:
             func = self.type.binary_op(self.operator)
@@ -11843,6 +11845,8 @@ class DivNode(NumBinopNode):
                     op1 = self.type.cast_code(op1)
                 if self.type != self.operand2.type:
                     op2 = self.type.cast_code(op2)
+            if self.operand1.type.is_cyp_class:
+                op1 = "*(%s)" % op1
             return "(%s / %s)" % (op1, op2)
         else:
             return "__Pyx_div_%s(%s, %s)" % (
@@ -11930,8 +11934,11 @@ class ModNode(DivNode):
                     self.operand1.result(),
                     self.operand2.result())
             else:
+                op1 = self.operand1.result()
+                if self.operand1.type.is_cyp_class:
+                    op1 = '*' + op1
                 return "(%s %% %s)" % (
-                    self.operand1.result(),
+                    op1,
                     self.operand2.result())
         else:
             return "__Pyx_mod_%s(%s, %s)" % (
@@ -11998,9 +12005,12 @@ class PowNode(NumBinopNode):
                 return operand.result()
             else:
                 return self.type.cast_code(operand.result())
+        op1 = typecast(self.operand1)
+        if self.operand1.type.is_cyp_class:
+            op1 = '*' + op1
         return "%s(%s, %s)" % (
             self.pow_func,
-            typecast(self.operand1),
+            op1,
             typecast(self.operand2))
 
     def py_operation_function(self, code):
@@ -12951,6 +12961,8 @@ class PrimaryCmpNode(ExprNode, CmpNode):
                 result1, result2 = operand1.pythran_result(), operand2.pythran_result()
             else:
                 result1, result2 = operand1.result(), operand2.result()
+                if operand1.type.is_cyp_class:
+                    result1 = '*' + result1
                 if self.is_memslice_nonecheck:
                     if operand1.type.is_memoryviewslice:
                         result1 = "((PyObject *) %s.memview)" % result1

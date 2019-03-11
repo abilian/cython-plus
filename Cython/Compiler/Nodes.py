@@ -6154,7 +6154,10 @@ class InPlaceAssignmentNode(AssignmentNode):
         else:
             # C++
             # TODO: make sure overload is declared
-            code.putln("%s %s= %s;" % (lhs.result(), c_op, rhs.result()))
+            l_op = lhs.result()
+            if lhs.type.is_cyp_class:
+                l_op = '*' + l_op
+            code.putln("%s %s= %s;" % (l_op, c_op, rhs.result()))
         lhs.generate_subexpr_disposal_code(code)
         lhs.free_subexpr_temps(code)
         rhs.generate_disposal_code(code)

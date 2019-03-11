@@ -2532,6 +2532,28 @@ class CppClassScope(Scope):
     default_constructor = None
     type = None
 
+    operator_table = {
+        '__add__': '+', '__iadd__': '+=',
+        '__sub__': '-', '__isub__': '-=',
+        '__mul__': '*', '__imul__': '*=',
+        '__div__': '/', '__idiv__': '/=',
+        '__mod__': '%', '__imod__': '%=',
+        '__lshift__': '<<', '__ilshift__': '<<=',
+        '__rshift__': '>>', '__irshift__': '>>=',
+        '__and__': '&', '__iand__': '&=',
+        '__or__': '|', '__ior__': '|=',
+        '__xor__': '^', '__ixor__': '^=',
+        '__neg__': '-',
+        '__pos__': '+',
+        '__invert__': '~',
+        '__eq__': '==',
+        '__ne__': '!=',
+        '__lt__': '<',
+        '__gt__': '>',
+        '__le__': '<=',
+        '__ge__': '>='
+    }
+
     def __init__(self, name, outer_scope, templates=None):
         Scope.__init__(self, name, outer_scope, None)
         self.directives = outer_scope.directives

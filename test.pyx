@@ -31,7 +31,7 @@ from libc.stdio cimport printf
 
 
 # cdef class SomeMemory:
-ccdef class SomeMemory:
+cdef cypclass SomeMemory:
   """
   This is a cdef class which is also called
   a extensino type. It is a kind of C struct
@@ -45,24 +45,28 @@ ccdef class SomeMemory:
   where all methods are "nogil" and memory
   allocation does not depend on python runtime
   """
-  cdef double a;
-  cdef double b;
+  double a;
+  double b;
     
-  cdef void foo(self) nogil:
-    """
-    It is possible to define native C/Cython methods
-    that release the GIL (cool...)
-    """
-    self.a = self.b
-    
-  cdef void foo1(self, int a) nogil:
-    """
-    It is possible to define native C/Cython methods
-    that release the GIL (cool...)
-    """
-    self.a = a
+  void __init__(double a, double b):
+    this.a = a
+    this.b = b
 
-  cdef void foo3(self) nogil:
+  void foo() nogil:
+    """
+    It is possible to define native C/Cython methods
+    that release the GIL (cool...)
+    """
+    this.a = this.b
+    
+  void foo1(int a) nogil:
+    """
+    It is possible to define native C/Cython methods
+    that release the GIL (cool...)
+    """
+    this.a = a
+
+  void foo3() nogil:
     """
     It is possible to define native C/Cython methods
     that release the GIL (cool...)

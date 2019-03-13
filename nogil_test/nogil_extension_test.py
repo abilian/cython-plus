@@ -6,7 +6,9 @@ setup(
     ext_modules = cythonize([
         Extension(
             'nogil_extension',
-            ['nogil_extension.pyx'],
+            language='c++',
+            sources=['nogil_extension.pyx'],
+            extra_compile_args=["-pthread", "-std=c++11"],
         ),
     ])
 )

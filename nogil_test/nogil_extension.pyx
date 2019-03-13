@@ -32,7 +32,7 @@ from libc.stdio cimport printf
 
 
 # cdef class SomeMemory:
-ccdef class SomeMemory:
+cdef cypclass SomeMemory:
   """
   This is a cdef class which is also called
   a extensino type. It is a kind of C struct
@@ -46,30 +46,29 @@ ccdef class SomeMemory:
   where all methods are "nogil" and memory
   allocation does not depend on python runtime
   """
-  cdef int a;
-  cdef double b;
+  int a;
+  double b;
 
-  cdef void cinit(self, a, b) nogil:
-      # self.a = a
-      # self.b = b
+  void __init__(int a, double b):
+      this.a = a
+      this.b = b
+
+  void __dealloc__():
       pass
 
-  cdef void cdealloc(self):
-      pass
-
-  cdef void foo1(self):
+  void foo1():
     """
     It is possible to define native C/Cython methods
     that release the GIL (cool...)
     """
-    self.a += 3
+    this.a += 3
 
-  cdef void foo2(self) nogil:
+  void foo2():
     """
     It is possible to define native C/Cython methods
     that release the GIL (cool...)
     """
-    self.a = 42
+    this.a = 42
     
   # Not allowed to define pure Python function in the extension type with nogil option now
   # since we want this extension type is CPython free

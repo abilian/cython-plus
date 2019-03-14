@@ -6301,7 +6301,7 @@ class DelStatNode(StatNode):
             if arg.type.is_pyobject or (arg.is_name and arg.type.is_memoryviewslice):
                 if arg.is_name and arg.entry.is_cglobal:
                     error(arg.pos, "Deletion of global C variable")
-            elif arg.type.is_ptr and arg.type.base_type.is_cpp_class:
+            elif arg.type.is_ptr and arg.type.base_type.is_cpp_class or arg.type.is_cyp_class:
                 self.cpp_check(env)
             elif arg.type.is_cpp_class:
                 error(arg.pos, "Deletion of non-heap C++ object")
@@ -6332,6 +6332,8 @@ class DelStatNode(StatNode):
                 code.putln("delete %s;" % arg.result())
                 arg.generate_disposal_code(code)
                 arg.free_temps(code)
+            elif arg.type.is_cyp_class:
+                code.putln("Cy_DECREF(%s);" % arg.result())
             # else error reported earlier
 
     def annotate(self, code):

@@ -1,64 +1,68 @@
 # distutils: language = c++
 
-#cdef class biniou:
-#    cdef int a
-#
-#cdef void genial(biniou arg):
-#    o = arg.a
-#    return
+#cdef extern from "unistd.h" nogil:
+#    unsigned int sleep(unsigned int seconds)
 
-cdef extern from "unistd.h" nogil:
-    unsigned int sleep(unsigned int seconds)
-
-cdef cypclass Rectangle:
+cdef cppclass Rectangle nogil:
     int a
+
     void test():
         this.a += 3
+
     void test(int a):
         this.a += a
+
     void Rectangle(int a):
         this.a = a
+
     void Rectangle():
-        this.a = 3
-    Rectangle __iadd__(Rectangle other) nogil:
-#        sleep(3)
+        this.a = 5
+
+cdef cypclass Rectangle_wrapper(Rectangle):
+
+    Rectangle_wrapper __iadd__(Rectangle_wrapper other):
         return this
 
-    Rectangle __le__(Rectangle other) nogil:
+    Rectangle_wrapper __le__(Rectangle_wrapper other):
         return other
-#    void __dealloc__():
-#        sleep(5)
 
-cdef cypclass Carre(Rectangle):
+
+cdef cypclass Carre(Rectangle_wrapper):
     int b
+
     void __dealloc__():
-        sleep(3)
+        pass
+
     void __init__(int a):
         Rectangle.__init__(a)
 
-cdef Rectangle retour() nogil:
-    cdef Rectangle o = Rectangle(12)
-    # o = Rectangle(12)
-    return o
+    void test():
+        this.a += 5
 
-cdef void mange(Rectangle o) nogil:
-    cdef int a = o.a
-    return
+
+cdef cypclass Truc(Rectangle_wrapper):
+    Carre c
+
+    void __init__(int a=1):
+        # Rectangle.__init__() is always called
+        this.c = Carre(a)
+
+    void __dealloc__():
+        del this.c
+
+cdef cppclass SomeMemory(Truc) nogil:
+    int d
 
 cdef int tipo() nogil:
-    #cdef Rectangle c
-    cdef Rectangle o = Rectangle(32)
-    #o = Rectangle(32)
-    c = o
-    c = Rectangle(3)
-    c += o
-    return c.a
+    cdef Carre c = Carre(32)
+    cdef Truc truc = Truc()
+
+    truc += c
+
+    truc.c.Rectangle.test()
+    #truc.c.test()
+
+    return truc.c.a
 
 def toto():
     print(tipo())
-
-#cdef void Rectangle::test() nogil:
-#    this.a += 3
-#
-#cdef void Rectangle::test(int a) nogil:
-#    this.a += a

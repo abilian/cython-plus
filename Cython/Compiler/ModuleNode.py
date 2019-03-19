@@ -991,9 +991,14 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             self.generate_cyp_class_wrapper_definitions(scope.sue_entries, code)
             py_attrs = [e for e in scope.entries.values()
                         if e.type.is_pyobject and not e.is_inherited]
+            cypclass_attrs = [e for e in scope.entries.values()
+                        if e.type.is_cyp_class and not e.name == "this"
+                        and not e.is_type]
             has_virtual_methods = False
             constructor = None
             destructor = None
+            if type.is_cyp_class:
+                has_virtual_methods = True
             for attr in scope.var_entries:
                 cname = attr.cname
                 if attr.type.is_cfunction and attr.type.is_static_method:
@@ -1052,6 +1057,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     code.put("virtual ")
                 if is_implementing:
                     code.putln("~%s() {" % type.cname)
+                    for cypattr in cypclass_attrs:
+                        code.put_cyxdecref(cypattr.cname)
                     if py_attrs:
                         code.put_ensure_gil()
                     if destructor:

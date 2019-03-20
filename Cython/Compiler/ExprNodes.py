@@ -6042,6 +6042,8 @@ class SimpleCallNode(CallNode):
         max_nargs = len(func_type.args)
         expected_nargs = max_nargs - func_type.optional_arg_count
         actual_nargs = len(self.args)
+        if self.type.is_cyp_class and isinstance(self.function, NewExprNode):
+            return "%s()" % self.function.result()
         for formal_arg, actual_arg in args[:expected_nargs]:
             arg_code = actual_arg.move_result_rhs_as(formal_arg.type)
             arg_list_code.append(arg_code)

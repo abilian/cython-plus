@@ -12868,6 +12868,9 @@ class PrimaryCmpNode(ExprNode, CmpNode):
         self.is_pycmp = False
         entry = env.lookup_operator(self.operator, [self.operand1, self.operand2])
         if entry is None:
+            if self.operator == "is":
+                self.type = PyrexTypes.c_bint_type
+                return
             error(self.pos, "Invalid types for '%s' (%s, %s)" %
                 (self.operator, type1, type2))
             self.type = PyrexTypes.error_type
@@ -12961,7 +12964,7 @@ class PrimaryCmpNode(ExprNode, CmpNode):
                 result1, result2 = operand1.pythran_result(), operand2.pythran_result()
             else:
                 result1, result2 = operand1.result(), operand2.result()
-                if operand1.type.is_cyp_class:
+                if operand1.type.is_cyp_class and self.operator != "is":
                     result1 = '*' + result1
                 if self.is_memslice_nonecheck:
                     if operand1.type.is_memoryviewslice:

@@ -5754,6 +5754,9 @@ class SimpleCallNode(CallNode):
         self.function = self.function.analyse_types(env)
         function = self.function
 
+        if isinstance(function, NewExprNode) and len(self.args) and function.class_type.is_cyp_class:
+            error(self.pos, "Cypclasses must be constructed without arguments when using new")
+
         if function.is_attribute and function.entry and function.entry.is_cmethod:
             # Take ownership of the object from which the attribute
             # was obtained, because we need to pass it as 'self'.

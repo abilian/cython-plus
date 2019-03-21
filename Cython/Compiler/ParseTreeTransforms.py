@@ -1719,7 +1719,6 @@ if VALUE is not None:
             if stats:
                 node.body.stats += stats
             if (node.visibility != 'extern'
-                    and not node.nogil
                     and not node.scope.lookup('__reduce__')
                     and not node.scope.lookup('__reduce_ex__')):
                 self._inject_pickle_methods(node)

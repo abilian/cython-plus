@@ -3859,7 +3859,7 @@ def p_cpp_class_attribute(s, ctx):
     decorators = None
     if s.sy == '@':
         decorators = p_decorators(s)
-    if s.systring == 'cppclass':
+    if s.systring in ('cppclass', 'cypclass'):
         return p_cpp_class_definition(s, s.position(), ctx)
     elif s.systring == 'ctypedef':
         return p_ctypedef_statement(s, ctx)

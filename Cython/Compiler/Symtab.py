@@ -756,7 +756,7 @@ class Scope(object):
                 cname = name
             else:
                 cname = self.mangle(Naming.var_prefix, name)
-        if type.is_cpp_class and visibility != 'extern':
+        if type.is_cpp_class and not type.is_cyp_class and visibility != 'extern':
             type.check_nullary_constructor(pos)
         entry = self.declare(name, cname, type, pos, visibility)
         entry.is_variable = 1

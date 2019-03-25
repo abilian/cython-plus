@@ -5534,9 +5534,18 @@ class CallNode(ExprNode):
                 func_type = entry.type or func_type
         if func_type.is_ptr:
             func_type = func_type.base_type
-        if func_type.is_cfunction:
-            if getattr(self.function, 'entry', None) and hasattr(self, 'args'):
-                alternatives = self.function.entry.all_alternatives()
+        if func_type.is_cfunction or func_type.is_cyp_class:
+            alternatives = None
+            cypclass_wrapper_entry = None
+            if func_type.is_cyp_class:
+                cypclass_wrapper_entry = func_type.scope.lookup_here("<constructor>")
+                func_type = cypclass_wrapper_entry.type
+            if hasattr(self, 'args'):
+                if cypclass_wrapper_entry:
+                    alternatives = cypclass_wrapper_entry.all_alternatives()
+                elif getattr(self.function, 'entry', None):
+                    alternatives = self.function.entry.all_alternatives()
+            if alternatives:
                 arg_types = [arg.infer_type(env) for arg in self.args]
                 func_entry = PyrexTypes.best_match(arg_types, alternatives)
                 if func_entry:

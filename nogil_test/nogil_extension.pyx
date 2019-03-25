@@ -49,21 +49,21 @@ cdef cypclass SomeMemory:
   int a;
   double b;
 
-  void __init__(int a, double b):
+  void __init__(self, int a, double b):
       this.a = a
       this.b = b
 
-  void __dealloc__():
+  void __dealloc__(self):
       pass
 
-  void foo1():
+  void foo1(self):
     """
     It is possible to define native C/Cython methods
     that release the GIL (cool...)
     """
     this.a += 3
 
-  void foo2():
+  void foo2(self):
     """
     It is possible to define native C/Cython methods
     that release the GIL (cool...)

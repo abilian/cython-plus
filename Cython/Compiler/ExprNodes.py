@@ -11260,7 +11260,8 @@ class BinopNode(ExprNode):
             or self.operand2.type.is_cpp_class)
 
     def analyse_cpp_operation(self, env):
-        entry = env.lookup_operator(self.operator, [self.operand1, self.operand2])
+        operator = self.operator if not self.inplace else self.operator+"="
+        entry = env.lookup_operator(operator, [self.operand1, self.operand2])
         if not entry:
             self.type_error()
             return
@@ -11455,7 +11456,14 @@ class NumBinopNode(BinopNode):
                     widest_type, PyrexTypes.c_int_type)
             return widest_type
         else:
-            return None
+            cpp_type = None
+            operator = self.operator if not self.inplace else self.operator+"="
+            if type1.is_cpp_class or type1.is_ptr:
+                cpp_type = type1.find_cpp_operation_type(operator, type2)
+            if cpp_type is None and (type2.is_cpp_class or type2.is_ptr):
+                cpp_type = type2.find_cpp_operation_type(operator, type1)
+            # FIXME: do we need to handle other cases here?
+            return cpp_type
 
     def may_be_none(self):
         if self.type and self.type.is_builtin_type:

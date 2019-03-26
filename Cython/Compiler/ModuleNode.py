@@ -991,7 +991,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             self.generate_cyp_class_wrapper_definitions(scope.sue_entries, code)
             py_attrs = [e for e in scope.entries.values()
                         if e.type.is_pyobject and not e.is_inherited]
-            cypclass_attrs = [e for e in scope.entries.values()
+            cypclass_attrs = [e for e in scope.var_entries
                         if e.type.is_cyp_class and not e.name == "this"
                         and not e.is_type]
             has_virtual_methods = False
@@ -1052,8 +1052,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     arg_names = []
                     generate_cpp_constructor_code(arg_decls, arg_names, is_implementing, py_attrs, constructor)
 
-            if destructor or py_attrs or has_virtual_methods:
-                if has_virtual_methods:
+            if type.is_cyp_class or destructor or py_attrs or has_virtual_methods:
+                if has_virtual_methods or type.is_cyp_class:
                     code.put("virtual ")
                 if is_implementing:
                     code.putln("~%s() {" % type.cname)

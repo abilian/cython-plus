@@ -11509,7 +11509,7 @@ class NumBinopNode(BinopNode):
             else:
                 result1, result2 = self.operand1.result(), self.operand2.result()
             if self.operand1.type.is_cyp_class:
-                result1 = '*' + result1
+                result1 = "(*%s)" % result1
             return "(%s %s %s)" % (result1, self.operator, result2)
         else:
             func = self.type.binary_op(self.operator)
@@ -11936,7 +11936,7 @@ class ModNode(DivNode):
             else:
                 op1 = self.operand1.result()
                 if self.operand1.type.is_cyp_class:
-                    op1 = '*' + op1
+                    op1 = "(*%s)" % op1
                 return "(%s %% %s)" % (
                     op1,
                     self.operand2.result())
@@ -12007,7 +12007,7 @@ class PowNode(NumBinopNode):
                 return self.type.cast_code(operand.result())
         op1 = typecast(self.operand1)
         if self.operand1.type.is_cyp_class:
-            op1 = '*' + op1
+            op1 = "(*%s)" % op1
         return "%s(%s, %s)" % (
             self.pow_func,
             op1,
@@ -12967,7 +12967,7 @@ class PrimaryCmpNode(ExprNode, CmpNode):
             else:
                 result1, result2 = operand1.result(), operand2.result()
                 if operand1.type.is_cyp_class and self.operator not in ("is", "is_not"):
-                    result1 = '*' + result1
+                    result1 = "(*%s)" % result1
                 if self.is_memslice_nonecheck:
                     if operand1.type.is_memoryviewslice:
                         result1 = "((PyObject *) %s.memview)" % result1

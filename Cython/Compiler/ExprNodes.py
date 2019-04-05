@@ -5790,7 +5790,7 @@ class SimpleCallNode(CallNode):
         else:
             self.args = [ arg.analyse_types(env) for arg in self.args ]
             self.analyse_c_function_call(env)
-            if func_type.exception_check == '+':
+            if func_type.exception_check == '+' or self.type.is_cyp_class:
                 self.is_temp = True
 
         return self

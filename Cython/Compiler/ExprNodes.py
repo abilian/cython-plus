@@ -706,8 +706,6 @@ class ExprNode(Node):
             self.gil_error()
 
     def gil_assignment_check(self, env):
-        if self.type == PyrexTypes.PyExtensionType and env.nogil and self.type.nogil:
-            error("No gil type in no gil function")
         if env.nogil and self.type.is_pyobject:
             error(self.pos, "Assignment of Python object not allowed without gil")
 

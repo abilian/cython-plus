@@ -3077,8 +3077,8 @@ def p_cdef_statement(s, ctx):
         return p_cdef_extern_block(s, pos, ctx)
     elif p_nogil(s):
         ctx.nogil = 1
-    #    if ctx.overridable:
-    #        error(pos, "cdef blocks cannot be declared cpdef")
+        if ctx.overridable:
+            error(pos, "cdef blocks cannot be declared cpdef")
         return p_cdef_block(s, ctx)
     elif ctx.overridable and ctx.nogil:
         error(pos, "nogil blocks cannot be declared cpdef")

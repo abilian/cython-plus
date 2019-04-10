@@ -10568,12 +10568,14 @@ class TypecastNode(ExprNode):
     #  base_type    CBaseTypeNode
     #  declarator   CDeclaratorNode
     #  typecheck    boolean
+    #  overloaded   boolean
     #
     #  If used from a transform, one can if wanted specify the attribute
     #  "type" directly and leave base_type and declarator to None
 
     subexprs = ['operand']
     base_type = declarator = type = None
+    overloaded = False
 
     def type_dependencies(self, env):
         return ()
@@ -10639,6 +10641,10 @@ class TypecastNode(ExprNode):
         elif self.operand.type.is_fused:
             self.operand = self.operand.coerce_to(self.type, env)
             #self.type = self.operand.type
+        elif self.operand.type.is_cpp_class:
+            operator = 'operator ' + self.type.declaration_code('')
+            entry = self.operand.type.scope.lookup_here(operator)
+            self.overloaded = entry is not None
         if self.type.is_ptr and self.type.base_type.is_cfunction and self.type.base_type.nogil:
             op_type = self.operand.type
             if op_type.is_ptr:
@@ -10685,6 +10691,8 @@ class TypecastNode(ExprNode):
                     real_part,
                     imag_part)
         else:
+            if self.overloaded and self.operand.type.is_cyp_class:
+                operand_result = '(*%s)' % operand_result
             return self.type.cast_code(operand_result)
 
     def get_constant_c_result_code(self):

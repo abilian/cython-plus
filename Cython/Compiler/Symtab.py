@@ -2658,6 +2658,41 @@ class CppClassScope(Scope):
                                              return_type=type.return_type)
 
             type.original_alloc_type = type.args[0]
+        else:
+            operator = self.operator_table.get(name, None)
+            if operator:
+                name = 'operator'+operator
+            elif name.startswith('__') and name.endswith('__'):
+                stripped_name = name[2:-2]
+                signed = 1
+                longness = 0
+                ctypename = None
+                exploded_name = stripped_name.split('_')
+                for index, token in enumerate(exploded_name):
+                    # Basically, it is the same code than Parsing.p_sign_and_longness
+                    if token == 'unsigned':
+                        signed = 0
+                    elif token == 'signed':
+                        signed = 2
+                    elif token == 'short':
+                        longness = -1
+                    elif token == 'long':
+                        longness += 1
+                    else:
+                        ctypename = '_'.join(exploded_name[index:])
+                        break
+                known_type = PyrexTypes.simple_c_type(signed, longness, ctypename)
+                if not known_type:
+                    if stripped_name == "bool":
+                        # This one is hardcoded because it is declared as an int
+                        # in PyrexTypes
+                        name = 'operator bool'
+                        type.args = []
+                    else:
+                        known_type = self.lookup_type(stripped_name)
+                if known_type:
+                    name = 'operator ' + known_type.declaration_code('')
+                    type.args = []
 
         if name in ('<init>', '<del>') and type.nogil:
             for base in self.type.base_classes:

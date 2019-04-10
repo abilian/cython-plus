@@ -2748,7 +2748,10 @@ class CFuncDefNode(FuncDefNode):
         dll_linkage = None
         modifiers = code.build_function_modifiers(self.entry.func_modifiers)
 
-        header = self.return_type.declaration_code(entity, dll_linkage=dll_linkage)
+        if 'operator ' in entity:
+            header = entity
+        else:
+            header = self.return_type.declaration_code(entity, dll_linkage=dll_linkage)
         #print (storage_class, modifiers, header)
         needs_proto = self.is_c_class_method or self.entry.is_cproperty
         if self.template_declaration:

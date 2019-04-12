@@ -1733,9 +1733,6 @@ class StringNode(PyConstNode):
     is_identifier = None
     unicode_value = None
 
-    # XXX: Let the StringNode can be used in nogil extension initializing
-    nogil_check = None
-
     def calculate_constant_result(self):
         if self.unicode_value is not None:
             # only the Unicode value is portable across Py2/3

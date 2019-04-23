@@ -2496,6 +2496,35 @@ class CFuncDefNode(FuncDefNode):
         while not hasattr(declarator, 'args'):
             declarator = declarator.base
 
+        name = name_declarator.name
+        cname = name_declarator.cname
+
+        # HACK: if we have a __new__ function in a cypclass which is
+        # not declared as static, the first argument may be untyped.
+        # In this case, it will go through the self arg execution flow,
+        # and it will be skipped from the actual arguments.
+        # It is reinserted here, as __new__ MUST be static in a cypclass,
+        # so there is no self arg (the first arg is actually the allocator).
+
+        if env.is_cpp_class_scope and env.parent_type.is_cyp_class\
+           and name in ("__new__", "__alloc__") and not self.is_static_method:
+            self.is_static_method = 1
+            if declarator.skipped_self:
+                _name, _type, _pos, _arg = declarator.skipped_self
+                if name == "__new__":
+                    _type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(_type, [], nogil=1))
+                    # aka _type = {class_type} (*f)() nogil
+                    reinjected_arg = PyrexTypes.CFuncTypeArg(_name, _type, _pos)
+                    typ.args = [reinjected_arg] + typ.args
+                    declarator.args = [_arg] + declarator.args
+                elif name == "__alloc__":
+                    # Force __alloc__ to have the signature:
+                    # {class_type} f() nogil
+                    typ.return_type = _type
+                    typ.args = []
+                    declarator.args = []
+                declarator.skipped_self = None
+
         self.cfunc_declarator = declarator
         self.args = declarator.args
 
@@ -2531,8 +2560,8 @@ class CFuncDefNode(FuncDefNode):
 
         self._validate_type_visibility(typ.return_type, self.pos, env)
 
-        name = name_declarator.name
-        cname = name_declarator.cname
+        #name = name_declarator.name
+        #cname = name_declarator.cname
 
         typ.is_const_method = self.is_const_method
         typ.is_static_method = self.is_static_method
@@ -2554,8 +2583,6 @@ class CFuncDefNode(FuncDefNode):
                 # An error will be produced in the cdef function
                 self.overridable = False
 
-        func_declarator = self.declarator.base if isinstance(self.declarator, CPtrDeclaratorNode)\
-                          else self.declarator
         if env.is_cpp_class_scope and env.parent_type.is_cyp_class\
            and not declarator.skipped_self and not self.is_static_method:
              # It means we have a cypclass method without the self argument

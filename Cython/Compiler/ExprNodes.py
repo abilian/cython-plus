@@ -7042,7 +7042,7 @@ class AttributeNode(ExprNode):
                     else:
                         # Create a temporary entry describing the C method
                         # as an ordinary function.
-                        if entry.func_cname and not hasattr(entry.type, 'op_arg_struct'):
+                        if entry.func_cname and not hasattr(entry.type, 'op_arg_struct') and not type.is_cyp_class:
                             cname = entry.func_cname
                             if entry.type.is_static_method or (
                                     env.parent_scope and env.parent_scope.is_cpp_class_scope):
@@ -7055,6 +7055,9 @@ class AttributeNode(ExprNode):
                                 ctype = copy.copy(entry.type)
                                 ctype.args = ctype.args[:]
                                 ctype.args[0] = PyrexTypes.CFuncTypeArg('self', type, 'self', None)
+                        elif type.is_cyp_class and entry.func_cname:
+                            cname = entry.func_cname
+                            ctype = entry.type
                         else:
                             cname = "%s->%s" % (type.vtabptr_cname, entry.cname)
                             ctype = entry.type
@@ -7065,6 +7068,7 @@ class AttributeNode(ExprNode):
                         ubcm_entry.scope = entry.scope
                         if type.is_cpp_class:
                             ubcm_entry.overloaded_alternatives = [Symtab.Entry(entry.name, entry.func_cname, entry.type) for entry in entry.overloaded_alternatives]
+                        self.entry = ubcm_entry
                     return self.as_name_node(env, ubcm_entry, target=False)
             elif type.is_enum or type.is_cpp_enum:
                 if self.attribute in type.values:
@@ -7201,6 +7205,11 @@ class AttributeNode(ExprNode):
                     self.type = entry.type
                     return
                 elif (entry.is_variable and not entry.fused_cfunction) or entry.is_cmethod:
+                    self.type = entry.type
+                    self.member = entry.cname
+                    return
+                elif entry.type.is_cpp_class and entry.is_type:
+                    # This could be a c++ class trying to access a parent type
                     self.type = entry.type
                     self.member = entry.cname
                     return

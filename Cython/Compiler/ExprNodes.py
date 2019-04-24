@@ -5676,6 +5676,7 @@ class SimpleCallNode(CallNode):
     nogil = False
     analysed = False
     overflowcheck = False
+    explicit_cpp_self = None
 
     def compile_time_value(self, denv):
         function = self.function.compile_time_value(denv)
@@ -5789,6 +5790,14 @@ class SimpleCallNode(CallNode):
             args = self.args
         elif self.self:
             args = [self.self] + self.args
+        elif (func_type.is_cfunction and len(self.args) > 0
+             and not func_type.is_static_method
+             and self.function.is_name and self.function.entry
+             and hasattr(self.function.entry, 'scope')
+             and self.function.entry.scope.is_cpp_class_scope
+             and self.function.entry.scope.type.is_cyp_class):
+            self.explicit_cpp_self = self.args[0].result()
+            args = self.args[1:]
         else:
             args = self.args
 
@@ -6019,7 +6028,13 @@ class SimpleCallNode(CallNode):
         for actual_arg in self.args[len(formal_args):]:
             arg_list_code.append(actual_arg.move_result_rhs())
 
-        result = "%s(%s)" % (self.function.result(), ', '.join(arg_list_code))
+        result = None
+        # Checking for self argument in cppclasses given as an explicit first
+        # argument. This is the opposite of self.self purpose.
+        if self.explicit_cpp_self:
+            result = "%s->%s(%s)" % (self.explicit_cpp_self, self.function.result(), ', '.join(arg_list_code))
+        else:
+            result = "%s(%s)" % (self.function.result(), ', '.join(arg_list_code))
         return result
 
     def is_c_result_required(self):

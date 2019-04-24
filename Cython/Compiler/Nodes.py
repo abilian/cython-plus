@@ -620,6 +620,7 @@ class CFuncDeclaratorNode(CDeclaratorNode):
     optional_arg_count = 0
     is_const_method = 0
     templates = None
+    skipped_self = None
 
     def declared_name(self):
         return self.base.declared_name()
@@ -655,7 +656,7 @@ class CFuncDeclaratorNode(CDeclaratorNode):
         for i, arg_node in enumerate(self.args):
             name_declarator, type = arg_node.analyse(
                 env, nonempty=nonempty,
-                is_self_arg=(i == 0 and env.is_c_class_scope and 'staticmethod' not in env.directives))
+                is_self_arg=(i == 0 and (env.is_c_class_scope or env.is_cpp_class_scope and env.parent_type.is_cyp_class) and 'staticmethod' not in env.directives))
             name = name_declarator.name
             if name in directive_locals:
                 type_node = directive_locals[name]
@@ -670,7 +671,11 @@ class CFuncDeclaratorNode(CDeclaratorNode):
                     type = other_type
             if name_declarator.cname:
                 error(self.pos, "Function argument cannot have C name specification")
-            if i == 0 and env.is_c_class_scope and type.is_unspecified:
+            if i == 0 and (env.is_c_class_scope or env.is_cpp_class_scope and env.parent_type.is_cyp_class) and type.is_unspecified:
+                if env.is_cpp_class_scope and env.parent_type.is_cyp_class:
+                    type = env.lookup_here("this").type
+                    self.skipped_self = (name, type, arg_node.pos, arg_node)
+                    continue
                 # fix the type of self
                 type = env.parent_type
             # Turn *[] argument into **
@@ -686,6 +691,8 @@ class CFuncDeclaratorNode(CDeclaratorNode):
             elif self.optional_arg_count:
                 error(self.pos, "Non-default argument follows default argument")
 
+        if self.skipped_self:
+            self.args = self.args[1:] if len(self.args) > 1 else []
         exc_val = None
         exc_check = 0
         if self.exception_check == '+':
@@ -1016,9 +1023,9 @@ class CSimpleBaseTypeNode(CBaseTypeNode):
             type = cy_object_type
             self.arg_name = EncodedString(self.name)
         elif self.name is None:
-            if self.is_self_arg and env.is_c_class_scope:
+            if self.is_self_arg and (env.is_c_class_scope or env.is_cpp_class_scope and env.parent_type.is_cyp_class):
                 #print "CSimpleBaseTypeNode.analyse: defaulting to parent type" ###
-                type = env.parent_type
+                type = env.parent_type if env.is_c_class_scope else PyrexTypes.unspecified_type
             ## elif self.is_type_arg and env.is_c_class_scope:
             ##     type = Builtin.type_type
             else:
@@ -1049,8 +1056,8 @@ class CSimpleBaseTypeNode(CBaseTypeNode):
                 if type is not None:
                     pass
                 elif could_be_name:
-                    if self.is_self_arg and env.is_c_class_scope:
-                        type = env.parent_type
+                    if self.is_self_arg and (env.is_c_class_scope or env.is_cpp_class_scope and env.parent_type.is_cyp_class):
+                        type = env.parent_type if env.is_c_class_scope else PyrexTypes.unspecified_type
                     ## elif self.is_type_arg and env.is_c_class_scope:
                     ##     type = Builtin.type_type
                     else:
@@ -2547,8 +2554,23 @@ class CFuncDefNode(FuncDefNode):
                 # An error will be produced in the cdef function
                 self.overridable = False
 
+        func_declarator = self.declarator.base if isinstance(self.declarator, CPtrDeclaratorNode)\
+                          else self.declarator
+        if env.is_cpp_class_scope and env.parent_type.is_cyp_class\
+           and not declarator.skipped_self and not self.is_static_method:
+             # It means we have a cypclass method without the self argument
+             # => shout
+             error(self.pos, "Cypclass methods must have a self argument")
+
         self.declare_cpdef_wrapper(env)
         self.create_local_scope(env)
+        # HACK: in case we had a skipped self in arguments (functions in cpp classes),
+        # declare it here as a valid local variable mapped to 'this'
+        if declarator.skipped_self:
+            _name, _type, _pos, _ = declarator.skipped_self
+            _cname = "this"
+            entry = self.local_scope.declare(_name, _cname, _type, _pos, 'private')
+            entry.is_variable = 1
 
     def declare_cpdef_wrapper(self, env):
         if self.overridable:

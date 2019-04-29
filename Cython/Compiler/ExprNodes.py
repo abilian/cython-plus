@@ -5630,15 +5630,40 @@ class CallNode(ExprNode):
         elif type and type.is_cpp_class:
             self.args = [ arg.analyse_types(env) for arg in self.args ]
             constructor = type.scope.lookup("<init>")
-            if not constructor:
+            constructor_type = None
+            constructor_cname = None
+            if type.is_cyp_class:
+                constructor = wrapper = type.scope.lookup_here("<constructor>")
+                if not wrapper:
+                    error(self.function.pos, "no constructor wrapper found for Cypclass  type '%s'" % self.function.name)
+                namespace_list = wrapper.func_cname.split('::')
+                templates = ''
+                if type.templates:
+                    templates = '<' + ','.join([param.declaration_code('')
+                                for param in type.templates
+                                if not PyrexTypes.is_optional_template_param(param) and not param.is_fused]) + '>'
+                if len(namespace_list) > 2:
+                    # We do this because cypclass wrappers are outside of the class namespace
+                    # in the C++ code, but they are declared within the class scope
+                    constructor_cname = '::'.join(namespace_list[:-2] + [namespace_list[-1]]) + templates
+                else:
+                    constructor_cname = namespace_list[-1] + templates
+                constructor_type = wrapper.type
+            elif not constructor:
                 error(self.function.pos, "no constructor found for C++  type '%s'" % self.function.name)
                 self.type = error_type
                 return self
-            self.function = RawCNameExprNode(self.function.pos, constructor.type)
+            else:
+                constructor_type = constructor.type
+                constructor_cname = type.empty_declaration_code()
+            self.function = RawCNameExprNode(self.function.pos, constructor_type)
             self.function.entry = constructor
-            self.function.set_cname(type.empty_declaration_code())
+            self.function.set_cname(constructor_cname)
             self.analyse_c_function_call(env)
-            self.type = type
+            if type.is_cyp_class:
+                self.type = constructor_type.return_type
+            else:
+                self.type = type
             return True
 
     def is_lvalue(self):

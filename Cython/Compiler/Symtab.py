@@ -680,7 +680,28 @@ class Scope(object):
         if scope:
             entry.type.set_scope(scope)
             declare_inherited_attributes(entry, base_classes)
-            scope.declare_var(name="this", cname="this", type=PyrexTypes.CPtrType(entry.type), pos=entry.pos)
+            this_type = PyrexTypes.CPtrType(entry.type) if not cypclass else entry.type
+            scope.declare_var(name="this", cname="this", type=this_type, pos=entry.pos)
+            if cypclass:
+                # Declare a shadow default constructor
+                wrapper_type = PyrexTypes.CFuncType(entry.type, [], nogil=1)
+                wrapper_cname = "%s__constructor__%s" % (Naming.func_prefix, name)
+                wrapper_name = "<constructor>"
+                wrapper_entry = scope.declare(wrapper_name, wrapper_cname, wrapper_type, pos, visibility)
+                wrapper_type.entry = wrapper_entry
+                wrapper_entry.is_inherited = 1
+                wrapper_entry.is_cfunction = 1
+                wrapper_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), wrapper_cname)
+
+                # Declare the default __alloc__ method
+                alloc_type = wrapper_type
+                alloc_cname = "%s__alloc__%s" % (Naming.func_prefix, name)
+                alloc_name = "<alloc>"
+                alloc_entry = scope.declare(alloc_name, alloc_cname, alloc_type, pos, visibility)
+                alloc_type.entry = alloc_entry
+                alloc_entry.is_cfunction = 1
+                alloc_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), alloc_cname)
+
         if self.is_cpp_class_scope:
             entry.type.namespace = self.outer_scope.lookup(self.name).type
         return entry
@@ -2550,6 +2571,26 @@ class CppClassScope(Scope):
             self.var_entries.append(entry)
         return entry
 
+    def declare_constructor_wrapper(self, args, pos, defining=0, has_varargs=0, optional_arg_count=0, op_arg_struct = None, return_type=None):
+        if not return_type:
+            return_type = self.type
+        class_type = self.parent_type
+        class_name = self.name.split('::')[-1]
+        wrapper_cname = "%s__constructor__%s" % (Naming.func_prefix, class_name)
+        wrapper_name = "<constructor>"
+        wrapper_type = PyrexTypes.CFuncType(return_type, args, nogil=1,
+                                            has_varargs=has_varargs,
+                                            optional_arg_count=optional_arg_count)
+        if op_arg_struct:
+            wrapper_type.op_arg_struct = op_arg_struct
+        wrapper_entry = self.declare(wrapper_name, wrapper_cname, wrapper_type,
+                                     pos, 'extern')
+        wrapper_type.entry = wrapper_entry
+        wrapper_entry.is_cfunction = 1
+        if defining:
+            wrapper_entry.func_cname = "%s::%s" % (class_type.empty_declaration_code(), wrapper_cname)
+        return wrapper_entry
+
     def declare_cfunction(self, name, type, pos,
                           cname=None, visibility='extern', api=0, in_pxd=0,
                           defining=0, modifiers=(), utility_code=None, overridable=False):
@@ -2562,16 +2603,40 @@ class CppClassScope(Scope):
             # arguments that cannot by called by value.
             type.original_args = type.args
             def maybe_ref(arg):
-                if arg.type.is_cpp_class and not arg.type.is_reference:
+                if arg.type.is_cpp_class and not arg.type.is_reference and not arg.type.is_cyp_class:
                     return PyrexTypes.CFuncTypeArg(
                         arg.name, PyrexTypes.c_ref_type(arg.type), arg.pos)
                 else:
                     return arg
             type.args = [maybe_ref(arg) for arg in type.args]
+
+            if self.type.is_cyp_class and not self.lookup_here("__new__"):
+                self.declare_constructor_wrapper(type.args, pos, defining,
+                                                 type.has_varargs, type.optional_arg_count,
+                                                 getattr(type, 'op_arg_struct', None))
+
         elif name == '__dealloc__' and cname is None:
             cname = "%s__dealloc__%s" % (Naming.func_prefix, class_name)
             name = EncodedString('<del>')
             type.return_type = PyrexTypes.c_void_type
+        elif name == '__alloc__' and self.type.is_cyp_class:
+            cname = "%s__alloc__%s" % (Naming.func_prefix, class_name)
+            name = '<alloc>'
+        elif name == '__new__' and self.type.is_cyp_class:
+            if name in self.entries:
+                if self.entries[name].is_inherited:
+                    del self.entries[name]
+                else:
+                    error(pos, "Couldn't have more than one __new__ function")
+            if self.lookup_here("<constructor>"):
+                del self.entries["<constructor>"]
+            self.declare_constructor_wrapper(type.args[1:], pos, defining,
+                                             type.has_varargs, type.optional_arg_count,
+                                             getattr(type, 'op_arg_struct', None),
+                                             return_type=type.return_type)
+
+            type.original_alloc_type = type.args[0]
+
         if name in ('<init>', '<del>') and type.nogil:
             for base in self.type.base_classes:
                 if base is cy_object_type:
@@ -2604,14 +2669,50 @@ class CppClassScope(Scope):
         # inherited type, with cnames modified appropriately
         # to work with this type.
         for base_entry in base_scope.inherited_var_entries + base_scope.var_entries:
+                base_entry_type = base_entry.type
                 #constructor/destructor is not inherited
-                if base_entry.name in ("<init>", "<del>"):
+                if base_entry.name == "<del>"\
+                   or base_entry.name == "<init>" and not self.parent_type.is_cyp_class\
+                   or base_entry.name in ("<constructor>", "<alloc>") and self.parent_type.is_cyp_class:
                     continue
+                elif base_entry.name == "<init>" and not self.lookup_here("__new__"):
+                    wrapper_entry = self.declare_constructor_wrapper(base_entry_type.args, base_entry.pos,
+                                                                     defining=1, has_varargs = base_entry_type.has_varargs,
+                                                                     optional_arg_count = base_entry_type.optional_arg_count,
+                                                                     op_arg_struct = getattr(base_entry_type, 'op_arg_struct', None),
+                                                                     return_type=self.parent_type)
+                    wrapper_entry.is_inherited = 1
                 #print base_entry.name, self.entries
+                elif base_entry.name == "__new__" and self.parent_type.is_cyp_class:
+                    # Rewrite first argument for __new__
+                    alloc_type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(
+                        self.parent_type, [], nogil=1))
+                    alloc_arg = PyrexTypes.CFuncTypeArg(base_entry.type.args[0].name, alloc_type,
+                                                        base_entry.type.args[0].pos, cname=base_entry.type.args[0].cname)
+                    base_entry_type = PyrexTypes.CFuncType(base_entry_type.return_type,
+                                            [alloc_arg] + base_entry_type.args[1:], nogil=1,
+                                            has_varargs=base_entry_type.has_varargs,
+                                            optional_arg_count=base_entry_type.optional_arg_count)
+                    if hasattr(base_entry.type, 'op_arg_struct'):
+                        base_entry_type.op_arg_struct = base_entry.type.op_arg_struct
+                    base_entry_type.original_alloc_type = base_entry.type.original_alloc_type
+                    if base_entry.name in self.entries:
+                        del self.entries[base_entry.name]
+                        del self.entries["<constructor>"]
+                    elif "<init>" in self.entries:
+                        del self.entries["<constructor>"]
+                    wrapper_entry = self.declare_constructor_wrapper(base_entry_type.args[1:],
+                                                                     base_entry.pos, defining=1,
+                                                                     has_varargs = base_entry_type.has_varargs,
+                                                                     optional_arg_count = base_entry_type.optional_arg_count,
+                                                                     op_arg_struct = getattr(base_entry_type, 'op_arg_struct', None),
+                                                                     return_type=base_entry_type.return_type)
+                    wrapper_entry.is_inherited = 1
+
                 if base_entry.name in self.entries:
                     base_entry.name    # FIXME: is there anything to do in this case?
                 entry = self.declare(base_entry.name, base_entry.cname,
-                    base_entry.type, None, 'extern')
+                    base_entry_type, None, 'extern')
                 entry.is_variable = 1
                 entry.is_inherited = 1
                 entry.is_cfunction = base_entry.is_cfunction
@@ -2665,7 +2766,9 @@ class CppClassScope(Scope):
             name = "<init>"
         elif name == "__dealloc__":
             name = "<del>"
-        return super(CppClassScope, self).lookup_here(name)
+        elif name == "__alloc__":
+            name = "<alloc>"
+        return super(CppClassScope,self).lookup_here(name)
 
 
 class CppScopedEnumScope(Scope):

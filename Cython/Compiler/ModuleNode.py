@@ -651,6 +651,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     type_entries.append(entry)
             type_entries = [t for t in type_entries if t not in vtabslot_entries]
             self.generate_type_header_code(type_entries, code)
+            self.generate_cyp_class_wrapper_definitions(type_entries, code)
         for entry in vtabslot_list:
             self.generate_objstruct_definition(entry.type, code)
             self.generate_typeobj_predeclaration(entry, code)
@@ -892,6 +893,22 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 elif type.is_extension_type:
                     self.generate_objstruct_definition(type, code)
 
+    def generate_cyp_class_wrapper_definitions(self, type_entries, code):
+        for entry in type_entries:
+            if entry.type.is_cyp_class:
+                # Generate wrapper constructor
+                scope = entry.type.scope
+                wrapper = scope.lookup_here("<constructor>")
+                constructor = scope.lookup_here("<init>")
+                new = scope.lookup_here("__new__")
+                alloc = scope.lookup_here("<alloc>")
+                if not wrapper:
+                    error(self.pos, "No constructor wrapper found for cypclass %s, did you write an __init__ method ?" % type.name)
+                    return
+                for wrapper_entry in wrapper.all_alternatives():
+                    if wrapper_entry.used or entry.type.templates:
+                        self.generate_cyp_class_wrapper_definition(entry.type, wrapper_entry, constructor, new, alloc, code)
+
     def generate_gcc33_hack(self, env, code):
         # Workaround for spurious warning generation in gcc 3.3
         code.putln("")
@@ -974,6 +991,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.mark_pos(entry.pos)
         type = entry.type
         scope = type.scope
+        default_constructor = False
         if scope:
             if type.templates:
                 code.putln("template <class %s>" % ", class ".join(
@@ -997,8 +1015,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             has_virtual_methods = False
             constructor = None
             destructor = None
-            if type.is_cyp_class:
-                has_virtual_methods = True
             for attr in scope.var_entries:
                 cname = attr.cname
                 if attr.type.is_cfunction and attr.type.is_static_method:
@@ -1031,7 +1047,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 else:
                     code.putln("%s(%s);" % (type.cname, ", ".join(arg_decls)))
 
-            if constructor or py_attrs:
+            if not type.is_cyp_class and (constructor or py_attrs):
                 if constructor:
                     for constructor_alternative in constructor.all_alternatives():
                         arg_decls = []
@@ -1096,11 +1112,157 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 else:
                     code.putln("%s(const %s& __Pyx_other);" % (type.cname, type.cname))
                     code.putln("%s& operator=(const %s& __Pyx_other);" % (type.cname, type.cname))
+            if type.is_cyp_class:
+                code.putln("// Auto generating default constructor to have Python-like behaviour")
+                code.putln("%s(){}" % type.cname)
+                code.putln("// Generating __alloc__ function (used for __new__ calls)")
+                alloc_entry = scope.lookup_here("<alloc>")
+                code.putln("static %s { return new %s(); }" % (alloc_entry.type.declaration_code(alloc_entry.cname), type.declaration_code("", deref=1)))
             code.putln("};")
 
         if type.is_cyp_class:
             code.globalstate.use_utility_code(
                 UtilityCode.load("CyObjects", "CyObjects.cpp", proto_block="utility_code_proto_before_types"))
+
+    def generate_cyp_class_wrapper_definition(self, type, wrapper_entry, constructor_entry, new_entry, alloc_entry, code):
+        if type.templates:
+                code.putln("template <typename %s>" % ", class ".join(
+                    [T.empty_declaration_code() for T in type.templates]))
+
+        init_entry = constructor_entry
+        self_type = wrapper_entry.type.return_type.declaration_code('')
+        type_string = type.empty_declaration_code()
+        class_name = type.name
+        wrapper_cname = "%s__constructor__%s" % (Naming.func_prefix, class_name)
+        wrapper_type = wrapper_entry.type
+
+        arg_decls = []
+        arg_names = []
+        for arg in wrapper_type.args[:len(wrapper_type.args)-wrapper_type.optional_arg_count]:
+            arg_decl = arg.declaration_code()
+            arg_decls.append(arg_decl)
+            arg_names.append(arg.cname)
+
+        if wrapper_type.optional_arg_count:
+            arg_decls.append(wrapper_type.op_arg_struct.declaration_code(Naming.optional_args_cname))
+            arg_names.append(Naming.optional_args_cname)
+        if wrapper_type.has_varargs:
+            # We can't safely handle varargs because we need
+            # to know where the size argument is to start a va_list
+            error(wrapper_entry.pos,
+            "Cypclass cannot handle variable arguments constructors, but you can use optional arguments (arg=some_value)")
+        if not arg_decls:
+            arg_decls = ["void"]
+
+        decl_arg_string = ', '.join(arg_decls)
+        code.putln("static %s %s(%s)" % (self_type, wrapper_cname, decl_arg_string))
+        code.putln("{")
+
+        wrapper_arg_types = [arg.type for arg in wrapper_entry.type.args]
+        pos = wrapper_entry.pos or type.entry.pos
+
+        if new_entry:
+            alloc_type = alloc_entry.type
+            new_arg_types = [alloc_type] + wrapper_arg_types
+
+            new_entry = PyrexTypes.best_match(new_arg_types,
+              new_entry.all_alternatives(), pos)
+
+            if new_entry:
+                alloc_call_string = "(" + new_entry.type.original_alloc_type.type.declaration_code("") + ") %s" % alloc_entry.func_cname
+                new_arg_names = [alloc_call_string] + arg_names
+                new_arg_string = ', '.join(new_arg_names)
+                code.putln("%s self =(%s) %s(%s);" % (self_type, self_type, new_entry.func_cname, new_arg_string))
+        else:
+            code.putln("%s self = new %s();" % (self_type, type_string))
+
+        if init_entry:
+            init_entry = PyrexTypes.best_match(wrapper_arg_types,
+            init_entry.all_alternatives(), None)
+        if init_entry and (not new_entry or new_entry.type.return_type == type):
+            # Calling __init__
+
+            max_init_nargs = len(init_entry.type.args)
+            min_init_nargs = max_init_nargs - init_entry.type.optional_arg_count
+            max_wrapper_nargs = len(wrapper_entry.type.args)
+            min_wrapper_nargs =  max_wrapper_nargs - wrapper_entry.type.optional_arg_count
+
+            if min_init_nargs == min_wrapper_nargs:
+                # The optional arguments begin at the same rank for both function
+                # => just pass the wrapper opt args structure, and everything will be fine.
+                if max_wrapper_nargs > min_wrapper_nargs:
+                    # The wrapper has optional args
+                    arg_names[-1] = "(%s) %s" % (init_entry.type.op_arg_struct.declaration_code(''), arg_names[-1])
+                elif max_init_nargs > min_init_nargs:
+                    # The wrapper has no optional args but the __init__ function does
+                    arg_names.append("(%s) NULL" % init_entry.type.op_arg_struct.declaration_code(''))
+                # else, neither __init__ nor __new__ have optional arguments, nothing to do
+            elif min_wrapper_nargs < min_init_nargs:
+                # It means some args from the wrapper should be at
+                # their default values, which we cannot know from here,
+                # so shout and stop, sadly.
+                error(init_entry.pos, "Could not call this __init__ function because the corresponding __new__ wrapper isn't aware of default values")
+                error(wrapper_entry.pos, "Wrapped __new__ is here (some args passed to __init__ could be at their default values)")
+            elif min_wrapper_nargs > min_init_nargs:
+                # Here, the __init__ optional arguments start before
+                # the __new__ ones. We have to unpack the __new__ opt args struct
+                # in some variables and then repack in the __init__ opt args struct.
+
+                init_opt_args_name_list = [arg.cname for arg in wrapper_entry.type.args[min_init_nargs:]]
+
+                # The first __init__ optional arguments are mandatory
+                # in the __new__ signature, so they will always appear
+                # in the __init__ optional arguments structure
+                init_opt_args_number = "init_opt_n"
+                code.putln("int %s = %s;" % (init_opt_args_number, min_wrapper_nargs - min_init_nargs))
+
+                if wrapper_entry.type.optional_arg_count:
+                    for i, arg in enumerate(wrapper_entry.type.args[min_wrapper_nargs:]):
+                        # It's an opt arg => it's not declared in the (c++) function scope => declare a variable for it
+                        arg_name = arg.cname
+                        code.putln("%s;" % arg.type.declaration_code(arg_name))
+
+                    # Arguments unpacking
+                    optional_struct_name = arg_names.pop()
+                    code.putln("if (%s) {" % optional_struct_name)
+
+                    # This is necessary to keep __init__ informed of
+                    # how many optional arguments were explicitely given
+                    code.putln("%s += %s->%sn;" % (init_opt_args_number, optional_struct_name, Naming.pyrex_prefix))
+
+                    braces_number = 1 + max_wrapper_nargs - min_wrapper_nargs
+                    for i, arg in enumerate(wrapper_entry.type.args[min_wrapper_nargs:]):
+                        code.putln("if(%s->%sn > %s) {" % (optional_struct_name, Naming.pyrex_prefix, i))
+                        code.putln("%s = %s->%s;" % (
+                            arg.cname,
+                            optional_struct_name,
+                            wrapper_entry.type.op_arg_struct.base_type.scope.var_entries[i+1].cname
+                        ))
+                    for _ in range(braces_number):
+                        code.putln('}')
+
+                # Arguments packing
+                init_opt_args_struct_name = "init_opt_args"
+                code.putln("%s;" % init_entry.type.op_arg_struct.base_type.declaration_code(init_opt_args_struct_name))
+                code.putln("%s.%sn = %s;" % (init_opt_args_struct_name, Naming.pyrex_prefix, init_opt_args_number))
+                for i, arg_name in enumerate(init_opt_args_name_list):
+                    # The second tuple member is a bit tricky.
+                    # Actually, the only way we have to precisely know the attribute cname
+                    # which corresponds to the argument in the opt args struct
+                    # is to rely on the declaration order in the struct scope.
+                    # FuncDefNode doesn't do this because it has it's declarator node,
+                    # which is not our case here.
+                    code.putln("%s.%s = %s;" % (
+                      init_opt_args_struct_name,
+                      init_entry.type.opt_arg_cname(init_entry.type.args[min_init_nargs+i].name),
+                      arg_name
+                    ))
+                arg_names = arg_names[:min_init_nargs] + ["&"+init_opt_args_struct_name]
+
+            init_arg_string = ','.join(arg_names)
+            code.putln("self->%s(%s);" % (init_entry.cname, init_arg_string))
+        code.putln("return self;")
+        code.putln("}")
 
     def generate_enum_definition(self, entry, code):
         code.mark_pos(entry.pos)

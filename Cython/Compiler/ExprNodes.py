@@ -10660,6 +10660,8 @@ class TypecastNode(ExprNode):
             operator = 'operator ' + self.type.declaration_code('')
             entry = self.operand.type.scope.lookup_here(operator)
             self.overloaded = entry is not None
+            if self.type.is_cyp_class:
+                self.is_temp = True
         if self.type.is_ptr and self.type.base_type.is_cfunction and self.type.base_type.nogil:
             op_type = self.operand.type
             if op_type.is_ptr:
@@ -10724,11 +10726,21 @@ class TypecastNode(ExprNode):
 
     def generate_result_code(self, code):
         if self.is_temp:
-            code.putln(
-                "%s = (PyObject *)%s;" % (
-                    self.result(),
-                    self.operand.result()))
-            code.put_incref(self.result(), self.ctype())
+            if self.type.is_pyobject:
+                code.putln(
+                    "%s = (PyObject *)%s;" % (
+                        self.result(),
+                        self.operand.result()))
+                code.put_incref(self.result(), self.ctype())
+            elif self.type.is_cyp_class:
+                star = "*" if self.overloaded else ""
+                operand_result = "%s%s" % (star, self.operand.result())
+                code.putln(
+                    "%s = (%s)(%s);" % (
+                        self.result(),
+                        self.type.declaration_code(''),
+                        operand_result))
+                code.put_cyincref(self.result())
 
 
 ERR_START = "Start may not be given"

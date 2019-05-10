@@ -699,7 +699,11 @@ class Scope(object):
                 alloc_name = "<alloc>"
                 alloc_entry = scope.declare(alloc_name, alloc_cname, alloc_type, pos, visibility)
                 alloc_type.entry = alloc_entry
+                alloc_entry.is_inherited = 1
                 alloc_entry.is_cfunction = 1
+                # is_builtin_cmethod is currently only used in cclass, so it should be safe
+                # to use it here to distinguish between implicit default __alloc__ and user-defined one
+                alloc_entry.is_builtin_cmethod = 1
                 alloc_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), alloc_cname)
 
         if self.is_cpp_class_scope:

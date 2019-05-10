@@ -1120,7 +1120,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.putln("%s(){}" % type.cname)
                 code.putln("// Generating __alloc__ function (used for __new__ calls)")
                 alloc_entry = scope.lookup_here("<alloc>")
-                code.putln("static %s { return new %s(); }" % (alloc_entry.type.declaration_code(alloc_entry.cname), type.declaration_code("", deref=1)))
+                if alloc_entry.is_builtin_cmethod:
+                    code.putln("static %s { return new %s(); }" % (alloc_entry.type.declaration_code(alloc_entry.cname), type.declaration_code("", deref=1)))
             code.putln("};")
 
         if type.is_cyp_class:

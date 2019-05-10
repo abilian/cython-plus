@@ -2825,6 +2825,10 @@ class CppClassScope(Scope):
             name = "<del>"
         elif name == "__alloc__":
             name = "<alloc>"
+        else:
+            operator = self.operator_table.get(name, None)
+            if operator:
+                name = 'operator'+operator
         return super(CppClassScope,self).lookup_here(name)
 
 

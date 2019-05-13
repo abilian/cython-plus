@@ -4277,9 +4277,16 @@ class IndexNode(_IndexingBaseNode):
             code.putln(
                 "%s = %s;" % (self.result(), rhs.result()))
 
-        self.generate_subexpr_disposal_code(code)
-        self.free_subexpr_temps(code)
-        rhs.generate_disposal_code(code)
+        if self.type.is_cyp_class:
+            # This hack is due to the fact cypclass objects are ref-counted, so
+            # they goes into temps, but their assignment code is a simple C assignment,
+            # which doesn't incref the temp.
+            # So we are effectively absorbing a reference in this case.
+            rhs.generate_post_assignment_code(code)
+        else:
+            self.generate_subexpr_disposal_code(code)
+            self.free_subexpr_temps(code)
+            rhs.generate_disposal_code(code)
         rhs.free_temps(code)
 
     def _check_byte_value(self, code, rhs):

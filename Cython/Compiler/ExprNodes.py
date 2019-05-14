@@ -2431,9 +2431,9 @@ class NameNode(AtomicExprNode):
                     if is_external_ref:
                         rhs.generate_giveref(code)
             elif self.type.is_cyp_class:
-                code.put_cyxdecref(self.result())
-                if isinstance(rhs, NameNode):
+                if self.use_managed_ref:
                     rhs.make_owned_reference(code)
+                code.put_cyxdecref(self.result())
             if not self.type.is_memoryviewslice:
                 if not assigned:
                     if overloaded_assignment:

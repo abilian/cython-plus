@@ -2078,6 +2078,20 @@ def p_with_items(s, is_async=False):
         else:
             body = p_suite(s)
         return Nodes.GILStatNode(pos, state=state, body=body, condition=condition)
+    elif not s.in_python_file and s.sy == 'IDENT' and s.systring in ('unlocked', 'rlocked', 'wlocked'):
+        state = s.systring
+        s.next()
+
+        if s.sy != 'IDENT':
+            s.error("The with %s statement must be followed by the cypclass object to operate on" % state, pos)
+
+        obj = p_starred_expr(s)
+        if s.sy == ',':
+            s.next()
+            body = p_with_items(s, is_async=is_async)
+        else:
+            body = p_suite(s)
+        return Nodes.LockCypclassNode(pos, state=state, obj=obj, body=body)
     else:
         manager = p_test(s)
         target = None

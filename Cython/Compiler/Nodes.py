@@ -5619,6 +5619,7 @@ class ExprStatNode(StatNode):
     def analyse_expressions(self, env):
         self.expr.result_is_used = False  # hint that .result() may safely be left empty
         self.expr = self.expr.analyse_expressions(env)
+        self.expr.check_rhs_locked()
         # Repeat in case of node replacement.
         self.expr.result_is_used = False  # hint that .result() may safely be left empty
         return self
@@ -5786,6 +5787,8 @@ class SingleAssignmentNode(AssignmentNode):
 
         self.lhs = self.lhs.analyse_target_types(env)
         self.lhs.gil_assignment_check(env)
+        self.rhs.check_rhs_locked()
+        self.lhs.check_lhs_locked()
         unrolled_assignment = self.unroll_lhs(env)
         if unrolled_assignment:
             return unrolled_assignment
@@ -8399,6 +8402,84 @@ class EnsureGILNode(GILExitNode):
 
     def generate_execution_code(self, code):
         code.put_ensure_gil(declare_gilstate=False)
+
+class LockCypclassNode(StatNode):
+    #  'with locked [cypclass object]' or 'with unlocked [cypclass object]' statement
+    #
+    #   state   string   'locked' or 'unlocked'
+    #   obj     ExprNode the (un)locked object
+    #   body    StatNode
+
+    child_attrs = ["body", "obj"]
+
+    def analyse_declarations(self, env):
+        self.body.analyse_declarations(env)
+        self.obj.analyse_declarations(env)
+
+    def analyse_expressions(self, env):
+        self.obj = self.obj.analyse_types(env)
+        if not hasattr(self.obj, 'entry'):
+            error(self.pos, "The (un)locking target has no entry")
+        if not self.obj.type.is_cyp_class:
+            error(self.pos, "Cannot (un)lock a non-cypclass variable !")
+
+        is_rlocked = self.obj.entry.is_rlocked
+        is_wlocked = self.obj.entry.is_wlocked
+
+        if self.state == "unclocked" and not (is_rlocked or is_wlocked):
+            error(self.pos, "Cannot unlock an already unlocked object !")
+
+        elif self.state == "rlocked" and is_rlocked:
+            error(self.pos, "Double read lock !")
+
+        elif self.state == "wlocked" and is_wlocked:
+            error(self.pos, "Double write lock !")
+
+
+        # We need to save states because in case of 'with unlocked' statement,
+        # we must know which lock has to be restored after the with body.
+        self.was_rlocked = is_rlocked
+        self.was_wlocked = is_wlocked
+
+        if self.state == "rlocked":
+            self.obj.entry.is_rlocked = True
+            self.obj.entry.is_wlocked = False
+        elif self.state == "wlocked":
+            self.obj.entry.is_rlocked = False
+            self.obj.entry.is_wlocked = True
+        else:
+            self.obj.entry.is_rlocked = False
+            self.obj.entry.is_wlocked = False
+
+        self.body = self.body.analyse_expressions(env)
+
+        self.obj.entry.is_rlocked = self.was_rlocked
+        self.obj.entry.is_wlocked = self.was_wlocked
+        return self
+
+    def generate_execution_code(self, code):
+        # We must unlock if it's a 'with unlocked' statement,
+        # or if we're changing lock type.
+        if self.was_rlocked or self.was_wlocked:
+            code.putln("Cy_UNLOCK(%s);" % self.obj.result())
+
+        # Then, lock accordingly
+        if self.state == "rlocked":
+            code.putln("Cy_RLOCK(%s);" % self.obj.result())
+        elif self.state == "wlocked":
+            code.putln("Cy_WLOCK(%s);" % self.obj.result())
+
+        self.body.generate_execution_code(code)
+
+        # We must unlock if we held a lock previously
+        if self.state != "unlocked":
+            code.putln("Cy_UNLOCK(%s);" % self.obj.result())
+
+        # Then, relock if needed
+        if self.was_rlocked:
+            code.putln("Cy_RLOCK(%s);" % self.obj.result())
+        elif self.was_wlocked:
+            code.putln("Cy_WLOCK(%s);" % self.obj.result())
 
 
 def cython_view_utility_code():

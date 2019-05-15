@@ -723,6 +723,20 @@ class ExprNode(Node):
     def addr_not_const(self):
         error(self.pos, "Address is not constant")
 
+    def is_rhs_locked(self):
+        return True
+
+    def is_lhs_locked(self):
+        return True
+
+    def check_rhs_locked(self):
+        if not self.is_rhs_locked():
+            error(self.pos, "This rhs is not correctly locked (write lock for non-const methods, read lock is sufficient for everything else)")
+
+    def check_lhs_locked(self):
+        if not self.is_lhs_locked():
+            error(self.pos, "This lhs is not correctly locked (write lock needed)")
+
     # ----------------- Result Allocation -----------------
 
     def result_in_temp(self):
@@ -6034,6 +6048,9 @@ class SimpleCallNode(CallNode):
 
         self.overflowcheck = env.directives['overflowcheck']
 
+    def is_rhs_locked(self):
+        return self.function.is_rhs_locked()
+
     def calculate_result_code(self):
         return self.c_call_code()
 
@@ -7335,6 +7352,22 @@ class AttributeNode(ExprNode):
             self.gil_error()
 
     gil_message = "Accessing Python attribute"
+
+    def is_rhs_locked(self):
+        # TODO: some chaining
+        obj = self.obj
+        if hasattr(obj, 'entry') and obj.entry.type.is_cyp_class and (obj.entry.is_variable or obj.entry.is_cfunction)\
+           and not (obj.entry.is_rlocked and (not self.entry.is_cfunction or self.entry.type.is_const_method) or obj.entry.is_wlocked):
+            return False
+        return True
+
+    def is_lhs_locked(self):
+        # TODO: some chaining
+        obj = self.obj
+        if self.is_lvalue() and hasattr(obj, 'entry') and obj.entry.type.is_cyp_class and not obj.entry.is_wlocked:
+            return False
+        return True
+
 
     def is_cimported_module_without_shadow(self, env):
         return self.obj.is_cimported_module_without_shadow(env)

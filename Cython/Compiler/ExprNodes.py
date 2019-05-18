@@ -5926,6 +5926,10 @@ class SimpleCallNode(CallNode):
                     arg.exact_builtin_type = False
             args[0] = arg
 
+        # Check arguments for cypclass locks
+        for arg in args:
+            arg.check_rhs_locked()
+
         # Coerce arguments
         some_args_in_temps = False
         for i in range(min(max_nargs, actual_nargs)):

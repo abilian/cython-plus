@@ -2240,6 +2240,9 @@ class FuncDefNode(StatNode, BlockNode):
                 # FIXME ideally use entry.xdecref_cleanup but this currently isn't reliable
                 code.put_var_xdecref(entry, have_gil=gil_owned['success'])
 
+        for entry in lenv.autolocked_entries:
+            code.putln("Cy_UNLOCK(%s);" % entry.cname)
+
         # Decref any increfed args
         for entry in lenv.arg_entries:
             if entry.type.is_memoryviewslice:
@@ -5619,7 +5622,7 @@ class ExprStatNode(StatNode):
     def analyse_expressions(self, env):
         self.expr.result_is_used = False  # hint that .result() may safely be left empty
         self.expr = self.expr.analyse_expressions(env)
-        self.expr.check_rhs_locked()
+        self.expr.check_rhs_locked(env)
         # Repeat in case of node replacement.
         self.expr.result_is_used = False  # hint that .result() may safely be left empty
         return self
@@ -5787,8 +5790,8 @@ class SingleAssignmentNode(AssignmentNode):
 
         self.lhs = self.lhs.analyse_target_types(env)
         self.lhs.gil_assignment_check(env)
-        self.rhs.check_rhs_locked()
-        self.lhs.check_lhs_locked()
+        self.rhs.check_rhs_locked(env)
+        self.lhs.check_lhs_locked(env)
         unrolled_assignment = self.unroll_lhs(env)
         if unrolled_assignment:
             return unrolled_assignment
@@ -6012,9 +6015,11 @@ class CascadedAssignmentNode(AssignmentNode):
         for i, lhs in enumerate(self.lhs_list):
             lhs = self.lhs_list[i] = lhs.analyse_target_types(env)
             lhs.gil_assignment_check(env)
+            lhs.check_lhs_locked(env)
             lhs_types.add(lhs.type)
 
         rhs = self.rhs.analyse_types(env)
+        rhs.check_rhs_locked(env)
         # common special case: only one type needed on the LHS => coerce only once
         if len(lhs_types) == 1:
             # Avoid coercion for overloaded assignment operators.

@@ -320,6 +320,7 @@ class Scope(object):
     # pyfunc_entries    [Entry]            Python function entries
     # cfunc_entries     [Entry]            C function entries
     # c_class_entries   [Entry]            All extension type entries
+    # autolocked_entries[Entry]            All autolocked entries that needs unlocking
     # cname_to_entry    {string : Entry}   Temp cname to entry mapping
     # return_type       PyrexType or None  Return type of function owning scope
     # is_builtin_scope  boolean            Is the builtin scope of Python/Cython
@@ -379,6 +380,7 @@ class Scope(object):
         self.cfunc_entries = []
         self.c_class_entries = []
         self.defined_c_classes = []
+        self.autolocked_entries = []
         self.imported_c_classes = {}
         self.cname_to_entry = {}
         self.identifier_to_entry = {}

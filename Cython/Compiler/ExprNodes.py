@@ -723,18 +723,22 @@ class ExprNode(Node):
     def addr_not_const(self):
         error(self.pos, "Address is not constant")
 
-    def is_rhs_locked(self):
+    def is_rhs_locked(self, env):
         return True
 
-    def is_lhs_locked(self):
+    def is_lhs_locked(self, env):
         return True
 
-    def check_rhs_locked(self):
-        if not self.is_rhs_locked():
+    def check_rhs_locked(self, env):
+        for node in self.subexpr_nodes():
+            node.check_rhs_locked(env)
+        if not self.is_rhs_locked(env):
             error(self.pos, "This rhs is not correctly locked (write lock for non-const methods, read lock is sufficient for everything else)")
 
-    def check_lhs_locked(self):
-        if not self.is_lhs_locked():
+    def check_lhs_locked(self, env):
+        for node in self.subexpr_nodes():
+            node.check_lhs_locked(env)
+        if not self.is_lhs_locked(env):
             error(self.pos, "This lhs is not correctly locked (write lock needed)")
 
     # ----------------- Result Allocation -----------------
@@ -5926,10 +5930,6 @@ class SimpleCallNode(CallNode):
                     arg.exact_builtin_type = False
             args[0] = arg
 
-        # Check arguments for cypclass locks
-        for arg in args:
-            arg.check_rhs_locked()
-
         # Coerce arguments
         some_args_in_temps = False
         for i in range(min(max_nargs, actual_nargs)):
@@ -6051,9 +6051,6 @@ class SimpleCallNode(CallNode):
                 env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
 
         self.overflowcheck = env.directives['overflowcheck']
-
-    def is_rhs_locked(self):
-        return self.function.is_rhs_locked()
 
     def calculate_result_code(self):
         return self.c_call_code()
@@ -6987,6 +6984,7 @@ class AttributeNode(ExprNode):
     is_memslice_transpose = False
     is_special_lookup = False
     is_py_attr = 0
+    needs_autolock = False
 
     def as_cython_attribute(self):
         if (isinstance(self.obj, NameNode) and
@@ -7357,21 +7355,31 @@ class AttributeNode(ExprNode):
 
     gil_message = "Accessing Python attribute"
 
-    def is_rhs_locked(self):
-        # TODO: some chaining
+    def is_rhs_locked(self, env):
         obj = self.obj
         if hasattr(obj, 'entry') and obj.entry.type.is_cyp_class and (obj.entry.is_variable or obj.entry.is_cfunction)\
            and not (obj.entry.is_rlocked and (not self.entry.is_cfunction or self.entry.type.is_const_method) or obj.entry.is_wlocked):
-            return False
+            if obj.entry.type.lock_mode == "autolock":
+                print "We will autolock here"
+                self.needs_autolock = True
+                self.obj.entry.is_wlocked = True
+            elif obj.entry.type.lock_mode == "checklock":
+                return False
         return True
 
-    def is_lhs_locked(self):
-        # TODO: some chaining
+    def is_lhs_locked(self, env):
         obj = self.obj
         if self.is_lvalue() and hasattr(obj, 'entry') and obj.entry.type.is_cyp_class and not obj.entry.is_wlocked:
-            return False
+            if obj.entry.type.lock_mode == "autolock":
+                print "We will autolock here"
+                self.needs_autolock = True
+                self.obj.entry.is_wlocked = True
+                # FIXME: this needs to be obj.result(), because maybe we have to lock
+                # an intermediate object (obj.att.__autolocked_obj__.attribute)
+                env.autolocked_entries.append(self.obj.entry)
+            elif obj.entry.type.lock_mode == "checklock":
+                return False
         return True
-
 
     def is_cimported_module_without_shadow(self, env):
         return self.obj.is_cimported_module_without_shadow(env)
@@ -7479,6 +7487,9 @@ class AttributeNode(ExprNode):
             elif self.entry and self.entry.is_cmethod:
                 # C method implemented as function call with utility code
                 code.globalstate.use_entry_utility_code(self.entry)
+        if self.needs_autolock:
+            obj_code = self.obj.result_as(self.obj.type)
+            code.putln("Cy_WLOCK(%s);" % obj_code)
 
     def generate_disposal_code(self, code):
         if self.is_temp and self.type.is_memoryviewslice and self.is_memslice_transpose:
@@ -7523,6 +7534,9 @@ class AttributeNode(ExprNode):
                 code.put_cygiveref(rhs.result())
                 code.put_cygotref(select_code)
                 code.put_cyxdecref(select_code)
+
+            if self.needs_autolock:
+                code.putln("Cy_WLOCK(%s);" % self.obj.result())
 
             if not self.type.is_memoryviewslice:
                 code.putln(
@@ -12853,6 +12867,12 @@ class PrimaryCmpNode(ExprNode, CmpNode):
         operand1 = self.operand1.compile_time_value(denv)
         return self.cascaded_compile_time_value(operand1, denv)
 
+    def check_rhs_locked(self, env):
+        self.operand1.check_rhs_locked(env)
+        self.operand2.check_rhs_locked(env)
+        if self.cascade:
+            self.cascade.check_rhs_locked(env)
+
     def analyse_types(self, env):
         self.operand1 = self.operand1.analyse_types(env)
         self.operand2 = self.operand2.analyse_types(env)
@@ -13118,6 +13138,11 @@ class CascadedCmpNode(Node, CmpNode):
     def has_constant_result(self):
         return self.constant_result is not constant_value_not_set and \
                self.constant_result is not not_a_constant
+
+    def check_rhs_locked(self, env):
+        self.operand2.check_rhs_locked(env)
+        if self.cascade:
+            self.cascade.check_rhs_locked(env)
 
     def analyse_types(self, env):
         self.operand2 = self.operand2.analyse_types(env)

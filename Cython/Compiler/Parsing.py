@@ -3839,6 +3839,9 @@ def p_cpp_class_definition(s, pos,  ctx):
     if s.sy == '[':
         error(s.position(), "Name options not allowed for C++ class")
     nogil = p_nogil(s) or cypclass
+    lock_mode = None
+    if cypclass:
+        lock_mode = p_cypclass_lock_mode(s)
     if s.sy == ':':
         s.next()
         s.expect('NEWLINE')
@@ -3867,7 +3870,7 @@ def p_cpp_class_definition(s, pos,  ctx):
         visibility = ctx.visibility,
         in_pxd = ctx.level == 'module_pxd',
         attributes = attributes,
-        templates = templates, cypclass=cypclass)
+        templates = templates, cypclass=cypclass, lock_mode=lock_mode)
 
 def p_cpp_class_attribute(s, ctx):
     decorators = None
@@ -3892,6 +3895,14 @@ def p_cpp_class_attribute(s, ctx):
                 s.error("Decorators can only be followed by functions or classes")
             node.decorators = decorators
         return node
+
+def p_cypclass_lock_mode(s):
+    if s.sy == 'IDENT' and s.systring in ('nolock', 'checklock', 'autolock'):
+        mode = s.systring
+        s.next()
+        return mode
+    else:
+        return None
 
 
 #----------------------------------------------

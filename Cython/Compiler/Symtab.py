@@ -628,7 +628,7 @@ class Scope(object):
 
     def declare_cpp_class(self, name, scope,
             pos, cname = None, base_classes = (),
-            visibility = 'extern', templates = None, cypclass=0):
+            visibility = 'extern', templates = None, cypclass=0, lock_mode=None):
         if cname is None:
             if self.in_cinclude or (visibility != 'private'):
                 cname = name
@@ -639,7 +639,7 @@ class Scope(object):
         if not entry:
             if cypclass:
                 type = PyrexTypes.CypClassType(
-                    name, scope, cname, base_classes, templates = templates)
+                    name, scope, cname, base_classes, templates = templates, lock_mode=lock_mode)
             else:
                 type = PyrexTypes.CppClassType(
                     name, scope, cname, base_classes, templates = templates)

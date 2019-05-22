@@ -4111,7 +4111,13 @@ class CppScopedEnumType(CType):
 
 
 class CypClassType(CppClassType):
+    #  lock_mode          string (tri-state: "nolock"/"checklock"/"autolock")
+
     is_cyp_class = 1
+
+    def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0, lock_mode=None):
+        CppClassType.__init__(self, name, scope, cname, base_classes, templates, template_type, nogil)
+        self.lock_mode = lock_mode if lock_mode else "checklock"
 
     def empty_declaration_code(self):
         if self._empty_declaration is None:

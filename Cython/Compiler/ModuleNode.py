@@ -1178,7 +1178,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 new_arg_string = ', '.join(new_arg_names)
                 code.putln("%s self =(%s) %s(%s);" % (self_type, self_type, new_entry.func_cname, new_arg_string))
         else:
-            code.putln("%s self = new %s();" % (self_type, type_string))
+            code.putln("%s self = %s();" % (self_type, alloc_entry.func_cname))
 
         if init_entry:
             init_entry = PyrexTypes.best_match(wrapper_arg_types,

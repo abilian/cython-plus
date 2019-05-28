@@ -679,15 +679,16 @@ class Scope(object):
             this_type = PyrexTypes.CPtrType(entry.type) if not cypclass else entry.type
             scope.declare_var(name="this", cname="this", type=this_type, pos=entry.pos)
             if cypclass:
-                # Declare a shadow default constructor
-                wrapper_type = PyrexTypes.CFuncType(entry.type, [], nogil=1)
-                wrapper_cname = "%s__constructor__%s" % (Naming.func_prefix, name)
-                wrapper_name = "<constructor>"
-                wrapper_entry = scope.declare(wrapper_name, wrapper_cname, wrapper_type, pos, visibility)
-                wrapper_type.entry = wrapper_entry
-                wrapper_entry.is_inherited = 1
-                wrapper_entry.is_cfunction = 1
-                wrapper_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), wrapper_cname)
+                if not scope.lookup_here("<init>"):
+                    # Declare a shadow default constructor
+                    wrapper_type = PyrexTypes.CFuncType(entry.type, [], nogil=1)
+                    wrapper_cname = "%s__constructor__%s" % (Naming.func_prefix, name)
+                    wrapper_name = "<constructor>"
+                    wrapper_entry = scope.declare(wrapper_name, wrapper_cname, wrapper_type, pos, visibility)
+                    wrapper_type.entry = wrapper_entry
+                    wrapper_entry.is_inherited = 1
+                    wrapper_entry.is_cfunction = 1
+                    wrapper_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), wrapper_cname)
 
                 # Declare the default __alloc__ method
                 alloc_type = PyrexTypes.CFuncType(entry.type, [], nogil=1)

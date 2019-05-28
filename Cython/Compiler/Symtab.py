@@ -690,7 +690,7 @@ class Scope(object):
                 wrapper_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), wrapper_cname)
 
                 # Declare the default __alloc__ method
-                alloc_type = wrapper_type
+                alloc_type = PyrexTypes.CFuncType(entry.type, [], nogil=1)
                 alloc_cname = "%s__alloc__%s" % (Naming.func_prefix, name)
                 alloc_name = "<alloc>"
                 alloc_entry = scope.declare(alloc_name, alloc_cname, alloc_type, pos, visibility)

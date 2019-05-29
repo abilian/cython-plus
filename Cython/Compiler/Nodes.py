@@ -1394,6 +1394,26 @@ class CVarDefNode(StatNode):
             if type.is_cfunction:
                 if 'staticmethod' in env.directives:
                     type.is_static_method = True
+                elif name in ("__new__", "__alloc__") and\
+                     env.is_cpp_class_scope and env.parent_type.is_cyp_class:
+                    type.is_static_method = True
+
+                    if declarator.skipped_self:
+                        _name, _type, _pos, _arg = declarator.skipped_self
+                        if name == "__new__":
+                            _type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(_type, [], nogil=1))
+                            # aka _type = {class_type} (*f)() nogil
+                            reinjected_arg = PyrexTypes.CFuncTypeArg(_name, _type, _pos)
+                            type.args = [reinjected_arg] + type.args
+                            declarator.args = [_arg] + declarator.args
+                        elif name == "__alloc__":
+                            # Force __alloc__ to have the signature:
+                            # {class_type} f() nogil
+                            type.return_type = _type
+                            type.args = []
+                            declarator.args = []
+                        declarator.skipped_self = None
+
                 self.entry = dest_scope.declare_cfunction(
                     name, type, declarator.pos,
                     cname=cname, visibility=self.visibility, in_pxd=self.in_pxd,
@@ -1403,6 +1423,12 @@ class CVarDefNode(StatNode):
                 if create_extern_wrapper:
                     self.entry.type.create_to_py_utility_code(env)
                     self.entry.create_wrapper = True
+                if env.is_cpp_class_scope and env.parent_type.is_cyp_class\
+                   and not declarator.skipped_self and not type.is_static_method:
+                    # It means we have a cypclass method without the self argument
+                    # => shout
+                    error(self.pos, "Cypclass methods must have a self argument")
+
             else:
                 if self.directive_locals:
                     error(self.pos, "Decorators can only be followed by functions")

@@ -485,11 +485,7 @@ class Scope(object):
             if type.is_cfunction and old_entry.type.is_cfunction and self.is_cpp_class_scope:
                 for index, alt_entry in enumerate(old_entry.all_alternatives()):
                     if type.compatible_signature_with(alt_entry.type):
-                        if name == '<init>' and not type.args:
-                            # Cython pre-declares the no-args constructor - allow later user definitions.
-                            old_index = index
-                            cpp_override_allowed = True
-                        elif alt_entry.is_inherited:
+                        if alt_entry.is_inherited:
                             old_index = index
                             cpp_override_allowed = True
                         break

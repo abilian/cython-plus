@@ -4030,7 +4030,10 @@ class CppClassType(CType):
                 break
 
         func_type = CFuncType(self, [], exception_check='+', nogil=nogil)
-        return self.scope.declare_cfunction(u'<init>', func_type, pos)
+        entry = self.scope.declare_cfunction(u'<init>', func_type, pos)
+        # This flag is set in order to be able to override this default __init__ by a user-defined one
+        entry.is_inherited = 1
+        return entry
 
     def check_nullary_constructor(self, pos, msg="stack allocated"):
         constructor = self.scope.lookup(u'<init>')

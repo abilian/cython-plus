@@ -2589,7 +2589,7 @@ class CppClassScope(Scope):
         if type.is_cfunction and self.type:
             if not self.type.get_fused_types():
                 entry.func_cname = "%s::%s" % (self.type.empty_declaration_code(), cname)
-        if name != "this" and (defining or name != "<init>"):
+        if name != "this" and (defining or name != "<init>" or self.parent_type.is_cyp_class):
             self.var_entries.append(entry)
         return entry
 

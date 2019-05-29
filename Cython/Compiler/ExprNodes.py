@@ -884,7 +884,8 @@ class ExprNode(Node):
             self.generate_subexpr_disposal_code(code)
 
     def generate_assignment_code(self, rhs, code, overloaded_assignment=False,
-                                 exception_check=None, exception_value=None):
+        exception_check=None, exception_value=None, needs_unlock=False,
+        needs_rlock=False, needs_wlock=False):
         #  Stub method for nodes which are not legal as
         #  the LHS of an assignment. An error will have
         #  been reported earlier.
@@ -2364,7 +2365,8 @@ class NameNode(AtomicExprNode):
                 code.put_error_if_unbound(self.pos, entry, self.in_nogil_context)
 
     def generate_assignment_code(self, rhs, code, overloaded_assignment=False,
-                                 exception_check=None, exception_value=None):
+        exception_check=None, exception_value=None, needs_unlock=False,
+        needs_rlock=False, needs_wlock=False):
         #print "NameNode.generate_assignment_code:", self.name ###
         entry = self.entry
         if entry is None:
@@ -2454,6 +2456,8 @@ class NameNode(AtomicExprNode):
                 code.put_cyxdecref(self.result())
             if not self.type.is_memoryviewslice:
                 if not assigned:
+                    if needs_unlock:
+                        code.putln("Cy_UNLOCK(%s);" % self.result())
                     if overloaded_assignment:
                         result = rhs.move_result_rhs()
                         if exception_check == '+':
@@ -2471,6 +2475,10 @@ class NameNode(AtomicExprNode):
                             code.putln('new (&%s) decltype(%s){%s};' % (self.result(), self.result(), result))
                         elif result != self.result():
                             code.putln('%s = %s;' % (self.result(), result))
+                    if needs_wlock:
+                        code.putln("Cy_WLOCK(%s);" % self.result())
+                    elif needs_rlock:
+                        code.putln("Cy_RLOCK(%s);" % self.result())
                 if debug_disposal_code:
                     print("NameNode.generate_assignment_code:")
                     print("...generating post-assignment code for %s" % rhs)
@@ -6201,6 +6209,9 @@ class SimpleCallNode(CallNode):
                         exc_checks.append("__Pyx_ErrOccurredWithGIL()")
                     else:
                         exc_checks.append("PyErr_Occurred()")
+            for arg in self.args:
+                if arg.type.is_cyp_class and arg.type.lock_mode == "autolock":
+                    code.putln("Cy_WLOCK(%s);" % arg.result())
             if self.is_temp or exc_checks:
                 rhs = self.c_call_code()
                 if self.result():
@@ -6984,7 +6995,6 @@ class AttributeNode(ExprNode):
     is_memslice_transpose = False
     is_special_lookup = False
     is_py_attr = 0
-    needs_autolock = False
 
     def as_cython_attribute(self):
         if (isinstance(self.obj, NameNode) and
@@ -7360,9 +7370,9 @@ class AttributeNode(ExprNode):
         if hasattr(obj, 'entry') and obj.entry.type.is_cyp_class and (obj.entry.is_variable or obj.entry.is_cfunction)\
            and not (obj.entry.is_rlocked and (not self.entry.is_cfunction or self.entry.type.is_const_method) or obj.entry.is_wlocked):
             if obj.entry.type.lock_mode == "autolock":
-                print "We will autolock here"
-                self.needs_autolock = True
-                self.obj.entry.is_wlocked = True
+                print "Request read lock autolock here"
+                self.obj.entry.is_rlocked = True
+                self.obj.entry.locking_node.needs_rlock = True
             elif obj.entry.type.lock_mode == "checklock":
                 return False
         return True
@@ -7371,12 +7381,10 @@ class AttributeNode(ExprNode):
         obj = self.obj
         if self.is_lvalue() and hasattr(obj, 'entry') and obj.entry.type.is_cyp_class and not obj.entry.is_wlocked:
             if obj.entry.type.lock_mode == "autolock":
-                print "We will autolock here"
+                print "Request write lock autolock here"
                 self.needs_autolock = True
                 self.obj.entry.is_wlocked = True
-                # FIXME: this needs to be obj.result(), because maybe we have to lock
-                # an intermediate object (obj.att.__autolocked_obj__.attribute)
-                env.autolocked_entries.append(self.obj.entry)
+                self.obj.entry.locking_node.needs_wlock = True
             elif obj.entry.type.lock_mode == "checklock":
                 return False
         return True
@@ -7487,9 +7495,6 @@ class AttributeNode(ExprNode):
             elif self.entry and self.entry.is_cmethod:
                 # C method implemented as function call with utility code
                 code.globalstate.use_entry_utility_code(self.entry)
-        if self.needs_autolock:
-            obj_code = self.obj.result_as(self.obj.type)
-            code.putln("Cy_WLOCK(%s);" % obj_code)
 
     def generate_disposal_code(self, code):
         if self.is_temp and self.type.is_memoryviewslice and self.is_memslice_transpose:
@@ -7499,7 +7504,8 @@ class AttributeNode(ExprNode):
             ExprNode.generate_disposal_code(self, code)
 
     def generate_assignment_code(self, rhs, code, overloaded_assignment=False,
-                                 exception_check=None, exception_value=None):
+        exception_check=None, exception_value=None, needs_unlock=False,
+        needs_rlock=False, needs_wlock=False):
         self.obj.generate_evaluation_code(code)
         if self.is_py_attr:
             code.globalstate.use_utility_code(
@@ -7535,15 +7541,19 @@ class AttributeNode(ExprNode):
                 code.put_cygotref(select_code)
                 code.put_cyxdecref(select_code)
 
-            if self.needs_autolock:
-                code.putln("Cy_WLOCK(%s);" % self.obj.result())
-
+            if needs_unlock:
+                code.putln("Cy_UNLOCK(%s);" % select_code)
             if not self.type.is_memoryviewslice:
                 code.putln(
                     "%s = %s;" % (
                         select_code,
                         rhs.move_result_rhs_as(self.ctype())))
                         #rhs.result()))
+            if needs_wlock:
+                code.putln("Cy_WLOCK(%s);" % select_code)
+            elif needs_rlock:
+                code.putln("Cy_RLOCK(%s);" % select_code)
+
             rhs.generate_post_assignment_code(code)
             rhs.free_temps(code)
         self.obj.generate_disposal_code(code)

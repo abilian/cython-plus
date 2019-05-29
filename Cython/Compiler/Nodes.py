@@ -2240,8 +2240,8 @@ class FuncDefNode(StatNode, BlockNode):
                 # FIXME ideally use entry.xdecref_cleanup but this currently isn't reliable
                 code.put_var_xdecref(entry, have_gil=gil_owned['success'])
 
-        for entry in lenv.autolocked_entries:
-            code.putln("Cy_UNLOCK(%s);" % entry.cname)
+        for node in lenv.autolocked_nodes:
+            code.putln("Cy_UNLOCK(%s);" % node.result())
 
         # Decref any increfed args
         for entry in lenv.arg_entries:
@@ -5694,6 +5694,9 @@ class SingleAssignmentNode(AssignmentNode):
     first = False
     is_overloaded_assignment = False
     declaration_only = False
+    needs_unlock = False
+    needs_rlock = False
+    needs_wlock = False
 
     def analyse_declarations(self, env):
         from . import ExprNodes
@@ -5790,6 +5793,16 @@ class SingleAssignmentNode(AssignmentNode):
 
         self.lhs = self.lhs.analyse_target_types(env)
         self.lhs.gil_assignment_check(env)
+        if hasattr(self.lhs, 'entry'):
+            entry = self.lhs.entry
+            if entry.type.is_cyp_class and entry.type.lock_mode == "autolock":
+                if entry.locking_node is None:
+                    env.declare_autolocked(self.lhs)
+                else:
+                    self.needs_unlock = True
+            self.lhs.entry.locking_node = self
+            self.lhs.entry.is_wlocked = False
+            self.lhs.entry.is_rlocked = False
         self.rhs.check_rhs_locked(env)
         self.lhs.check_lhs_locked(env)
         unrolled_assignment = self.unroll_lhs(env)
@@ -5972,9 +5985,17 @@ class SingleAssignmentNode(AssignmentNode):
                 code,
                 overloaded_assignment=self.is_overloaded_assignment,
                 exception_check=self.exception_check,
-                exception_value=self.exception_value)
+                exception_value=self.exception_value,
+                needs_unlock=self.needs_unlock,
+                needs_rlock=self.needs_rlock,
+                needs_wlock=self.needs_wlock)
         else:
-            self.lhs.generate_assignment_code(self.rhs, code)
+            self.lhs.generate_assignment_code(
+                self.rhs,
+                code,
+                needs_unlock=self.needs_unlock,
+                needs_rlock=self.needs_rlock,
+                needs_wlock=self.needs_wlock)
 
     def generate_function_definitions(self, env, code):
         self.rhs.generate_function_definitions(env, code)

@@ -160,6 +160,7 @@ class Entry(object):
     # is_cgetter       boolean    Is a c-level getter function
     # is_wlocked       boolean    Is locked with a write lock (used for cypclass)
     # is_rlocked       boolean    Is locked with a read lock (used for cypclass)
+    # locking_node     Node       The assignment node doing the locking
 
     # TODO: utility_code and utility_code_definition serves the same purpose...
 
@@ -233,6 +234,7 @@ class Entry(object):
     is_cgetter = False
     is_wlocked = False
     is_rlocked = False
+    locking_node = None
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name
@@ -320,7 +322,7 @@ class Scope(object):
     # pyfunc_entries    [Entry]            Python function entries
     # cfunc_entries     [Entry]            C function entries
     # c_class_entries   [Entry]            All extension type entries
-    # autolocked_entries[Entry]            All autolocked entries that needs unlocking
+    # autolocked_nodes  [ExprNodes]        All autolocked nodes that needs unlocking
     # cname_to_entry    {string : Entry}   Temp cname to entry mapping
     # return_type       PyrexType or None  Return type of function owning scope
     # is_builtin_scope  boolean            Is the builtin scope of Python/Cython
@@ -380,7 +382,7 @@ class Scope(object):
         self.cfunc_entries = []
         self.c_class_entries = []
         self.defined_c_classes = []
-        self.autolocked_entries = []
+        self.autolocked_nodes = []
         self.imported_c_classes = {}
         self.cname_to_entry = {}
         self.identifier_to_entry = {}
@@ -1877,9 +1879,17 @@ class LocalScope(Scope):
         if type.is_pyobject:
             entry.init = "0"
         entry.is_arg = 1
+        if type.is_cyp_class and type.lock_mode == "autolock":
+            entry.is_wlocked = True
         #entry.borrowed = 1 # Not using borrowed arg refs for now
         self.arg_entries.append(entry)
         return entry
+
+    def declare_autolocked(self, node):
+        # Add an entry for autolocked cypclass
+        if not (node.type.is_cyp_class and node.type.lock_mode == "autolock"):
+            error(pos, "Trying to autolock a non cypclass object !")
+        self.autolocked_nodes.append(node)
 
     def declare_var(self, name, type, pos,
                     cname = None, visibility = 'private',

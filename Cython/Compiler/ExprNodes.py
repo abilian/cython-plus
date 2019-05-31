@@ -727,7 +727,7 @@ class ExprNode(Node):
         if hasattr(self, 'entry') and self.entry.type.is_cyp_class and self.entry.is_variable\
         and not (self.entry.is_rlocked or self.entry.is_wlocked):
                 if self.entry.type.lock_mode == "autolock":
-                    print "Request read lock autolock here"
+                    print "Request read lock autolock here", self.entry.name
                     self.entry.is_rlocked = True
                     self.entry.locking_node.needs_rlock = True
                 elif self.entry.type.lock_mode == "checklock":
@@ -5954,6 +5954,14 @@ class SimpleCallNode(CallNode):
                     arg.exact_builtin_type = False
             args[0] = arg
 
+        # Check for args locks: read-lock for const args, write-locks for other
+        for i in range(min(max_nargs, actual_nargs)):
+            formal_arg = func_type.args[i]
+            actual_arg = args[i]
+            if formal_arg.type.is_const:
+                actual_arg.check_rhs_locked(env)
+            else:
+                actual_arg.check_lhs_locked(env)
         # Coerce arguments
         some_args_in_temps = False
         for i in range(min(max_nargs, actual_nargs)):
@@ -6075,6 +6083,11 @@ class SimpleCallNode(CallNode):
                 env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
 
         self.overflowcheck = env.directives['overflowcheck']
+
+    def check_rhs_locked(self, env):
+        self.function.check_rhs_locked(env)
+        #if not self.is_rhs_locked(env):
+        #    error(self.pos, "RHS lock needed")
 
     def calculate_result_code(self):
         return self.c_call_code()
@@ -6225,9 +6238,6 @@ class SimpleCallNode(CallNode):
                         exc_checks.append("__Pyx_ErrOccurredWithGIL()")
                     else:
                         exc_checks.append("PyErr_Occurred()")
-            for arg in self.args:
-                if arg.type.is_cyp_class and arg.type.lock_mode == "autolock":
-                    code.putln("Cy_WLOCK(%s);" % arg.result())
             if self.is_temp or exc_checks:
                 rhs = self.c_call_code()
                 if self.result():
@@ -7387,10 +7397,7 @@ class AttributeNode(ExprNode):
         # The subexpr mechanism will here issue check_rhs_lock on self.obj
         # BUT if we are calling a non-const method, the object can be modified.
         # So here we're calling directly check_lhs_lock if this is needed.
-        if self.entry.is_cfunction and self.entry.type.is_const_method:
-            print self.entry.name, "const method in rhs check detected !"
         if self.entry.is_cfunction and not self.entry.type.is_const_method:
-            print self.entry.name, "is considered a non const method"
             self.obj.check_lhs_locked(env)
 
         return ExprNode.is_rhs_locked(self, env)

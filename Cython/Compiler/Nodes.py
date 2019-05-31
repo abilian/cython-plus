@@ -5803,8 +5803,10 @@ class SingleAssignmentNode(AssignmentNode):
             self.lhs.entry.locking_node = self
             self.lhs.entry.is_wlocked = False
             self.lhs.entry.is_rlocked = False
-        self.rhs.check_rhs_locked(env)
-        self.lhs.check_lhs_locked(env)
+        if self.rhs.is_attribute:
+            self.rhs.obj.check_rhs_locked(env)
+        if self.lhs.is_attribute:
+            self.lhs.obj.check_lhs_locked(env)
         unrolled_assignment = self.unroll_lhs(env)
         if unrolled_assignment:
             return unrolled_assignment

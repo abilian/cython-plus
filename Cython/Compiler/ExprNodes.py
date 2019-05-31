@@ -724,9 +724,25 @@ class ExprNode(Node):
         error(self.pos, "Address is not constant")
 
     def is_rhs_locked(self, env):
+        if hasattr(self, 'entry') and self.entry.type.is_cyp_class and self.entry.is_variable\
+        and not (self.entry.is_rlocked or self.entry.is_wlocked):
+                if self.entry.type.lock_mode == "autolock":
+                    print "Request read lock autolock here"
+                    self.entry.is_rlocked = True
+                    self.entry.locking_node.needs_rlock = True
+                elif self.entry.type.lock_mode == "checklock":
+                    return False
         return True
 
     def is_lhs_locked(self, env):
+        if hasattr(self, 'entry') and self.entry.type.is_cyp_class and self.entry.is_variable\
+        and not self.entry.is_wlocked:
+            if self.entry.type.lock_mode == "autolock":
+                print "Request write lock autolock here", self.entry.name
+                self.entry.is_wlocked = True
+                self.entry.locking_node.needs_wlock = True
+            elif self.entry.type.lock_mode == "checklock":
+                return False
         return True
 
     def check_rhs_locked(self, env):
@@ -7367,27 +7383,17 @@ class AttributeNode(ExprNode):
 
     def is_rhs_locked(self, env):
         obj = self.obj
-        if hasattr(obj, 'entry') and obj.entry.type.is_cyp_class and (obj.entry.is_variable or obj.entry.is_cfunction)\
-           and not (obj.entry.is_rlocked and (not self.entry.is_cfunction or self.entry.type.is_const_method) or obj.entry.is_wlocked):
-            if obj.entry.type.lock_mode == "autolock":
-                print "Request read lock autolock here"
-                self.obj.entry.is_rlocked = True
-                self.obj.entry.locking_node.needs_rlock = True
-            elif obj.entry.type.lock_mode == "checklock":
-                return False
-        return True
 
-    def is_lhs_locked(self, env):
-        obj = self.obj
-        if self.is_lvalue() and hasattr(obj, 'entry') and obj.entry.type.is_cyp_class and not obj.entry.is_wlocked:
-            if obj.entry.type.lock_mode == "autolock":
-                print "Request write lock autolock here"
-                self.needs_autolock = True
-                self.obj.entry.is_wlocked = True
-                self.obj.entry.locking_node.needs_wlock = True
-            elif obj.entry.type.lock_mode == "checklock":
-                return False
-        return True
+        # The subexpr mechanism will here issue check_rhs_lock on self.obj
+        # BUT if we are calling a non-const method, the object can be modified.
+        # So here we're calling directly check_lhs_lock if this is needed.
+        if self.entry.is_cfunction and self.entry.type.is_const_method:
+            print self.entry.name, "const method in rhs check detected !"
+        if self.entry.is_cfunction and not self.entry.type.is_const_method:
+            print self.entry.name, "is considered a non const method"
+            self.obj.check_lhs_locked(env)
+
+        return ExprNode.is_rhs_locked(self, env)
 
     def is_cimported_module_without_shadow(self, env):
         return self.obj.is_cimported_module_without_shadow(env)

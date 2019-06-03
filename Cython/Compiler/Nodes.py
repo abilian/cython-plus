@@ -2627,6 +2627,8 @@ class CFuncDefNode(FuncDefNode):
             _cname = "this"
             entry = self.local_scope.declare(_name, _cname, _type, _pos, 'private')
             entry.is_variable = 1
+            # Even if it is checklock it should be OK to mess with self without locking
+            entry.is_wlocked = True
 
     def declare_cpdef_wrapper(self, env):
         if self.overridable:

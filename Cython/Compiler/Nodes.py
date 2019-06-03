@@ -6380,6 +6380,8 @@ class DelStatNode(StatNode):
                 arg.free_temps(code)
             elif arg.type.is_cyp_class:
                 arg.generate_evaluation_code(code)
+                if arg.type.lock_mode == "autolock":
+                    code.putln("Cy_UNLOCK(%s);" % arg.result())
                 code.putln("Cy_DECREF(%s);" % arg.result())
                 code.putln("%s = NULL;" % arg.result())
                 arg.generate_disposal_code(code)

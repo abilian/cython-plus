@@ -160,7 +160,8 @@ class Entry(object):
     # is_cgetter       boolean    Is a c-level getter function
     # is_wlocked       boolean    Is locked with a write lock (used for cypclass)
     # is_rlocked       boolean    Is locked with a read lock (used for cypclass)
-    # locking_node     Node       The assignment node doing the locking
+    # needs_rlock      boolean    The entry needs a read lock (used in autolock mode)
+    # needs_wlock      boolean    The entry needs a write lock (used in autolock mode)
 
     # TODO: utility_code and utility_code_definition serves the same purpose...
 
@@ -234,7 +235,8 @@ class Entry(object):
     is_cgetter = False
     is_wlocked = False
     is_rlocked = False
-    locking_node = None
+    needs_rlock = False
+    needs_wlock = False
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name

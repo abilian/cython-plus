@@ -729,7 +729,7 @@ class ExprNode(Node):
                 if self.entry.type.lock_mode == "autolock":
                     print "Request read lock autolock here", self.entry.name
                     self.entry.is_rlocked = True
-                    self.entry.locking_node.needs_rlock = True
+                    self.entry.needs_rlock = True
                 elif self.entry.type.lock_mode == "checklock":
                     return False
         return True
@@ -740,7 +740,7 @@ class ExprNode(Node):
             if self.entry.type.lock_mode == "autolock":
                 print "Request write lock autolock here", self.entry.name
                 self.entry.is_wlocked = True
-                self.entry.locking_node.needs_wlock = True
+                self.entry.needs_wlock = True
             elif self.entry.type.lock_mode == "checklock":
                 return False
         return True
@@ -900,8 +900,7 @@ class ExprNode(Node):
             self.generate_subexpr_disposal_code(code)
 
     def generate_assignment_code(self, rhs, code, overloaded_assignment=False,
-        exception_check=None, exception_value=None, needs_unlock=False,
-        needs_rlock=False, needs_wlock=False):
+        exception_check=None, exception_value=None):
         #  Stub method for nodes which are not legal as
         #  the LHS of an assignment. An error will have
         #  been reported earlier.
@@ -2381,8 +2380,7 @@ class NameNode(AtomicExprNode):
                 code.put_error_if_unbound(self.pos, entry, self.in_nogil_context)
 
     def generate_assignment_code(self, rhs, code, overloaded_assignment=False,
-        exception_check=None, exception_value=None, needs_unlock=False,
-        needs_rlock=False, needs_wlock=False):
+        exception_check=None, exception_value=None):
         #print "NameNode.generate_assignment_code:", self.name ###
         entry = self.entry
         if entry is None:
@@ -2391,6 +2389,9 @@ class NameNode(AtomicExprNode):
         if (self.entry.type.is_ptr and isinstance(rhs, ListNode)
                 and not self.lhs_of_first_assignment and not rhs.in_module_scope):
             error(self.pos, "Literal list must be assigned to pointer at time of declaration")
+
+        if entry.needs_wlock or entry.needs_rlock:
+            code.putln("Cy_UNLOCK(%s);" % self.result())
 
         # is_pyglobal seems to be True for module level-globals only.
         # We use this to access class->tp_dict if necessary.
@@ -2472,8 +2473,6 @@ class NameNode(AtomicExprNode):
                 code.put_cyxdecref(self.result())
             if not self.type.is_memoryviewslice:
                 if not assigned:
-                    if needs_unlock:
-                        code.putln("Cy_UNLOCK(%s);" % self.result())
                     if overloaded_assignment:
                         result = rhs.move_result_rhs()
                         if exception_check == '+':
@@ -2491,9 +2490,9 @@ class NameNode(AtomicExprNode):
                             code.putln('new (&%s) decltype(%s){%s};' % (self.result(), self.result(), result))
                         elif result != self.result():
                             code.putln('%s = %s;' % (self.result(), result))
-                    if needs_wlock:
+                    if entry.needs_wlock:
                         code.putln("Cy_WLOCK(%s);" % self.result())
-                    elif needs_rlock:
+                    elif entry.needs_rlock:
                         code.putln("Cy_RLOCK(%s);" % self.result())
                 if debug_disposal_code:
                     print("NameNode.generate_assignment_code:")
@@ -7517,8 +7516,7 @@ class AttributeNode(ExprNode):
             ExprNode.generate_disposal_code(self, code)
 
     def generate_assignment_code(self, rhs, code, overloaded_assignment=False,
-        exception_check=None, exception_value=None, needs_unlock=False,
-        needs_rlock=False, needs_wlock=False):
+        exception_check=None, exception_value=None):
         self.obj.generate_evaluation_code(code)
         if self.is_py_attr:
             code.globalstate.use_utility_code(
@@ -7539,6 +7537,8 @@ class AttributeNode(ExprNode):
             rhs.free_temps(code)
         else:
             select_code = self.result()
+            if self.entry.needs_rlock or self.entry.needs_wlock:
+                code.putln("Cy_UNLOCK(%s);" % select_code)
             if self.type.is_pyobject and self.use_managed_ref:
                 rhs.make_owned_reference(code)
                 rhs.generate_giveref(code)
@@ -7554,17 +7554,15 @@ class AttributeNode(ExprNode):
                 code.put_cygotref(select_code)
                 code.put_cyxdecref(select_code)
 
-            if needs_unlock:
-                code.putln("Cy_UNLOCK(%s);" % select_code)
             if not self.type.is_memoryviewslice:
                 code.putln(
                     "%s = %s;" % (
                         select_code,
                         rhs.move_result_rhs_as(self.ctype())))
                         #rhs.result()))
-            if needs_wlock:
+            if self.entry.needs_wlock:
                 code.putln("Cy_WLOCK(%s);" % select_code)
-            elif needs_rlock:
+            elif self.entry.needs_rlock:
                 code.putln("Cy_RLOCK(%s);" % select_code)
 
             rhs.generate_post_assignment_code(code)

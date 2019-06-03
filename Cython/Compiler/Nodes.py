@@ -5795,14 +5795,11 @@ class SingleAssignmentNode(AssignmentNode):
         self.lhs.gil_assignment_check(env)
         if hasattr(self.lhs, 'entry'):
             entry = self.lhs.entry
-            if entry.type.is_cyp_class and entry.type.lock_mode == "autolock":
-                if entry.locking_node is None:
-                    env.declare_autolocked(self.lhs)
-                else:
-                    self.needs_unlock = True
-            self.lhs.entry.locking_node = self
-            self.lhs.entry.is_wlocked = False
-            self.lhs.entry.is_rlocked = False
+            if entry.type.is_cyp_class and entry.type.lock_mode == "autolock"\
+               and not (entry.needs_rlock or entry.needs_wlock):
+                 env.declare_autolocked(self.lhs)
+            #self.lhs.entry.is_wlocked = False
+            #self.lhs.entry.is_rlocked = False
         if self.rhs.is_attribute:
             self.rhs.obj.check_rhs_locked(env)
         if self.lhs.is_attribute:
@@ -5987,17 +5984,9 @@ class SingleAssignmentNode(AssignmentNode):
                 code,
                 overloaded_assignment=self.is_overloaded_assignment,
                 exception_check=self.exception_check,
-                exception_value=self.exception_value,
-                needs_unlock=self.needs_unlock,
-                needs_rlock=self.needs_rlock,
-                needs_wlock=self.needs_wlock)
+                exception_value=self.exception_value)
         else:
-            self.lhs.generate_assignment_code(
-                self.rhs,
-                code,
-                needs_unlock=self.needs_unlock,
-                needs_rlock=self.needs_rlock,
-                needs_wlock=self.needs_wlock)
+            self.lhs.generate_assignment_code(self.rhs, code)
 
     def generate_function_definitions(self, env, code):
         self.rhs.generate_function_definitions(env, code)

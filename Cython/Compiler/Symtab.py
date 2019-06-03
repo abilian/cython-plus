@@ -1890,7 +1890,7 @@ class LocalScope(Scope):
     def declare_autolocked(self, node):
         # Add an entry for autolocked cypclass
         if not (node.type.is_cyp_class and node.type.lock_mode == "autolock"):
-            error(pos, "Trying to autolock a non cypclass object !")
+            error(pos, "Trying to autolock a non (autolocked) cypclass object !")
         self.autolocked_nodes.append(node)
 
     def declare_var(self, name, type, pos,

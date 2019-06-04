@@ -5625,7 +5625,7 @@ class ExprStatNode(StatNode):
     def analyse_expressions(self, env):
         self.expr.result_is_used = False  # hint that .result() may safely be left empty
         self.expr = self.expr.analyse_expressions(env)
-        self.expr.check_rhs_locked(env)
+        self.expr.ensure_rhs_locked(env)
         # Repeat in case of node replacement.
         self.expr.result_is_used = False  # hint that .result() may safely be left empty
         return self
@@ -5801,12 +5801,8 @@ class SingleAssignmentNode(AssignmentNode):
             if entry.type.is_cyp_class and entry.type.lock_mode == "autolock"\
                and not (entry.needs_rlock or entry.needs_wlock):
                  env.declare_autolocked(self.lhs)
-            #self.lhs.entry.is_wlocked = False
-            #self.lhs.entry.is_rlocked = False
-        if self.rhs.is_attribute:
-            self.rhs.obj.check_rhs_locked(env)
-        if self.lhs.is_attribute:
-            self.lhs.obj.check_lhs_locked(env)
+        self.rhs.ensure_rhs_locked(env)
+        self.lhs.ensure_lhs_locked(env)
         unrolled_assignment = self.unroll_lhs(env)
         if unrolled_assignment:
             return unrolled_assignment
@@ -6030,11 +6026,11 @@ class CascadedAssignmentNode(AssignmentNode):
         for i, lhs in enumerate(self.lhs_list):
             lhs = self.lhs_list[i] = lhs.analyse_target_types(env)
             lhs.gil_assignment_check(env)
-            lhs.check_lhs_locked(env)
+            lhs.ensure_lhs_locked(env)
             lhs_types.add(lhs.type)
 
         rhs = self.rhs.analyse_types(env)
-        rhs.check_rhs_locked(env)
+        rhs.ensure_rhs_locked(env)
         # common special case: only one type needed on the LHS => coerce only once
         if len(lhs_types) == 1:
             # Avoid coercion for overloaded assignment operators.

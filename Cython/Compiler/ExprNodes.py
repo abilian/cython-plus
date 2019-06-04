@@ -723,39 +723,52 @@ class ExprNode(Node):
     def addr_not_const(self):
         error(self.pos, "Address is not constant")
 
+    def set_autorlock(self, env):
+        self.entry.is_rlocked = True
+        self.entry.needs_rlock = True
+
+    def set_autowlock(self, env):
+        print "Setting wlock"
+        self.entry.is_wlocked = True
+        self.entry.needs_wlock = True
+
+    def is_autolock(self, env):
+        return self.type.is_cyp_class and self.type.lock_mode == "autolock"
+
+    def is_checklock(self, env):
+        return self.type.is_cyp_class and self.type.lock_mode == "checklock"
+
     def is_rhs_locked(self, env):
-        if hasattr(self, 'entry') and self.entry.type.is_cyp_class and self.entry.is_variable\
-        and not (self.entry.is_rlocked or self.entry.is_wlocked):
-                if self.entry.type.lock_mode == "autolock":
-                    print "Request read lock autolock here", self.entry.name
-                    self.entry.is_rlocked = True
-                    self.entry.needs_rlock = True
-                elif self.entry.type.lock_mode == "checklock":
-                    return False
-        return True
+        return not(hasattr(self, 'entry') and self.entry.type.is_cyp_class and not (self.entry.is_rlocked or self.entry.is_wlocked))
 
     def is_lhs_locked(self, env):
-        if hasattr(self, 'entry') and self.entry.type.is_cyp_class and self.entry.is_variable\
-        and not self.entry.is_wlocked:
-            if self.entry.type.lock_mode == "autolock":
-                print "Request write lock autolock here", self.entry.name
-                self.entry.is_wlocked = True
-                self.entry.needs_wlock = True
-            elif self.entry.type.lock_mode == "checklock":
-                return False
-        return True
+        return not(hasattr(self, 'entry') and self.entry.type.is_cyp_class and not self.entry.is_wlocked)
 
-    def check_rhs_locked(self, env):
+    def ensure_subexpr_rhs_locked(self, env):
         for node in self.subexpr_nodes():
-            node.check_rhs_locked(env)
-        if not self.is_rhs_locked(env):
-            error(self.pos, "This rhs is not correctly locked (write lock for non-const methods, read lock is sufficient for everything else)")
+            node.ensure_rhs_locked(env)
 
-    def check_lhs_locked(self, env):
+    def ensure_subexpr_lhs_locked(self, env):
         for node in self.subexpr_nodes():
-            node.check_lhs_locked(env)
-        if not self.is_lhs_locked(env):
-            error(self.pos, "This lhs is not correctly locked (write lock needed)")
+            node.ensure_lhs_locked(env)
+
+    def ensure_rhs_locked(self, env, is_dereferenced = False):
+        self.ensure_subexpr_rhs_locked(env)
+        if is_dereferenced:
+            if not self.is_rhs_locked(env):
+                if self.is_checklock(env):
+                    error(self.pos, "This expression is not correctly locked (read lock needed)")
+                elif self.is_autolock(env):
+                    self.set_autorlock(env)
+
+    def ensure_lhs_locked(self, env, is_dereferenced = False):
+        self.ensure_subexpr_lhs_locked(env)
+        if is_dereferenced:
+            if not self.is_lhs_locked(env):
+                if self.is_checklock(env):
+                    error(self.pos, "This expression is not correctly locked (write lock needed)")
+                elif self.is_autolock(env):
+                    self.set_autowlock(env)
 
     # ----------------- Result Allocation -----------------
 
@@ -5748,6 +5761,8 @@ class SimpleCallNode(CallNode):
     analysed = False
     overflowcheck = False
     explicit_cpp_self = None
+    rlocked = False
+    wlocked = False
 
     def compile_time_value(self, denv):
         function = self.function.compile_time_value(denv)
@@ -5958,9 +5973,9 @@ class SimpleCallNode(CallNode):
             formal_arg = func_type.args[i]
             actual_arg = args[i]
             if formal_arg.type.is_const:
-                actual_arg.check_rhs_locked(env)
+                actual_arg.ensure_rhs_locked(env, is_dereferenced = True)
             else:
-                actual_arg.check_lhs_locked(env)
+                actual_arg.ensure_lhs_locked(env, is_dereferenced = True)
         # Coerce arguments
         some_args_in_temps = False
         for i in range(min(max_nargs, actual_nargs)):
@@ -6083,10 +6098,17 @@ class SimpleCallNode(CallNode):
 
         self.overflowcheck = env.directives['overflowcheck']
 
-    def check_rhs_locked(self, env):
-        self.function.check_rhs_locked(env)
-        #if not self.is_rhs_locked(env):
-        #    error(self.pos, "RHS lock needed")
+    def is_lhs_locked(self, env):
+        return self.wlocked
+
+    def is_rhs_locked(self, env):
+        return self.rlocked
+
+    def set_autorlock(self, env):
+        self.rlocked = True
+
+    def set_autowlock(self, env):
+        self.wlocked = True
 
     def calculate_result_code(self):
         return self.c_call_code()
@@ -7390,16 +7412,14 @@ class AttributeNode(ExprNode):
 
     gil_message = "Accessing Python attribute"
 
-    def is_rhs_locked(self, env):
-        obj = self.obj
-
-        # The subexpr mechanism will here issue check_rhs_lock on self.obj
-        # BUT if we are calling a non-const method, the object can be modified.
-        # So here we're calling directly check_lhs_lock if this is needed.
+    def ensure_subexpr_rhs_locked(self, env):
         if self.entry.is_cfunction and not self.entry.type.is_const_method:
-            self.obj.check_lhs_locked(env)
+            self.obj.ensure_lhs_locked(env, is_dereferenced = True)
+        else:
+            self.obj.ensure_rhs_locked(env, is_dereferenced = True)
 
-        return ExprNode.is_rhs_locked(self, env)
+    def ensure_subexpr_lhs_locked(self, env):
+        self.obj.ensure_lhs_locked(env, is_dereferenced = True)
 
     def is_cimported_module_without_shadow(self, env):
         return self.obj.is_cimported_module_without_shadow(env)
@@ -12888,11 +12908,11 @@ class PrimaryCmpNode(ExprNode, CmpNode):
         operand1 = self.operand1.compile_time_value(denv)
         return self.cascaded_compile_time_value(operand1, denv)
 
-    def check_rhs_locked(self, env):
-        self.operand1.check_rhs_locked(env)
-        self.operand2.check_rhs_locked(env)
-        if self.cascade:
-            self.cascade.check_rhs_locked(env)
+    #def check_rhs_locked(self, env):
+    #    self.operand1.check_rhs_locked(env)
+    #    self.operand2.check_rhs_locked(env)
+    #    if self.cascade:
+    #        self.cascade.check_rhs_locked(env)
 
     def analyse_types(self, env):
         self.operand1 = self.operand1.analyse_types(env)
@@ -13160,10 +13180,10 @@ class CascadedCmpNode(Node, CmpNode):
         return self.constant_result is not constant_value_not_set and \
                self.constant_result is not not_a_constant
 
-    def check_rhs_locked(self, env):
-        self.operand2.check_rhs_locked(env)
-        if self.cascade:
-            self.cascade.check_rhs_locked(env)
+    #def check_rhs_locked(self, env):
+    #    self.operand2.check_rhs_locked(env)
+    #    if self.cascade:
+    #        self.cascade.check_rhs_locked(env)
 
     def analyse_types(self, env):
         self.operand2 = self.operand2.analyse_types(env)

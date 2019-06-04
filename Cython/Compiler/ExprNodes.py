@@ -6280,6 +6280,10 @@ class SimpleCallNode(CallNode):
                     else:
                         goto_error = ""
                     code.putln("%s%s; %s" % (lhs, rhs, goto_error))
+                    if self.wlocked:
+                        code.putln("Cy_WLOCK(%s);" % self.result())
+                    elif self.rlocked:
+                        code.putln("Cy_RLOCK(%s);" % self.result())
                 if self.type.is_pyobject and self.result():
                     self.generate_gotref(code)
                 elif self.type.is_cyp_class and self.result():
@@ -6287,6 +6291,10 @@ class SimpleCallNode(CallNode):
             if self.has_optional_args:
                 code.funcstate.release_temp(self.opt_arg_struct)
 
+    def generate_disposal_code(self, code):
+        if self.wlocked or self.rlocked:
+            code.putln("Cy_UNLOCK(%s);" % self.result())
+        ExprNode.generate_disposal_code(self, code)
 
 class NumPyMethodCallNode(ExprNode):
     # Pythran call to a NumPy function or method.

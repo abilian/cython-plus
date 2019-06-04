@@ -2241,7 +2241,8 @@ class FuncDefNode(StatNode, BlockNode):
                 code.put_var_xdecref(entry, have_gil=gil_owned['success'])
 
         for node in lenv.autolocked_nodes:
-            code.putln("Cy_UNLOCK(%s);" % node.result())
+            if node.entry.needs_rlock or node.entry.needs_wlock:
+                code.putln("Cy_UNLOCK(%s);" % node.result())
 
         # Decref any increfed args
         for entry in lenv.arg_entries:

@@ -2225,6 +2225,23 @@ class FuncDefNode(StatNode, BlockNode):
             align_error_path_gil_to_success_path()
             code.put_label(code.return_from_error_cleanup_label)
 
+        for node in reversed(lenv.autolocked_nodes):
+            # We iterate in the reverse order to properly unlock
+            # nested locked objects (aka most nested first).
+
+            # For example, if we have the following situation:
+            # obj.sub_obj.attr = some_value
+            # If obj and sub_obj are both of autolocked types,
+            # the obj (name)node is declared before the sub_obj (attribute)node.
+            # If we unlock first obj, another thread could immediately acquire
+            # a write lock and change where sub_obj points to.
+            # We would then try to unlock the new sub_obj reference,
+            # which leads to a dangling lock on the previous reference
+            # (and attempt to unlock a non-locked ref).
+
+            if not node.was_locked and (node.tracked_state.needs_wlock or node.tracked_state.needs_rlock):
+                code.putln("Cy_UNLOCK(%s);" % node.result())
+
         for entry in lenv.var_entries:
             if not entry.used or entry.in_closure:
                 continue
@@ -2239,10 +2256,6 @@ class FuncDefNode(StatNode, BlockNode):
             else:
                 # FIXME ideally use entry.xdecref_cleanup but this currently isn't reliable
                 code.put_var_xdecref(entry, have_gil=gil_owned['success'])
-
-        for node in lenv.autolocked_nodes:
-            if node.entry.needs_rlock or node.entry.needs_wlock:
-                code.putln("Cy_UNLOCK(%s);" % node.result())
 
         # Decref any increfed args
         for entry in lenv.arg_entries:
@@ -2629,7 +2642,8 @@ class CFuncDefNode(FuncDefNode):
             entry = self.local_scope.declare(_name, _cname, _type, _pos, 'private')
             entry.is_variable = 1
             # Even if it is checklock it should be OK to mess with self without locking
-            entry.is_wlocked = True
+            self_locking_state = self.local_scope.declare_tracked(entry)
+            self_locking_state.is_wlocked = True
 
     def declare_cpdef_wrapper(self, env):
         if self.overridable:
@@ -5796,11 +5810,6 @@ class SingleAssignmentNode(AssignmentNode):
 
         self.lhs = self.lhs.analyse_target_types(env)
         self.lhs.gil_assignment_check(env)
-        if hasattr(self.lhs, 'entry'):
-            entry = self.lhs.entry
-            if entry.type.is_cyp_class and entry.type.lock_mode == "autolock"\
-               and not (entry.needs_rlock or entry.needs_wlock):
-                 env.declare_autolocked(self.lhs)
         self.rhs.ensure_rhs_locked(env)
         self.lhs.ensure_lhs_locked(env)
         unrolled_assignment = self.unroll_lhs(env)
@@ -8436,13 +8445,16 @@ class LockCypclassNode(StatNode):
 
     def analyse_expressions(self, env):
         self.obj = self.obj.analyse_types(env)
+        self.obj.ensure_rhs_locked(env)
         if not hasattr(self.obj, 'entry'):
             error(self.pos, "The (un)locking target has no entry")
         if not self.obj.type.is_cyp_class:
             error(self.pos, "Cannot (un)lock a non-cypclass variable !")
 
-        is_rlocked = self.obj.entry.is_rlocked
-        is_wlocked = self.obj.entry.is_wlocked
+        # FIXME: this is a bit redundant here
+        self.obj.get_tracked_state(env)
+        is_rlocked = self.obj.is_rhs_locked(env)
+        is_wlocked = self.obj.is_lhs_locked(env)
 
         if self.state == "unclocked" and not (is_rlocked or is_wlocked):
             error(self.pos, "Cannot unlock an already unlocked object !")
@@ -8459,23 +8471,29 @@ class LockCypclassNode(StatNode):
         self.was_rlocked = is_rlocked
         self.was_wlocked = is_wlocked
 
+        tracked_state = self.obj.tracked_state
+
         if self.state == "rlocked":
-            self.obj.entry.is_rlocked = True
-            self.obj.entry.is_wlocked = False
+            tracked_state.is_rlocked = True
+            tracked_state.is_wlocked = False
         elif self.state == "wlocked":
-            self.obj.entry.is_rlocked = False
-            self.obj.entry.is_wlocked = True
+            tracked_state.is_rlocked = False
+            tracked_state.is_wlocked = True
         else:
-            self.obj.entry.is_rlocked = False
-            self.obj.entry.is_wlocked = False
+            tracked_state.is_rlocked = False
+            tracked_state.is_wlocked = False
 
         self.body = self.body.analyse_expressions(env)
 
-        self.obj.entry.is_rlocked = self.was_rlocked
-        self.obj.entry.is_wlocked = self.was_wlocked
+        #self.obj.entry.is_rlocked = self.was_rlocked
+        #self.obj.entry.is_wlocked = self.was_wlocked
+
+        tracked_state.is_rlocked = self.was_rlocked
+        tracked_state.is_wlocked = self.was_wlocked
         return self
 
     def generate_execution_code(self, code):
+        self.obj.generate_evaluation_code(code)
         # We must unlock if it's a 'with unlocked' statement,
         # or if we're changing lock type.
         if self.was_rlocked or self.was_wlocked:

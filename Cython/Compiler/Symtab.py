@@ -162,6 +162,7 @@ class Entry(object):
     # is_rlocked       boolean    Is locked with a read lock (used for cypclass)
     # needs_rlock      boolean    The entry needs a read lock (used in autolock mode)
     # needs_wlock      boolean    The entry needs a write lock (used in autolock mode)
+    # was_locked       boolean    Indicates to nodes falling through that the first lock already took place
 
     # TODO: utility_code and utility_code_definition serves the same purpose...
 
@@ -237,6 +238,7 @@ class Entry(object):
     is_rlocked = False
     needs_rlock = False
     needs_wlock = False
+    was_locked = False
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name
@@ -311,6 +313,15 @@ class InnerEntry(Entry):
     def all_entries(self):
         return self.defining_entry.all_entries()
 
+class TrackedLockedEntry:
+    def __init__(self, entry, scope):
+        self.entry = entry
+        self.scope = scope
+        self.is_wlocked = False
+        self.is_rlocked = False
+        self.needs_wlock = False
+        self.needs_rlock = False
+        self.was_locked = False
 
 class Scope(object):
     # name              string             Unqualified name
@@ -393,6 +404,8 @@ class Scope(object):
         self.buffer_entries = []
         self.lambda_defs = []
         self.id_counters = {}
+        self.tracked_entries = {}
+
 
     def __deepcopy__(self, memo):
         return self
@@ -474,6 +487,18 @@ class Scope(object):
         if self.subscopes:
             for scope in sorted(self.subscopes, key=operator.attrgetter('scope_prefix')):
                 yield scope
+
+    def declare_tracked(self, entry):
+        # Keying only with the name is wrong: if we have multiple attributes
+        # with the same name in different cypclass, this will conflict.
+        key = entry
+        self.tracked_entries[key] = TrackedLockedEntry(entry, self)
+        return self.tracked_entries[key]
+
+    def lookup_tracked(self, entry):
+        # We don't chain up the scopes on purpose: we want to keep things local
+        key = entry
+        return self.tracked_entries.get(key, None)
 
     def declare(self, name, cname, type, pos, visibility, shadow = 0, is_type = 0, create_wrapper = 0):
         # Create new entry, and add to dictionary if
@@ -1882,7 +1907,8 @@ class LocalScope(Scope):
             entry.init = "0"
         entry.is_arg = 1
         if type.is_cyp_class and type.lock_mode == "autolock":
-            entry.is_wlocked = True
+            arg_lock_state = self.declare_tracked(entry)
+            arg_lock_state.is_wlocked = True
         #entry.borrowed = 1 # Not using borrowed arg refs for now
         self.arg_entries.append(entry)
         return entry

@@ -320,6 +320,8 @@ class ExprNode(Node):
     use_managed_ref = True  # can be set by optimisation transforms
     result_is_used = True
     is_numpy_attribute = False
+    tracked_state = None
+    was_locked = True
 
     #  The Analyse Expressions phase for expressions is split
     #  into two sub-phases:
@@ -724,25 +726,45 @@ class ExprNode(Node):
         error(self.pos, "Address is not constant")
 
     def set_autorlock(self, env):
-        self.entry.is_rlocked = True
-        self.entry.needs_rlock = True
+        self.tracked_state.was_locked = True
+        self.tracked_state.is_rlocked = True
+        self.tracked_state.needs_rlock = True
 
     def set_autowlock(self, env):
-        print "Setting wlock"
-        self.entry.is_wlocked = True
-        self.entry.needs_wlock = True
+        self.tracked_state.was_locked = True
+        self.tracked_state.is_wlocked = True
+        self.tracked_state.needs_wlock = True
 
-    def is_autolock(self, env):
+    def is_autolock(self):
         return self.type.is_cyp_class and self.type.lock_mode == "autolock"
 
-    def is_checklock(self, env):
+    def is_checklock(self):
         return self.type.is_cyp_class and self.type.lock_mode == "checklock"
 
+    def get_tracked_state(self, env):
+        if not hasattr(self, 'entry') or not self.entry.type.is_cyp_class:
+            return
+        self.tracked_state = env.lookup_tracked(self.entry)
+        if self.tracked_state is None:
+            self.tracked_state = env.declare_tracked(self.entry)
+            if self.is_autolock():
+                env.declare_autolocked(self)
+        self.was_locked = self.tracked_state.was_locked
+        self.tracked_state.was_locked = True
+
     def is_rhs_locked(self, env):
-        return not(hasattr(self, 'entry') and self.entry.type.is_cyp_class and not (self.entry.is_rlocked or self.entry.is_wlocked))
+        if not hasattr(self, 'entry') or not self.entry.type.is_cyp_class:
+            # These nodes couldn't be tracked (because it is for example a constant),
+            # so we let them pass silently
+            return True
+        return self.tracked_state.is_rlocked or self.tracked_state.is_wlocked
 
     def is_lhs_locked(self, env):
-        return not(hasattr(self, 'entry') and self.entry.type.is_cyp_class and not self.entry.is_wlocked)
+        if not hasattr(self, 'entry') or not self.entry.type.is_cyp_class:
+            # These nodes couldn't be tracked (because it is for example a constant),
+            # so we let them pass silently
+            return True
+        return self.tracked_state.is_wlocked
 
     def ensure_subexpr_rhs_locked(self, env):
         for node in self.subexpr_nodes():
@@ -754,20 +776,24 @@ class ExprNode(Node):
 
     def ensure_rhs_locked(self, env, is_dereferenced = False):
         self.ensure_subexpr_rhs_locked(env)
+        if not self.tracked_state:
+            self.get_tracked_state(env)
         if is_dereferenced:
             if not self.is_rhs_locked(env):
-                if self.is_checklock(env):
+                if self.is_checklock():
                     error(self.pos, "This expression is not correctly locked (read lock needed)")
-                elif self.is_autolock(env):
+                elif self.is_autolock():
                     self.set_autorlock(env)
 
     def ensure_lhs_locked(self, env, is_dereferenced = False):
         self.ensure_subexpr_lhs_locked(env)
+        if not self.tracked_state:
+            self.get_tracked_state(env)
         if is_dereferenced:
             if not self.is_lhs_locked(env):
-                if self.is_checklock(env):
+                if self.is_checklock():
                     error(self.pos, "This expression is not correctly locked (write lock needed)")
-                elif self.is_autolock(env):
+                elif self.is_autolock():
                     self.set_autowlock(env)
 
     # ----------------- Result Allocation -----------------
@@ -2377,8 +2403,14 @@ class NameNode(AtomicExprNode):
                         code.error_goto_if_null(self.result(), self.pos)))
             self.generate_gotref(code)
 
-        elif entry.is_local and entry.type.is_cyp_class:
+        elif entry.type.is_cyp_class:
             code.put_cygotref(self.result())
+            if not self.was_locked and self.is_autolock():
+                tracked_state = self.tracked_state
+                if tracked_state.needs_wlock:
+                    code.putln("Cy_WLOCK(%s);" % self.result())
+                elif tracked_state.needs_rlock:
+                    code.putln("Cy_RLOCK(%s);" % self.result())
             #pass
             # code.putln(entry.cname)
         elif entry.is_local or entry.in_closure or entry.from_closure or entry.type.is_memoryviewslice:
@@ -2396,6 +2428,7 @@ class NameNode(AtomicExprNode):
         exception_check=None, exception_value=None):
         #print "NameNode.generate_assignment_code:", self.name ###
         entry = self.entry
+        tracked_state = self.tracked_state
         if entry is None:
             return  # There was an error earlier
 
@@ -2403,7 +2436,7 @@ class NameNode(AtomicExprNode):
                 and not self.lhs_of_first_assignment and not rhs.in_module_scope):
             error(self.pos, "Literal list must be assigned to pointer at time of declaration")
 
-        if entry.needs_wlock or entry.needs_rlock:
+        if self.is_autolock() and tracked_state and (tracked_state.needs_wlock or tracked_state.needs_rlock):
             code.putln("Cy_UNLOCK(%s);" % self.result())
 
         # is_pyglobal seems to be True for module level-globals only.
@@ -2503,10 +2536,11 @@ class NameNode(AtomicExprNode):
                             code.putln('new (&%s) decltype(%s){%s};' % (self.result(), self.result(), result))
                         elif result != self.result():
                             code.putln('%s = %s;' % (self.result(), result))
-                    if entry.needs_wlock:
-                        code.putln("Cy_WLOCK(%s);" % self.result())
-                    elif entry.needs_rlock:
-                        code.putln("Cy_RLOCK(%s);" % self.result())
+                    if self.is_autolock():
+                        if tracked_state.needs_wlock:
+                            code.putln("Cy_WLOCK(%s);" % self.result())
+                        elif tracked_state.needs_rlock:
+                            code.putln("Cy_RLOCK(%s);" % self.result())
                 if debug_disposal_code:
                     print("NameNode.generate_assignment_code:")
                     print("...generating post-assignment code for %s" % rhs)
@@ -5972,10 +6006,11 @@ class SimpleCallNode(CallNode):
         for i in range(min(max_nargs, actual_nargs)):
             formal_arg = func_type.args[i]
             actual_arg = args[i]
-            if formal_arg.type.is_const:
-                actual_arg.ensure_rhs_locked(env, is_dereferenced = True)
-            else:
-                actual_arg.ensure_lhs_locked(env, is_dereferenced = True)
+            if formal_arg.type.is_cyp_class:
+                if formal_arg.type.is_const:
+                    actual_arg.ensure_rhs_locked(env, is_dereferenced = True)
+                else:
+                    actual_arg.ensure_lhs_locked(env, is_dereferenced = True)
         # Coerce arguments
         some_args_in_temps = False
         for i in range(min(max_nargs, actual_nargs)):
@@ -7527,6 +7562,12 @@ class AttributeNode(ExprNode):
                                         '"Memoryview is not initialized");'
                         '%s'
                     '}' % (self.result(), code.error_goto(self.pos)))
+        elif self.is_autolock():
+            if not self.was_locked:
+                if self.tracked_state.needs_wlock:
+                    code.putln("Cy_WLOCK(%s);" % self.result())
+                elif self.tracked_state.needs_rlock:
+                    code.putln("Cy_RLOCK(%s);" % self.result())
         else:
             # result_code contains what is needed, but we may need to insert
             # a check and raise an exception
@@ -7565,7 +7606,9 @@ class AttributeNode(ExprNode):
             rhs.free_temps(code)
         else:
             select_code = self.result()
-            if self.entry.needs_rlock or self.entry.needs_wlock:
+            # XXX - Greater to have a getter, right ?
+            tracked_state = self.tracked_state
+            if self.is_autolock() and tracked_state and (tracked_state.needs_rlock or tracked_state.needs_wlock):
                 code.putln("Cy_UNLOCK(%s);" % select_code)
             if self.type.is_pyobject and self.use_managed_ref:
                 rhs.make_owned_reference(code)
@@ -7588,10 +7631,11 @@ class AttributeNode(ExprNode):
                         select_code,
                         rhs.move_result_rhs_as(self.ctype())))
                         #rhs.result()))
-            if self.entry.needs_wlock:
-                code.putln("Cy_WLOCK(%s);" % select_code)
-            elif self.entry.needs_rlock:
-                code.putln("Cy_RLOCK(%s);" % select_code)
+            if self.is_autolock():
+                if tracked_state.needs_wlock:
+                    code.putln("Cy_WLOCK(%s);" % select_code)
+                elif tracked_state.needs_rlock:
+                    code.putln("Cy_RLOCK(%s);" % select_code)
 
             rhs.generate_post_assignment_code(code)
             rhs.free_temps(code)

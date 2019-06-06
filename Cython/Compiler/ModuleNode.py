@@ -904,9 +904,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 constructor = scope.lookup_here("<init>")
                 new = scope.lookup_here("__new__")
                 alloc = scope.lookup_here("<alloc>")
-                if not wrapper:
-                    error(self.pos, "No constructor wrapper found for cypclass %s, did you write an __init__ method ?" % type.name)
-                    return
                 for wrapper_entry in wrapper.all_alternatives():
                     if wrapper_entry.used or entry.type.templates:
                         self.generate_cyp_class_wrapper_definition(entry.type, wrapper_entry, constructor, new, alloc, code)

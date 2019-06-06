@@ -6180,7 +6180,9 @@ class InPlaceAssignmentNode(AssignmentNode):
 
     def analyse_types(self, env):
         self.rhs = self.rhs.analyse_types(env)
+        self.rhs.ensure_rhs_locked(env)
         self.lhs = self.lhs.analyse_target_types(env)
+        self.rhs.ensure_lhs_locked(env)
 
         # When assigning to a fully indexed buffer or memoryview, coerce the rhs
         if self.lhs.is_memview_index or self.lhs.is_buffer_access:
@@ -6243,6 +6245,7 @@ class PrintStatNode(StatNode):
             stream = self.stream.analyse_expressions(env)
             self.stream = stream.coerce_to_pyobject(env)
         arg_tuple = self.arg_tuple.analyse_expressions(env)
+        arg_tuple.ensure_rhs_locked(env)
         self.arg_tuple = arg_tuple.coerce_to_pyobject(env)
         env.use_utility_code(printing_utility_code)
         if len(self.arg_tuple.args) == 1 and self.append_newline:
@@ -6352,6 +6355,7 @@ class DelStatNode(StatNode):
     def analyse_expressions(self, env):
         for i, arg in enumerate(self.args):
             arg = self.args[i] = arg.analyse_target_expression(env, None)
+            arg.ensure_lhs_locked(env)
             if arg.type.is_pyobject or (arg.is_name and arg.type.is_memoryviewslice):
                 if arg.is_name and arg.entry.is_cglobal:
                     error(arg.pos, "Deletion of global C variable")
@@ -6480,6 +6484,7 @@ class ReturnStatNode(StatNode):
             if self.in_async_gen:
                 error(self.pos, "Return with value in async generator")
             self.value = self.value.analyse_types(env)
+            self.value.ensure_rhs_locked(env)
             if return_type.is_void or return_type.is_returncode:
                 error(self.value.pos, "Return with value in void function")
             else:
@@ -6824,6 +6829,7 @@ class IfClauseNode(Node):
 
     def analyse_expressions(self, env):
         self.condition = self.condition.analyse_temp_boolean_expression(env)
+        self.condition.ensure_rhs_locked(env)
         self.body = self.body.analyse_expressions(env)
         return self
 
@@ -6955,6 +6961,7 @@ class WhileStatNode(LoopNode, StatNode):
     def analyse_expressions(self, env):
         if self.condition:
             self.condition = self.condition.analyse_temp_boolean_expression(env)
+            self.condition.ensure_rhs_locked(env)
         self.body = self.body.analyse_expressions(env)
         if self.else_clause:
             self.else_clause = self.else_clause.analyse_expressions(env)
@@ -7186,7 +7193,9 @@ class _ForInStatNode(LoopNode, StatNode):
 
     def analyse_expressions(self, env):
         self.target = self.target.analyse_target_types(env)
+        self.target.ensure_lhs_locked(env)
         self.iterator = self.iterator.analyse_expressions(env)
+        self.iterator.ensure_rhs_locked(env)
         self._create_item_node()  # must rewrap self.item after analysis
         self.item = self.item.analyse_expressions(env)
         if (not self.is_async and
@@ -7328,13 +7337,17 @@ class ForFromStatNode(LoopNode, StatNode):
     def analyse_expressions(self, env):
         from . import ExprNodes
         self.target = self.target.analyse_target_types(env)
+        self.target.ensure_lhs_locked(env)
         self.bound1 = self.bound1.analyse_types(env)
+        self.bound1.ensure_rhs_locked(env)
         self.bound2 = self.bound2.analyse_types(env)
+        self.bound2.ensure_rhs_locked(env)
         if self.step is not None:
             if isinstance(self.step, ExprNodes.UnaryMinusNode):
                 warning(self.step.pos, "Probable infinite loop in for-from-by statement. "
                         "Consider switching the directions of the relations.", 2)
             self.step = self.step.analyse_types(env)
+            self.step.ensure_rhs_locked(env)
 
         self.set_up_loop(env)
         target_type = self.target.type

@@ -2797,7 +2797,7 @@ class CFakeReferenceType(CReferenceType):
     def declaration_code(self, entity_code,
             for_display = 0, dll_linkage = None, pyrex = 0):
         #print "CReferenceType.declaration_code: pointer to", self.base_type ###
-        return "__Pyx_FakeReference<%s> %s" % (self.ref_base_type.empty_declaration_code(), entity_code)
+        return "__Pyx_FakeReference<%s> %s" % (self.ref_base_type.declaration_code(''), entity_code)
 
 
 class CFuncType(CType):

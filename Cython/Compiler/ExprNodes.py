@@ -742,7 +742,7 @@ class ExprNode(Node):
         return self.type.is_cyp_class and self.type.lock_mode == "checklock"
 
     def get_tracked_state(self, env):
-        if not hasattr(self, 'entry') or not self.entry.type.is_cyp_class:
+        if not hasattr(self, 'entry') or not self.entry or not self.entry.type.is_cyp_class:
             return
         self.tracked_state = env.lookup_tracked(self.entry)
         if self.tracked_state is None:
@@ -778,7 +778,7 @@ class ExprNode(Node):
         self.ensure_subexpr_rhs_locked(env)
         if not self.tracked_state:
             self.get_tracked_state(env)
-        if is_dereferenced:
+        if is_dereferenced and self.tracked_state:
             if not self.is_rhs_locked(env):
                 if self.is_checklock():
                     error(self.pos, "This expression is not correctly locked (read lock needed)")
@@ -789,7 +789,7 @@ class ExprNode(Node):
         self.ensure_subexpr_lhs_locked(env)
         if not self.tracked_state:
             self.get_tracked_state(env)
-        if is_dereferenced:
+        if is_dereferenced and self.tracked_state:
             if not self.is_lhs_locked(env):
                 if self.is_checklock():
                     error(self.pos, "This expression is not correctly locked (write lock needed)")
@@ -7456,7 +7456,7 @@ class AttributeNode(ExprNode):
     gil_message = "Accessing Python attribute"
 
     def ensure_subexpr_rhs_locked(self, env):
-        if self.entry.is_cfunction and not self.entry.type.is_const_method:
+        if not self.entry or self.entry.is_cfunction and not self.entry.type.is_const_method:
             self.obj.ensure_lhs_locked(env, is_dereferenced = True)
         else:
             self.obj.ensure_rhs_locked(env, is_dereferenced = True)

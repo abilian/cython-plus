@@ -651,7 +651,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     type_entries.append(entry)
             type_entries = [t for t in type_entries if t not in vtabslot_entries]
             self.generate_type_header_code(type_entries, code)
-            self.generate_cyp_class_wrapper_definitions(type_entries, code)
+            self.generate_cyp_class_deferred_definitions(type_entries, code)
         for entry in vtabslot_list:
             self.generate_objstruct_definition(entry.type, code)
             self.generate_typeobj_predeclaration(entry, code)
@@ -893,9 +893,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 elif type.is_extension_type:
                     self.generate_objstruct_definition(type, code)
 
-    def generate_cyp_class_wrapper_definitions(self, type_entries, code):
+    def generate_cyp_class_deferred_definitions(self, type_entries, code):
         for entry in type_entries:
             if entry.type.is_cyp_class:
+                # Generate cypclass attr destructor
+                self.generate_cyp_class_attrs_destructor_definition(entry, code)
                 # Generate wrapper constructor
                 scope = entry.type.scope
                 wrapper = scope.lookup_here("<constructor>")
@@ -1006,10 +1008,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.put(" : public %s" % base_class_decl)
             code.putln(" {")
             self.generate_type_header_code(scope.type_entries, code)
-            self.generate_cyp_class_wrapper_definitions(scope.sue_entries, code)
+            self.generate_cyp_class_deferred_definitions(scope.sue_entries, code)
             py_attrs = [e for e in scope.entries.values()
                         if e.type.is_pyobject and not e.is_inherited]
-            cypclass_attrs = [e for e in scope.var_entries
+            cypclass_attrs = [e for e in scope.var_entries + scope.inherited_var_entries
                         if e.type.is_cyp_class and not e.name == "this"
                         and not e.is_type]
             has_virtual_methods = False
@@ -1071,13 +1073,22 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     arg_names = []
                     generate_cpp_constructor_code(arg_decls, arg_names, is_implementing, py_attrs, constructor)
 
+            if type.is_cyp_class and cypclass_attrs:
+                # Declaring a small destruction handler which will always try to Cy_XDECREF
+                # every cypclass attribute. This handler is defined after all class definition.
+                # We cannot define it inplace, because we won't be able to decref forward declare attributes
+                # (as they're not defined, they're not considered CyObject subclasses, so Cy_DECREF will be lost)
+                cypclass_attrs_destructor_name = "%s__cypclass_attrs_destructor__%s" % (Naming.func_prefix, type.name)
+                code.putln("void " + cypclass_attrs_destructor_name + "();")
+
             if type.is_cyp_class or destructor or py_attrs or has_virtual_methods:
                 if has_virtual_methods or type.is_cyp_class:
                     code.put("virtual ")
                 if is_implementing:
                     code.putln("~%s() {" % type.cname)
-                    for cypattr in cypclass_attrs:
-                        code.put_cyxdecref(cypattr.cname)
+                    if cypclass_attrs:
+                        cypclass_attrs_destructor_name = "%s__cypclass_attrs_destructor__%s" % (Naming.func_prefix, entry.name)
+                        code.putln(cypclass_attrs_destructor_name + "();")
                     if py_attrs:
                         code.put_ensure_gil()
                     if destructor:
@@ -1127,6 +1138,20 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         if type.is_cyp_class:
             code.globalstate.use_utility_code(
                 UtilityCode.load("CyObjects", "CyObjects.cpp", proto_block="utility_code_proto_before_types"))
+
+    def generate_cyp_class_attrs_destructor_definition(self, entry, code):
+        scope = entry.type.scope
+        cypclass_attrs = [e for e in scope.var_entries + scope.inherited_var_entries
+                        if e.type.is_cyp_class and not e.name == "this"
+                        and not e.is_type]
+        if cypclass_attrs:
+            cypclass_attrs_destructor_name = "%s__cypclass_attrs_destructor__%s" % (Naming.func_prefix, entry.name)
+            destructor_with_namespace = "void %s::%s()" % (entry.type.empty_declaration_code(), cypclass_attrs_destructor_name)
+            code.putln(destructor_with_namespace)
+            code.putln("{")
+            for attr in cypclass_attrs:
+                code.putln("Cy_XDECREF(this->%s);" % attr.cname)
+            code.putln("}")
 
     def generate_cyp_class_wrapper_definition(self, type, wrapper_entry, constructor_entry, new_entry, alloc_entry, code):
         if type.templates:

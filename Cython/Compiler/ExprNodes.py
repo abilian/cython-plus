@@ -13126,6 +13126,12 @@ class PrimaryCmpNode(ExprNode, CmpNode):
         else:
             return self.operand1.check_const() and self.operand2.check_const()
 
+    def ensure_subexpr_rhs_locked(self, env):
+        self.operand1.ensure_rhs_locked(env)
+        self.operand2.ensure_rhs_locked(env)
+        if self.cascade:
+            self.cascade.ensure_rhs_locked(env)
+
     def calculate_result_code(self):
         operand1, operand2 = self.operand1, self.operand2
         if operand1.type.is_complex:
@@ -13236,6 +13242,11 @@ class CascadedCmpNode(Node, CmpNode):
     #    self.operand2.check_rhs_locked(env)
     #    if self.cascade:
     #        self.cascade.check_rhs_locked(env)
+
+    def ensure_rhs_locked(self, env):
+        self.operand2.ensure_rhs_locked(env)
+        if self.cascade:
+            self.cascade.ensure_rhs_locked(env)
 
     def analyse_types(self, env):
         self.operand2 = self.operand2.analyse_types(env)

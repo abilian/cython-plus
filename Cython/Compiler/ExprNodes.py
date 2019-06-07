@@ -6002,15 +6002,6 @@ class SimpleCallNode(CallNode):
                     arg.exact_builtin_type = False
             args[0] = arg
 
-        # Check for args locks: read-lock for const args, write-locks for other
-        for i in range(min(max_nargs, actual_nargs)):
-            formal_arg = func_type.args[i]
-            actual_arg = args[i]
-            if formal_arg.type.is_cyp_class:
-                if formal_arg.type.is_const:
-                    actual_arg.ensure_rhs_locked(env, is_dereferenced = True)
-                else:
-                    actual_arg.ensure_lhs_locked(env, is_dereferenced = True)
         # Coerce arguments
         some_args_in_temps = False
         for i in range(min(max_nargs, actual_nargs)):
@@ -6132,6 +6123,37 @@ class SimpleCallNode(CallNode):
                 env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
 
         self.overflowcheck = env.directives['overflowcheck']
+
+    def ensure_subexpr_rhs_locked(self, env):
+        func_type = self.function_type()
+        if func_type.is_pyobject:
+            self.arg_tuple.ensure_rhs_locked(env)
+        else:
+            max_nargs = len(func_type.args)
+            actual_nargs = len(self.args)
+
+            # Check for args locks: read-lock for const args, write-locks for other
+            for i in range(min(max_nargs, actual_nargs)):
+                formal_arg = func_type.args[i]
+                actual_arg = self.args[i]
+                deref_flag = formal_arg.type.is_cyp_class
+                if isinstance(formal_arg.type, PyrexTypes.CConstOrVolatileType) and formal_arg.type.is_const:
+                    actual_arg.ensure_rhs_locked(env, is_dereferenced = deref_flag)
+                else:
+                    actual_arg.ensure_lhs_locked(env, is_dereferenced = deref_flag)
+            # XXX - Should we do something in a pyfunc case ?
+            if func_type.is_const_method:
+                self.function.ensure_rhs_locked(env)
+            else:
+                self.function.ensure_lhs_locked(env)
+
+    def ensure_subexpr_lhs_locked(self, env):
+        # This may be seen a bit weird
+        # In fact, the only thing that changes between lhs & rhs analysis for function
+        # calls is that the result should be locked, but the subexpr analysis is
+        # exactly the same, because the result is not explicitely tied to args
+        # and base object (in case of a method call).
+        self.ensure_subexpr_rhs_locked(env)
 
     def is_lhs_locked(self, env):
         return self.wlocked

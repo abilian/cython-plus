@@ -2826,6 +2826,8 @@ class CppClassScope(Scope):
             name = "<del>"
         elif name == "__alloc__":
             name = "<alloc>"
+        elif name == "__constructor__":
+            name = "<constructor>"
         else:
             operator = self.operator_table.get(name, None)
             if operator:

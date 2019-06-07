@@ -8507,25 +8507,19 @@ class LockCypclassNode(StatNode):
 
     def generate_execution_code(self, code):
         self.obj.generate_evaluation_code(code)
-        # We must unlock if it's a 'with unlocked' statement,
-        # or if we're changing lock type.
-        if self.was_rlocked or self.was_wlocked:
-            code.putln("Cy_UNLOCK(%s);" % self.obj.result())
 
-        # Then, lock accordingly
-        if self.state == "rlocked":
-            code.putln("Cy_RLOCK(%s);" % self.obj.result())
-        elif self.state == "wlocked":
-            code.putln("Cy_WLOCK(%s);" % self.obj.result())
+        # As we're relying on a recursive and upgradable lock,
+        # we don't need to care about things like unlocking a read lock
+        # before taking a write lock, so the code is quite brutal here.
+        lock_code = "Cy_%s(%s);" % (self.state[:-2].upper(), self.obj.result())
+        code.putln(lock_code)
 
         self.body.generate_execution_code(code)
 
-        # We must unlock if we held a lock previously
+        # We must unlock if we held a lock previously, and relock if we unlocked.
         if self.state != "unlocked":
             code.putln("Cy_UNLOCK(%s);" % self.obj.result())
-
-        # Then, relock if needed
-        if self.was_rlocked:
+        elif self.was_rlocked:
             code.putln("Cy_RLOCK(%s);" % self.obj.result())
         elif self.was_wlocked:
             code.putln("Cy_WLOCK(%s);" % self.obj.result())

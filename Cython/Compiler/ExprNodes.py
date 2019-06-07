@@ -5032,6 +5032,13 @@ class SliceIndexNode(ExprNode):
                 index = not_a_constant
         return self.base.inferable_item_node(index)
 
+    def ensure_subexpr_lhs_locked(self, env):
+      self.base.ensure_lhs_locked(env)
+      if self.start:
+        self.start.ensure_rhs_locked(env)
+      elif self.stop:
+        self.stop.ensure_rhs_locked(env)
+
     def may_be_none(self):
         base_type = self.base.type
         if base_type:

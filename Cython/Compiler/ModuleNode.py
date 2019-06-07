@@ -1008,7 +1008,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             self.generate_cyp_class_deferred_definitions(scope.sue_entries, code)
             py_attrs = [e for e in scope.entries.values()
                         if e.type.is_pyobject and not e.is_inherited]
-            cypclass_attrs = [e for e in scope.var_entries + scope.inherited_var_entries
+            cypclass_attrs = [e for e in scope.var_entries
                         if e.type.is_cyp_class and not e.name == "this"
                         and not e.is_type]
             has_virtual_methods = False
@@ -1138,7 +1138,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
     def generate_cyp_class_attrs_destructor_definition(self, entry, code):
         scope = entry.type.scope
-        cypclass_attrs = [e for e in scope.var_entries + scope.inherited_var_entries
+        cypclass_attrs = [e for e in scope.var_entries
                         if e.type.is_cyp_class and not e.name == "this"
                         and not e.is_type]
         if cypclass_attrs:

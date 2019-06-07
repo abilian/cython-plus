@@ -8481,8 +8481,8 @@ class LockCypclassNode(StatNode):
 
         # We need to save states because in case of 'with unlocked' statement,
         # we must know which lock has to be restored after the with body.
-        self.was_rlocked = is_rlocked
         self.was_wlocked = is_wlocked
+        self.was_rlocked = is_rlocked and not is_wlocked
 
         tracked_state = self.obj.tracked_state
 

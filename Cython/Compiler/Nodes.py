@@ -8519,10 +8519,10 @@ class LockCypclassNode(StatNode):
         # We must unlock if we held a lock previously, and relock if we unlocked.
         if self.state != "unlocked":
             code.putln("Cy_UNLOCK(%s);" % self.obj.result())
-        elif self.was_rlocked:
-            code.putln("Cy_RLOCK(%s);" % self.obj.result())
         elif self.was_wlocked:
             code.putln("Cy_WLOCK(%s);" % self.obj.result())
+        elif self.was_rlocked:
+            code.putln("Cy_RLOCK(%s);" % self.obj.result())
 
 
 def cython_view_utility_code():

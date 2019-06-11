@@ -735,6 +735,21 @@ class Scope(object):
                 alloc_entry.is_builtin_cmethod = 1
                 alloc_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), alloc_cname)
 
+                # === Acthon ===
+                # Declare activated class
+                act_scope = CppClassScope("Activated", scope)
+                act_type = PyrexTypes.CypClassType(
+                    "Activated", act_scope, "Activated", None, templates = templates, lock_mode="nolock")
+                act_type.set_scope(act_scope)
+                act_type.namespace = entry.type
+                #scope.declare_cpp_class("Activated", act_scope, pos)
+                scope.declare("Activated", "Activated", act_type, pos, visibility)
+                # Declaring active_self member and activate function (its definition is generated automatically)
+                act_attr_name = Naming.builtin_prefix + "_active_self"
+                scope.declare_var("<active_self>", act_type, pos, cname=act_attr_name)
+                activate_type = PyrexTypes.CFuncType(act_type, [])
+                scope.declare_var("__activate__", activate_type, pos, cname="__activate__", defining = 1)
+
         if self.is_cpp_class_scope:
             entry.type.namespace = self.outer_scope.lookup(self.name).type
         return entry
@@ -2602,6 +2617,7 @@ class CppClassScope(Scope):
         self.directives = outer_scope.directives
         self.inherited_var_entries = []
         self.inherited_type_entries = []
+        self.reified_methods = []
         if templates is not None:
             for T in templates:
                 template_entry = self.declare(
@@ -2655,11 +2671,24 @@ class CppClassScope(Scope):
         wrapper_entry.func_cname = "%s::%s" % (class_type.empty_declaration_code(), wrapper_cname)
         return wrapper_entry
 
+    def reify_method(self, name, type, pos, defining=0, has_varargs=0, optional_arg_count=0, op_arg_struct = None):
+        # TODO: clean argument list
+        reified_name = "reified_" + name
+        reified_cname = Naming.builtin_prefix + reified_name
+        scope = CppClassScope(reified_name, self)
+        reify_base_class = []
+        reified_entry = self.declare_cpp_class(
+            reified_name, scope, pos,
+            cname=reified_cname, base_classes=(), cypclass=True, lock_mode="nolock")
+        self.reified_methods.append(reified_entry)
+
     def declare_cfunction(self, name, type, pos,
                           cname=None, visibility='extern', api=0, in_pxd=0,
                           defining=0, modifiers=(), utility_code=None, overridable=False):
+        reify = True
         class_name = self.name.split('::')[-1]
         if name in (class_name, '__init__') and cname is None:
+            reify = False
             cname = "%s__init__%s" % (Naming.func_prefix, class_name)
             name = EncodedString('<init>')
             type.return_type = PyrexTypes.c_void_type
@@ -2680,13 +2709,16 @@ class CppClassScope(Scope):
                                                  getattr(type, 'op_arg_struct', None))
 
         elif name == '__dealloc__' and cname is None:
+            reify = False
             cname = "%s__dealloc__%s" % (Naming.func_prefix, class_name)
             name = EncodedString('<del>')
             type.return_type = PyrexTypes.c_void_type
         elif name == '__alloc__' and self.type.is_cyp_class:
+            reify = False
             cname = "%s__alloc__%s" % (Naming.func_prefix, class_name)
             name = '<alloc>'
         elif name == '__new__' and self.type.is_cyp_class:
+            reify = False
             if name in self.entries:
                 if self.entries[name].is_inherited:
                     del self.entries[name]
@@ -2703,6 +2735,7 @@ class CppClassScope(Scope):
         else:
             operator = self.operator_table.get(name, None)
             if operator:
+                reify = False
                 name = 'operator'+operator
             elif name.startswith('__') and name.endswith('__'):
                 stripped_name = name[2:-2]
@@ -2726,6 +2759,7 @@ class CppClassScope(Scope):
                 known_type = PyrexTypes.simple_c_type(signed, longness, ctypename)
                 if not known_type:
                     if stripped_name == "bool":
+                        reify = False
                         # This one is hardcoded because it is declared as an int
                         # in PyrexTypes
                         name = 'operator bool'
@@ -2733,6 +2767,7 @@ class CppClassScope(Scope):
                     else:
                         known_type = self.lookup_type(stripped_name)
                 if known_type:
+                    reify = False
                     name = 'operator ' + known_type.declaration_code('')
                     type.args = []
 
@@ -2749,6 +2784,8 @@ class CppClassScope(Scope):
         entry = self.declare_var(name, type, pos,
                                  defining=defining,
                                  cname=cname, visibility=visibility)
+        if reify:
+            self.reify_method(name, type, pos)
         #if prev_entry and not defining:
         #    entry.overloaded_alternatives = prev_entry.all_alternatives()
         entry.utility_code = utility_code
@@ -2772,7 +2809,7 @@ class CppClassScope(Scope):
                 #constructor/destructor is not inherited
                 if base_entry.name == "<del>"\
                    or base_entry.name == "<init>" and not self.parent_type.is_cyp_class\
-                   or base_entry.name in ("<constructor>", "<alloc>") and self.parent_type.is_cyp_class:
+                   or base_entry.name in ("<constructor>", "<alloc>", "<active_self>", "__activate__") and self.parent_type.is_cyp_class:
                     continue
                 elif base_entry.name == "<init>" and not self.lookup_here("__new__"):
                     wrapper_entry = self.declare_constructor_wrapper(base_entry_type.args, base_entry.pos,

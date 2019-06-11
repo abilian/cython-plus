@@ -898,6 +898,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             if entry.type.is_cyp_class:
                 # Generate cypclass attr destructor
                 self.generate_cyp_class_attrs_destructor_definition(entry, code)
+                # Generate acthon-specific classes
+                self.generate_cyp_class_activated_class(entry, code)
+                self.generate_cyp_class_activate_function(entry, code)
                 # Generate wrapper constructor
                 scope = entry.type.scope
                 wrapper = scope.lookup_here("<constructor>")
@@ -1014,6 +1017,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             has_virtual_methods = False
             constructor = None
             destructor = None
+            activated_class_entry = scope.lookup_here("Activated")
+            if activated_class_entry:
+                code.putln("struct %s;" % activated_class_entry.cname)
             for attr in scope.var_entries:
                 cname = attr.cname
                 if attr.type.is_cfunction and attr.type.is_static_method:
@@ -1153,6 +1159,26 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             for attr in cypclass_attrs:
                 code.putln("Cy_XDECREF(this->%s);" % attr.cname)
             code.putln("}")
+
+    def generate_cyp_class_activate_function(self, entry, code):
+        active_self_entry = entry.type.scope.lookup_here("<active_self>")
+        code.putln("%s::Activated* %s::activate() {" % (entry.type.empty_declaration_code(), entry.type.empty_declaration_code()))
+        code.putln("if (this->%s == NULL) {" % active_self_entry.cname)
+        code.putln("this->%s = new %s::Activated(this);" % (active_self_entry.cname, entry.type.empty_declaration_code()))
+        code.putln("}")
+        code.putln("Cy_INCREF(this->%s);" % active_self_entry.cname)
+        code.putln("return this->%s;" % active_self_entry.cname)
+        code.putln("}")
+
+    def generate_cyp_class_activated_class(self, entry, code):
+        # TODO: handle inheritance
+        code.putln("struct %s::Activated {" % entry.type.empty_declaration_code())
+        code.putln("%s * _passive_self;" % entry.type.empty_declaration_code())
+        code.putln("Activated(){} // Used for inheritance, never used for classic instantiation")
+        code.putln("Activated(%s * passive_object):_passive_self(passive_object){} // Used by _passive_self.activate()" % entry.type.empty_declaration_code())
+        for reified_entry in entry.scope.reified_entries:
+            code.putln("// generating reified of %s" % reified_entry.name)
+        code.putln("};")
 
     def generate_cyp_class_wrapper_definition(self, type, wrapper_entry, constructor_entry, new_entry, alloc_entry, code):
         if type.templates:

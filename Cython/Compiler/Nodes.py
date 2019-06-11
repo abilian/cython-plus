@@ -5639,7 +5639,9 @@ class ExprStatNode(StatNode):
     def analyse_expressions(self, env):
         self.expr.result_is_used = False  # hint that .result() may safely be left empty
         self.expr = self.expr.analyse_expressions(env)
-        self.expr.ensure_rhs_locked(env)
+        from . import ExprNodes
+        if isinstance(self.expr, ExprNodes.ExprNode):
+            self.expr.ensure_rhs_locked(env)
         # Repeat in case of node replacement.
         self.expr.result_is_used = False  # hint that .result() may safely be left empty
         return self

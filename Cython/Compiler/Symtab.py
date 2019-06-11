@@ -2685,7 +2685,7 @@ class CppClassScope(Scope):
     def declare_cfunction(self, name, type, pos,
                           cname=None, visibility='extern', api=0, in_pxd=0,
                           defining=0, modifiers=(), utility_code=None, overridable=False):
-        reify = True
+        reify = self.type.is_cyp_class
         class_name = self.name.split('::')[-1]
         if name in (class_name, '__init__') and cname is None:
             reify = False

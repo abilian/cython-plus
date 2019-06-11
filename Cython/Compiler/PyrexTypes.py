@@ -4117,7 +4117,7 @@ class CypClassType(CppClassType):
 
     def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0, lock_mode=None):
         CppClassType.__init__(self, name, scope, cname, base_classes, templates, template_type, nogil)
-        self.lock_mode = lock_mode if lock_mode else "checklock"
+        self.lock_mode = lock_mode if lock_mode else "autolock"
 
     def empty_declaration_code(self):
         if self._empty_declaration is None:

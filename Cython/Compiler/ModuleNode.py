@@ -1166,7 +1166,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
     def generate_cyp_class_activate_function(self, entry, code):
         active_self_entry = entry.type.scope.lookup_here("<active_self>")
-        code.putln("%s::Activated* %s::activate() {" % (entry.type.empty_declaration_code(), entry.type.empty_declaration_code()))
+        code.putln("%s::Activated* %s::__activate__() {" % (entry.type.empty_declaration_code(), entry.type.empty_declaration_code()))
         code.putln("if (this->%s == NULL) {" % active_self_entry.cname)
         code.putln("this->%s = new %s::Activated(this);" % (active_self_entry.cname, entry.type.empty_declaration_code()))
         code.putln("}")

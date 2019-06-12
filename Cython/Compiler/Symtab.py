@@ -2617,7 +2617,7 @@ class CppClassScope(Scope):
         self.directives = outer_scope.directives
         self.inherited_var_entries = []
         self.inherited_type_entries = []
-        self.reified_methods = []
+        self.reifying_entries = []
         if templates is not None:
             for T in templates:
                 template_entry = self.declare(
@@ -2671,16 +2671,18 @@ class CppClassScope(Scope):
         wrapper_entry.func_cname = "%s::%s" % (class_type.empty_declaration_code(), wrapper_cname)
         return wrapper_entry
 
-    def reify_method(self, name, type, pos, defining=0, has_varargs=0, optional_arg_count=0, op_arg_struct = None):
+    def reify_method(self, entry):
         # TODO: clean argument list
-        reified_name = "reified_" + name
+        reified_name = "reified_" + entry.name
         reified_cname = Naming.builtin_prefix + reified_name
         scope = CppClassScope(reified_name, self)
-        reify_base_class = []
-        reified_entry = self.declare_cpp_class(
-            reified_name, scope, pos,
-            cname=reified_cname, base_classes=(), cypclass=True, lock_mode="nolock")
-        self.reified_methods.append(reified_entry)
+        reified_type = PyrexTypes.CypClassType(reified_name, scope, reified_cname, None, templates = None, lock_mode="nolock")
+        reified_type.namespace = self.type
+        #reify_base_classes = ()
+        reifying_entry = self.declare(reified_name, reified_cname, reified_type, entry.pos, 'extern') # FIXME: visibility
+        #reified_entry.is_cpp_class = 1
+        reifying_entry.reified_entry = entry
+        self.reifying_entries.append(reifying_entry)
 
     def declare_cfunction(self, name, type, pos,
                           cname=None, visibility='extern', api=0, in_pxd=0,
@@ -2785,7 +2787,7 @@ class CppClassScope(Scope):
                                  defining=defining,
                                  cname=cname, visibility=visibility)
         if reify:
-            self.reify_method(name, type, pos)
+            self.reify_method(entry)
         #if prev_entry and not defining:
         #    entry.overloaded_alternatives = prev_entry.all_alternatives()
         entry.utility_code = utility_code

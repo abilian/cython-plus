@@ -3840,8 +3840,10 @@ def p_cpp_class_definition(s, pos,  ctx):
         error(s.position(), "Name options not allowed for C++ class")
     nogil = p_nogil(s) or cypclass
     lock_mode = None
+    activable = False
     if cypclass:
         lock_mode = p_cypclass_lock_mode(s)
+        activable = p_cypclass_activable(s)
     if s.sy == ':':
         s.next()
         s.expect('NEWLINE')
@@ -3870,7 +3872,7 @@ def p_cpp_class_definition(s, pos,  ctx):
         visibility = ctx.visibility,
         in_pxd = ctx.level == 'module_pxd',
         attributes = attributes,
-        templates = templates, cypclass=cypclass, lock_mode=lock_mode)
+        templates = templates, cypclass=cypclass, lock_mode=lock_mode, activable=activable)
 
 def p_cpp_class_attribute(s, ctx):
     decorators = None
@@ -3904,6 +3906,12 @@ def p_cypclass_lock_mode(s):
     else:
         return None
 
+def p_cypclass_activable(s):
+    if s.sy == 'IDENT' and s.systring == 'activable':
+        s.next()
+        return True
+    else:
+        return False
 
 #----------------------------------------------
 #

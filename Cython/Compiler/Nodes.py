@@ -1519,7 +1519,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                 error(self.pos, "Required template parameters must precede optional template parameters.")
         self.entry = env.declare_cpp_class(
             self.name, None, self.pos, self.cname,
-            base_classes=[], visibility=self.visibility, templates=template_types, cypclass=self.cypclass, lock_mode=self.lock_mode)
+            base_classes=[], visibility=self.visibility, templates=template_types, cypclass=self.cypclass, lock_mode=self.lock_mode, activable=self.activable)
 
     def analyse_declarations(self, env):
         if self.templates is None:
@@ -1546,7 +1546,8 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         base_class_types = filter(base_ok, base_types_list)
         self.entry = env.declare_cpp_class(
             self.name, scope, self.pos,
-            self.cname, base_class_types, visibility=self.visibility, templates=template_types, cypclass=self.cypclass, lock_mode=self.lock_mode)
+            self.cname, base_class_types, visibility=self.visibility, templates=template_types,
+            cypclass=self.cypclass, lock_mode=self.lock_mode, activable=self.activable)
         if self.entry is None:
             return
         self.entry.is_cpp_class = 1

@@ -896,10 +896,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
     def generate_cyp_class_deferred_definitions(self, type_entries, code):
         for entry in type_entries:
             if entry.type.is_cyp_class:
-                # Generate acthon-specific classes
-                self.generate_cyp_class_reifying_entries(entry, code)
-                self.generate_cyp_class_activated_class(entry, code)
-                self.generate_cyp_class_activate_function(entry, code)
+                if entry.type.activable:
+                    # Generate acthon-specific classes
+                    self.generate_cyp_class_reifying_entries(entry, code)
+                    self.generate_cyp_class_activated_class(entry, code)
+                    self.generate_cyp_class_activate_function(entry, code)
                 # Generate cypclass attr destructor
                 self.generate_cyp_class_attrs_destructor_definition(entry, code)
                 # Generate wrapper constructor

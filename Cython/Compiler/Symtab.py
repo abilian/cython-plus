@@ -656,7 +656,7 @@ class Scope(object):
 
     def declare_cpp_class(self, name, scope,
             pos, cname = None, base_classes = (),
-            visibility = 'extern', templates = None, cypclass=0, lock_mode=None):
+            visibility = 'extern', templates = None, cypclass=0, lock_mode=None, activable=False):
         if cname is None:
             if self.in_cinclude or (visibility != 'private'):
                 cname = name
@@ -667,7 +667,7 @@ class Scope(object):
         if not entry:
             if cypclass:
                 type = PyrexTypes.CypClassType(
-                    name, scope, cname, base_classes, templates = templates, lock_mode=lock_mode)
+                    name, scope, cname, base_classes, templates = templates, lock_mode=lock_mode, activable=activable)
             else:
                 type = PyrexTypes.CppClassType(
                     name, scope, cname, base_classes, templates = templates)
@@ -735,20 +735,21 @@ class Scope(object):
                 alloc_entry.is_builtin_cmethod = 1
                 alloc_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), alloc_cname)
 
-                # === Acthon ===
-                # Declare activated class
-                act_scope = CppClassScope("Activated", scope)
-                act_type = PyrexTypes.CypClassType(
-                    "Activated", act_scope, "Activated", None, templates = templates, lock_mode="nolock")
-                act_type.set_scope(act_scope)
-                act_type.namespace = entry.type
-                #scope.declare_cpp_class("Activated", act_scope, pos)
-                scope.declare("Activated", "Activated", act_type, pos, visibility)
-                # Declaring active_self member and activate function (its definition is generated automatically)
-                act_attr_name = Naming.builtin_prefix + "_active_self"
-                scope.declare_var("<active_self>", act_type, pos, cname=act_attr_name)
-                activate_type = PyrexTypes.CFuncType(act_type, [])
-                scope.declare_var("__activate__", activate_type, pos, cname="__activate__", defining = 1)
+                if entry.type.activable:
+                    # === Acthon ===
+                    # Declare activated class
+                    act_scope = CppClassScope("Activated", scope)
+                    act_type = PyrexTypes.CypClassType(
+                        "Activated", act_scope, "Activated", None, templates = templates, lock_mode="nolock")
+                    act_type.set_scope(act_scope)
+                    act_type.namespace = entry.type
+                    #scope.declare_cpp_class("Activated", act_scope, pos)
+                    scope.declare("Activated", "Activated", act_type, pos, visibility)
+                    # Declaring active_self member and activate function (its definition is generated automatically)
+                    act_attr_name = Naming.builtin_prefix + "_active_self"
+                    scope.declare_var("<active_self>", act_type, pos, cname=act_attr_name)
+                    activate_type = PyrexTypes.CFuncType(act_type, [])
+                    scope.declare_var("__activate__", activate_type, pos, cname="__activate__", defining = 1)
 
         if self.is_cpp_class_scope:
             entry.type.namespace = self.outer_scope.lookup(self.name).type
@@ -2687,7 +2688,7 @@ class CppClassScope(Scope):
     def declare_cfunction(self, name, type, pos,
                           cname=None, visibility='extern', api=0, in_pxd=0,
                           defining=0, modifiers=(), utility_code=None, overridable=False):
-        reify = self.type.is_cyp_class
+        reify = self.type.is_cyp_class and self.type.activable
         class_name = self.name.split('::')[-1]
         if name in (class_name, '__init__') and cname is None:
             reify = False

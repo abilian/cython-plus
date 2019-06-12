@@ -1040,6 +1040,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.putln("%s;" % attr.type.declaration_code(cname))
             is_implementing = 'init_module' in code.globalstate.parts
 
+            for reified in scope.reifying_entries:
+                code.putln("struct %s;" % reified.cname)
+
             def generate_cpp_constructor_code(arg_decls, arg_names, is_implementing, py_attrs, constructor):
                 if is_implementing:
                     code.putln("%s(%s) {" % (type.cname, ", ".join(arg_decls)))
@@ -1172,13 +1175,80 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
     def generate_cyp_class_activated_class(self, entry, code):
         # TODO: handle inheritance
-        code.putln("struct %s::Activated {" % entry.type.empty_declaration_code())
+        code.putln("struct %s::Activated : public CyObject {" % entry.type.empty_declaration_code())
         code.putln("%s * _passive_self;" % entry.type.empty_declaration_code())
         code.putln("Activated(){} // Used for inheritance, never used for classic instantiation")
         code.putln("Activated(%s * passive_object):_passive_self(passive_object){} // Used by _passive_self.activate()" % entry.type.empty_declaration_code())
-        for reified_entry in entry.scope.reified_entries:
-            code.putln("// generating reified of %s" % reified_entry.name)
+        for reifying_class_entry in entry.type.scope.reifying_entries:
+            code.putln("// generating reified of %s" % reifying_class_entry.name)
+            reified_function_entry = reifying_class_entry.reified_entry
+            arg_cname_list = [arg.cname for arg in reified_function_entry.type.args]
+            args_code = ", ".join([
+                arg.type.declaration_code(arg.cname) for arg in reified_function_entry.type.args
+            ])
+            function_header = reified_function_entry.type.function_header_code(reified_function_entry.cname, args_code)
+            function_code = PyrexTypes.c_void_type.declaration_code(function_header)
+            # FIXME: it should return a ResultInterface
+            code.putln("%s {" % function_code)
+            message_constructor_args_list = ["_passive_self"] + arg_cname_list
+            message_constructor_args_code = ", ".join(message_constructor_args_list)
+            code.putln("%s = new %s(%s);" % (
+                reifying_class_entry.type.declaration_code("message"),
+                reifying_class_entry.type.empty_declaration_code(),
+                message_constructor_args_code
+            ))
+            code.putln("/* Push message in the queue */")
+            code.putln("}")
         code.putln("};")
+
+    def generate_cyp_class_reifying_entries(self, entry, code):
+        target_object_type = entry.type
+        target_object_name = "target_object"
+        target_object_cname = Naming.builtin_prefix + target_object_name
+        target_object_code = target_object_type.declaration_code(target_object_cname)
+        target_object_argument_code = target_object_type.declaration_code(target_object_name)
+        for reifying_class_entry in entry.type.scope.reifying_entries:
+            reified_function_entry = reifying_class_entry.reified_entry
+            reifying_class_full_name = reifying_class_entry.type.empty_declaration_code()
+            constructor_name = reifying_class_full_name.split('::')[-1]
+            # FIXME: it should not inherit from CyObject but from MessageInterface
+            code.putln("struct %s : public CyObject {" % reifying_class_full_name)
+            # Declaring target object & reified method arguments
+            code.putln("%s;" % target_object_code)
+            arg_codes = [target_object_argument_code]
+            arg_names = ["target_object"]
+            arg_cnames = [target_object_cname]
+            for arg in reified_function_entry.type.args:
+                arg_cname_code = arg.type.declaration_code(arg.cname)
+                arg_constructor_code = arg.type.declaration_code(arg.name)
+                code.putln("%s;" % arg_cname_code)
+                arg_codes.append(arg_constructor_code)
+                arg_names.append(arg.name)
+                arg_cnames.append(arg.cname)
+            # Putting them into constructor
+            constructor_args_declaration = ", ".join(arg_codes)
+            initializer_list = ["%s(%s)" % (cname, name)
+                for name, cname in zip(arg_names, arg_cnames)]
+            constructor_initializer_list_declaration = ", ".join(initializer_list)
+            code.putln("%s(%s) : %s {}" % (
+                constructor_name,
+                constructor_args_declaration,
+                constructor_initializer_list_declaration
+            ))
+            code.putln("void activate() {")
+            result_assignment = ""
+            if reified_function_entry.type.return_type is not PyrexTypes.c_void_type:
+                result_assignment = "%s =" % reified_function_entry.type.return_type.declaration_code("result")
+            code.putln("%s this->%s->%s(%s);" % (
+                result_assignment,
+                target_object_cname,
+                reified_function_entry.cname,
+                ", ".join("this->%s" % arg_cname for arg_cname in arg_cnames[1:])
+                )
+            )
+            code.putln("/* Push result in the result object */")
+            code.putln("}")
+            code.putln("};")
 
     def generate_cyp_class_wrapper_definition(self, type, wrapper_entry, constructor_entry, new_entry, alloc_entry, code):
         if type.templates:

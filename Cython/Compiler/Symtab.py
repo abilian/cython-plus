@@ -1342,6 +1342,119 @@ class ModuleScope(Scope):
             self.declare_var(EncodedString(var_name), py_object_type, None)
         self.process_include(Code.IncludeCode("Python.h", initial=True))
 
+    def inject_acthon_interfaces(self):
+        # XXX - Moving this to the builtin scope would make much more sense
+        # XXX - than redeclaring acthon builtins in every module.
+        #declare_cpp_class(self, name, scope,
+        #  pos, cname = None, base_classes = (),
+        #  visibility = 'extern', templates = None, cypclass=0, lock_mode=None, activable=False):
+
+        #    def declare_cfunction(self, name, type, pos,
+        #                  cname=None, visibility='extern', api=0, in_pxd=0,
+        #                  defining=0, modifiers=(), utility_code=None, overridable=False):
+
+
+        # cypclass ActhonMessageInterface
+
+        forward_declared_message_entry = self.declare_cpp_class("ActhonMessageInterface",
+        None, None, cname="ActhonMessageInterface", base_classes = (PyrexTypes.cy_object_type,),
+        cypclass=1, lock_mode="nolock")
+
+        # cypclass ActhonSyncInterface(CyObject):
+        #     bool isActivable(){}
+        #     bool isCompleted(){}
+        #     void insertActivity(ActhonMessageInterface msg){}
+        #     void removeActivity(ActhonMessageInterface msg){}
+        sync_scope = CppClassScope("ActhonSyncInterface", self)
+        sync_entry = self.declare_cpp_class("ActhonSyncInterface",
+            sync_scope, None, cname="ActhonSyncInterface", base_classes = (PyrexTypes.cy_object_type,),
+            cypclass=1, lock_mode="nolock")
+        sync_scope.type = sync_entry.type
+
+        sync_isActivable_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+        sync_isActivable_entry = sync_scope.declare_cfunction("isActivable", sync_isActivable_type,
+            None, cname="isActivable", defining = 1)
+
+        sync_isCompleted_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+        sync_isCompleted_entry = sync_scope.declare_cfunction("isCompleted", sync_isCompleted_type,
+            None, cname="isCompleted", defining = 1)
+
+        sync_msg_arg = PyrexTypes.CFuncTypeArg("msg", forward_declared_message_entry.type, None)
+        sync_insertActivity_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [sync_msg_arg], nogil = 1)
+        sync_removeActivity_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [sync_msg_arg], nogil = 1)
+        sync_insertActivity_entry = sync_scope.declare_cfunction("insertActivity", sync_insertActivity_type,
+            None, cname="insertActivity", defining = 1)
+        sync_removeActivity_entry = sync_scope.declare_cfunction("removeActivity", sync_removeActivity_type,
+            None, cname="removeActivity", defining = 1)
+
+        # cypclass ActhonMessageInterface(CyObject):
+        #     SyncInterface _sync_method
+        #     bool activate(){}
+
+        message_scope = CppClassScope("ActhonMessageInterface", self)
+        message_entry = self.declare_cpp_class("ActhonMessageInterface",
+            message_scope, None, cname="ActhonMessageInterface", base_classes = (PyrexTypes.cy_object_type,),
+            cypclass=1, lock_mode="nolock")
+        message_scope.type = message_entry.type
+
+        message_activate_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+        message_activate_entry = message_scope.declare_cfunction("activate", message_activate_type,
+            None, cname="activate", defining = 1)
+
+        # cypclass ActhonQueueInterface(CyObject):
+        #     void push(ActhonMessageInterface message){}
+        #     bool activate(){}
+
+        queue_scope = CppClassScope("ActhonQueueInterface", self)
+        queue_entry = self.declare_cpp_class("ActhonQueueInterface",
+            queue_scope, None, cname="ActhonQueueInterface", base_classes = (PyrexTypes.cy_object_type,),
+            cypclass=1, lock_mode="nolock")
+        queue_scope.type = queue_entry.type
+
+        queue_msg_arg = PyrexTypes.CFuncTypeArg("msg", message_entry.type, None)
+        queue_push_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [queue_msg_arg], nogil = 1)
+        queue_push_entry = queue_scope.declare_cfunction("push", queue_push_type,
+            None, cname="push", defining = 1)
+
+        queue_activate_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+        queue_activate_entry = queue_scope.declare_cfunction("activate", queue_activate_type,
+            None, cname="activate", defining = 1)
+
+        # cypclass ActhonResultInterface(CyObject):
+        #     void pushVoidStarResult(void* result){}
+        #     void* getVoidStarResult(){}
+        #     void pushIntResult(int result){}
+        #     int getIntResult(){}
+        #     operator int() { return this->getIntResult(); }
+
+        result_scope = CppClassScope("ActhonResultInterface", self)
+        result_entry = self.declare_cpp_class("ActhonResultInterface",
+            result_scope, None, cname="ActhonResultInterface", base_classes = (PyrexTypes.cy_object_type,),
+            cypclass=1, lock_mode="nolock")
+        result_scope.type = result_entry.type
+
+        result_pushVoidStar_arg_type = PyrexTypes.CFuncTypeArg("result", PyrexTypes.c_void_ptr_type, None)
+        result_pushVoidStar_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [result_pushVoidStar_arg_type], nogil = 1)
+        result_pushVoidStar_entry = result_scope.declare_cfunction("pushVoidStarResult", result_pushVoidStar_type,
+            None, cname="pushVoidStarResult", defining = 1)
+
+        result_getVoidStar_type = PyrexTypes.CFuncType(PyrexTypes.c_void_ptr_type, [], nogil = 1)
+        result_getVoidStar_entry = result_scope.declare_cfunction("getVoidStarResult", result_getVoidStar_type,
+            None, cname="getVoidStarResult", defining = 1)
+
+        result_pushInt_arg_type = PyrexTypes.CFuncTypeArg("result", PyrexTypes.c_int_type, None)
+        result_pushInt_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [result_pushInt_arg_type], nogil = 1)
+        result_pushInt_entry = result_scope.declare_cfunction("pushIntResult", result_pushInt_type,
+            None, cname="pushIntResult", defining = 1)
+
+        result_getInt_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type, [], nogil = 1)
+        result_pushInt_entry = result_scope.declare_cfunction("getIntResult", result_getInt_type,
+            None, cname="getIntResult", defining = 1)
+
+        result_int_typecast_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type, [], nogil = 1)
+        result_int_typecast_entry = result_scope.declare_cfunction("operator int", result_int_typecast_type,
+            None, cname="operator int", defining = 1)
+
     def qualifying_scope(self):
         return self.parent_module
 

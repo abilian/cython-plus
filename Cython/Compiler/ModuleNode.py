@@ -144,7 +144,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         else:
             env.doc = self.doc
         env.directives = self.directives
-
+        env.inject_acthon_interfaces()
         self.body.analyse_declarations(env)
 
     def prepare_utility_code(self):
@@ -912,6 +912,14 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 for wrapper_entry in wrapper.all_alternatives():
                     if wrapper_entry.used or entry.type.templates:
                         self.generate_cyp_class_wrapper_definition(entry.type, wrapper_entry, constructor, new, alloc, code)
+                self.generate_acthon_hacks(entry, code)
+
+    def generate_acthon_hacks(self, entry, code):
+        # HACK !!!
+        if entry.name == "ActhonResultInterface":
+            code.putln("ActhonResultInterface::operator int() {")
+            code.putln("return this->getIntResult();")
+            code.putln("}")
 
     def generate_gcc33_hack(self, env, code):
         # Workaround for spurious warning generation in gcc 3.3

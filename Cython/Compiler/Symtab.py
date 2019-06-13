@@ -744,7 +744,8 @@ class Scope(object):
                     act_type.set_scope(act_scope)
                     act_type.namespace = entry.type
                     #scope.declare_cpp_class("Activated", act_scope, pos)
-                    scope.declare("Activated", "Activated", act_type, pos, visibility)
+                    act_entry = scope.declare("Activated", "Activated", act_type, pos, visibility)
+                    act_entry.is_type = 1
                     # Declaring active_self member and activate function (its definition is generated automatically)
                     act_attr_name = Naming.builtin_prefix + "_active_self"
                     scope.declare_var("<active_self>", act_type, pos, cname=act_attr_name)

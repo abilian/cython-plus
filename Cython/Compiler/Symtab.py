@@ -749,7 +749,8 @@ class Scope(object):
                     act_attr_name = Naming.builtin_prefix + "_active_self"
                     scope.declare_var("<active_self>", act_type, pos, cname=act_attr_name)
                     activate_type = PyrexTypes.CFuncType(act_type, [], nogil = 1)
-                    scope.declare_var("__activate__", activate_type, pos, cname="__activate__", defining = 1)
+                    activate_entry = scope.declare("__activate__", "__activate__", activate_type, None, 'extern')
+                    activate_entry.is_variable = activate_entry.is_cfunction = 1
 
         if self.is_cpp_class_scope:
             entry.type.namespace = self.outer_scope.lookup(self.name).type

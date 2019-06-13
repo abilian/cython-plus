@@ -1022,6 +1022,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             activated_class_entry = scope.lookup_here("Activated")
             if activated_class_entry:
                 code.putln("struct %s;" % activated_class_entry.cname)
+                code.putln("%s;" % activated_class_entry.type.declaration_code("__activate__(void)"))
             for attr in scope.var_entries:
                 cname = attr.cname
                 if attr.type.is_cfunction and attr.type.is_static_method:
@@ -1178,7 +1179,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
     def generate_cyp_class_activated_class(self, entry, code):
         result_interface_entry = entry.scope.lookup_here("ActhonResultInterface")
         # TODO: handle inheritance
-        code.putln("struct %s::Activated : public CyObject {" % entry.type.empty_declaration_code())
+        activable_bases = ["public %s::Activated" % base.cname for base in entry.type.base_classes if base.activable]
+        if activable_bases:
+            base_classes_code = ", ".join(activable_bases)
+        else:
+            base_classes_code = "public CyObject"
+        code.putln("struct %s::Activated : %s {" % (entry.type.empty_declaration_code(), base_classes_code))
         code.putln("%s * _passive_self;" % entry.type.empty_declaration_code())
         code.putln("Activated(){} // Used for inheritance, never used for classic instantiation")
         code.putln("Activated(%s * passive_object):_passive_self(passive_object){} // Used by _passive_self.activate()" % entry.type.empty_declaration_code())

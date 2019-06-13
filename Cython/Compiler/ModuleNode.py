@@ -1240,20 +1240,17 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 arg_codes.append(arg_constructor_code)
                 arg_names.append(arg.name)
                 arg_cnames.append(arg.cname)
+
             # Putting them into constructor
             constructor_args_declaration = ", ".join(arg_codes)
             initializer_list = ["%s(%s)" % (cname, name)
                 for name, cname in zip(arg_names, arg_cnames)]
             constructor_initializer_list_declaration = ", ".join(initializer_list)
-            code.putln("%s(%s) : %s {" % (
+            code.putln("%s(%s) : ActhonMessageInterface(sync_method, result_object), %s {}" % (
                 constructor_name,
                 constructor_args_declaration,
                 constructor_initializer_list_declaration
             ))
-            # FIXME: it would be cleaner to be able to have a bare C++ two-args constructor for ActhonMessageInterface
-            code.putln("this->_sync_method = sync_method;")
-            code.putln("this->_result = result_object;")
-            code.putln("}")
             code.putln("int activate() {")
             code.putln("/* Activate only if its sync object agrees to do so */")
             code.putln("if (this->_sync_method != NULL and !this->_sync_method->isActivable()) {")

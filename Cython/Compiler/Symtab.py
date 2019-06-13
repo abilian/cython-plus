@@ -748,7 +748,7 @@ class Scope(object):
                     # Declaring active_self member and activate function (its definition is generated automatically)
                     act_attr_name = Naming.builtin_prefix + "_active_self"
                     scope.declare_var("<active_self>", act_type, pos, cname=act_attr_name)
-                    activate_type = PyrexTypes.CFuncType(act_type, [])
+                    activate_type = PyrexTypes.CFuncType(act_type, [], nogil = 1)
                     scope.declare_var("__activate__", activate_type, pos, cname="__activate__", defining = 1)
 
         if self.is_cpp_class_scope:

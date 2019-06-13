@@ -1538,6 +1538,14 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                 error(self.pos, "Base class '%s' not a struct or class." % base_class)
         base_types_list = [b.analyse(scope or env) for b in self.base_classes]
         if self.cypclass:
+            if self.activable:
+                activable_base = False
+                for base_type in base_types_list:
+                    activable_base = activable_base or base_type.activable
+                if not activable_base:
+                    activable_base_entry = env.lookup_here("ActhonActivableClass")
+                    base_types_list.append(activable_base_entry.type)
+
             cyobject_base = False
             for base_type in base_types_list:
                 cyobject_base = cyobject_base or base_type.is_cyp_class

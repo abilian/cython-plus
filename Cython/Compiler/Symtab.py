@@ -1345,80 +1345,6 @@ class ModuleScope(Scope):
     def inject_acthon_interfaces(self):
         # XXX - Moving this to the builtin scope would make much more sense
         # XXX - than redeclaring acthon builtins in every module.
-        #declare_cpp_class(self, name, scope,
-        #  pos, cname = None, base_classes = (),
-        #  visibility = 'extern', templates = None, cypclass=0, lock_mode=None, activable=False):
-
-        #    def declare_cfunction(self, name, type, pos,
-        #                  cname=None, visibility='extern', api=0, in_pxd=0,
-        #                  defining=0, modifiers=(), utility_code=None, overridable=False):
-
-
-        # cypclass ActhonMessageInterface
-
-        forward_declared_message_entry = self.declare_cpp_class("ActhonMessageInterface",
-        None, None, cname="ActhonMessageInterface", base_classes = (PyrexTypes.cy_object_type,),
-        cypclass=1, lock_mode="nolock")
-
-        # cypclass ActhonSyncInterface(CyObject):
-        #     bool isActivable(){}
-        #     bool isCompleted(){}
-        #     void insertActivity(ActhonMessageInterface msg){}
-        #     void removeActivity(ActhonMessageInterface msg){}
-        sync_scope = CppClassScope("ActhonSyncInterface", self)
-        sync_entry = self.declare_cpp_class("ActhonSyncInterface",
-            sync_scope, None, cname="ActhonSyncInterface", base_classes = (PyrexTypes.cy_object_type,),
-            cypclass=1, lock_mode="nolock")
-        sync_scope.type = sync_entry.type
-
-        sync_isActivable_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
-        sync_isActivable_entry = sync_scope.declare_cfunction("isActivable", sync_isActivable_type,
-            None, cname="isActivable", defining = 1)
-
-        sync_isCompleted_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
-        sync_isCompleted_entry = sync_scope.declare_cfunction("isCompleted", sync_isCompleted_type,
-            None, cname="isCompleted", defining = 1)
-
-        sync_msg_arg = PyrexTypes.CFuncTypeArg("msg", forward_declared_message_entry.type, None)
-        sync_insertActivity_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [sync_msg_arg], nogil = 1)
-        sync_removeActivity_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [sync_msg_arg], nogil = 1)
-        sync_insertActivity_entry = sync_scope.declare_cfunction("insertActivity", sync_insertActivity_type,
-            None, cname="insertActivity", defining = 1)
-        sync_removeActivity_entry = sync_scope.declare_cfunction("removeActivity", sync_removeActivity_type,
-            None, cname="removeActivity", defining = 1)
-
-        # cypclass ActhonMessageInterface(CyObject):
-        #     SyncInterface _sync_method
-        #     bool activate(){}
-
-        message_scope = CppClassScope("ActhonMessageInterface", self)
-        message_entry = self.declare_cpp_class("ActhonMessageInterface",
-            message_scope, None, cname="ActhonMessageInterface", base_classes = (PyrexTypes.cy_object_type,),
-            cypclass=1, lock_mode="nolock")
-        message_scope.type = message_entry.type
-
-        message_activate_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
-        message_activate_entry = message_scope.declare_cfunction("activate", message_activate_type,
-            None, cname="activate", defining = 1)
-
-        # cypclass ActhonQueueInterface(CyObject):
-        #     void push(ActhonMessageInterface message){}
-        #     bool activate(){}
-
-        queue_scope = CppClassScope("ActhonQueueInterface", self)
-        queue_entry = self.declare_cpp_class("ActhonQueueInterface",
-            queue_scope, None, cname="ActhonQueueInterface", base_classes = (PyrexTypes.cy_object_type,),
-            cypclass=1, lock_mode="nolock")
-        queue_scope.type = queue_entry.type
-
-        queue_msg_arg = PyrexTypes.CFuncTypeArg("msg", message_entry.type, None)
-        queue_push_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [queue_msg_arg], nogil = 1)
-        queue_push_entry = queue_scope.declare_cfunction("push", queue_push_type,
-            None, cname="push", defining = 1)
-
-        queue_activate_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
-        queue_activate_entry = queue_scope.declare_cfunction("activate", queue_activate_type,
-            None, cname="activate", defining = 1)
 
         # cypclass ActhonResultInterface(CyObject):
         #     void pushVoidStarResult(void* result){}
@@ -1428,10 +1354,13 @@ class ModuleScope(Scope):
         #     operator int() { return this->getIntResult(); }
 
         result_scope = CppClassScope("ActhonResultInterface", self)
-        result_entry = self.declare_cpp_class("ActhonResultInterface",
-            result_scope, None, cname="ActhonResultInterface", base_classes = (PyrexTypes.cy_object_type,),
-            cypclass=1, lock_mode="nolock")
-        result_scope.type = result_entry.type
+        result_type = PyrexTypes.CypClassType(
+                    "ActhonResultInterface", result_scope, "ActhonResultInterface", (PyrexTypes.cy_object_type,),
+                    lock_mode="nolock", activable=False)
+        result_scope.type = result_type
+        #result_type.set_scope is a little bit overkill here, because parent_type is only used when doing scope inheritance
+        result_entry = self.declare("ActhonResultInterface", None, result_type, "ActhonResultInterface", "extern")
+        result_entry.is_type = 1
 
         result_pushVoidStar_arg_type = PyrexTypes.CFuncTypeArg("result", PyrexTypes.c_void_ptr_type, None)
         result_pushVoidStar_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [result_pushVoidStar_arg_type], nogil = 1)
@@ -1454,6 +1383,97 @@ class ModuleScope(Scope):
         result_int_typecast_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type, [], nogil = 1)
         result_int_typecast_entry = result_scope.declare_cfunction("operator int", result_int_typecast_type,
             None, cname="operator int", defining = 1)
+
+        # cypclass ActhonMessageInterface
+
+        message_scope = CppClassScope("ActhonMessageInterface", self)
+        message_type = PyrexTypes.CypClassType(
+                    "ActhonMessageInterface", message_scope, "ActhonMessageInterface", (PyrexTypes.cy_object_type,),
+                    lock_mode="nolock", activable=False)
+        message_scope.type = message_type
+
+        # cypclass ActhonSyncInterface(CyObject):
+        #     bool isActivable(){}
+        #     bool isCompleted(){}
+        #     void insertActivity(ActhonMessageInterface msg){}
+        #     void removeActivity(ActhonMessageInterface msg){}
+
+        sync_scope = CppClassScope("ActhonSyncInterface", self)
+        sync_type = PyrexTypes.CypClassType(
+                    "ActhonSyncInterface", sync_scope, "ActhonSyncInterface", (PyrexTypes.cy_object_type,),
+                    lock_mode="nolock", activable=False)
+        sync_scope.type = sync_type
+        sync_entry = self.declare("ActhonSyncInterface", None, sync_type, "ActhonSyncInterface", "extern")
+        sync_entry.is_type = 1
+
+        sync_isActivable_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+        sync_isActivable_entry = sync_scope.declare_cfunction("isActivable", sync_isActivable_type,
+            None, cname="isActivable", defining = 1)
+
+        sync_isCompleted_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+        sync_isCompleted_entry = sync_scope.declare_cfunction("isCompleted", sync_isCompleted_type,
+            None, cname="isCompleted", defining = 1)
+
+        sync_msg_arg = PyrexTypes.CFuncTypeArg("msg", message_type, None)
+        sync_insertActivity_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [sync_msg_arg], nogil = 1)
+        sync_removeActivity_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [sync_msg_arg], nogil = 1)
+        sync_insertActivity_entry = sync_scope.declare_cfunction("insertActivity", sync_insertActivity_type,
+            None, cname="insertActivity", defining = 1)
+        sync_removeActivity_entry = sync_scope.declare_cfunction("removeActivity", sync_removeActivity_type,
+            None, cname="removeActivity", defining = 1)
+
+        # cypclass ActhonMessageInterface(CyObject):
+        #     ActhonSyncInterface _sync_method
+        #     ActhonResultInterface _result
+        #     bool activate(){}
+
+        message_entry = self.declare("ActhonMessageInterface", None, message_type, "ActhonMessageInterface", "extern")
+        message_entry.is_type = 1
+
+        message_sync_attr_entry = message_scope.declare_var("_sync_method", sync_type, None)
+
+        message_result_attr_entry = message_scope.declare_var("_result", result_type, None)
+
+        message_activate_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+        message_activate_entry = message_scope.declare_cfunction("activate", message_activate_type,
+            None, cname="activate", defining = 1)
+
+        # cypclass ActhonQueueInterface(CyObject):
+        #     void push(ActhonMessageInterface message){}
+        #     bool activate(){}
+
+        queue_scope = CppClassScope("ActhonQueueInterface", self)
+        queue_type = PyrexTypes.CypClassType(
+                    "ActhonQueueInterface", queue_scope, "ActhonQueueInterface", (PyrexTypes.cy_object_type,),
+                    lock_mode="nolock", activable=False)
+        queue_scope.type = queue_type
+        queue_entry = self.declare("ActhonQueueInterface", None, queue_type, "ActhonQueueInterface", "extern")
+        queue_entry.is_type = 1
+
+        queue_msg_arg = PyrexTypes.CFuncTypeArg("msg", message_type, None)
+        queue_push_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [queue_msg_arg], nogil = 1)
+        queue_push_entry = queue_scope.declare_cfunction("push", queue_push_type,
+            None, cname="push", defining = 1)
+
+        queue_activate_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+        queue_activate_entry = queue_scope.declare_cfunction("activate", queue_activate_type,
+            None, cname="activate", defining = 1)
+
+        # cdef cypclass ActivableClass:
+        #     ResultInterface (*_active_result_class)()
+        #     QueueInterface _active_queue_class
+
+        activable_scope = CppClassScope("ActhonActivableClass", self)
+        activable_type = PyrexTypes.CypClassType(
+                    "ActhonActivableClass", activable_scope, "ActhonActivableClass", (PyrexTypes.cy_object_type,),
+                    lock_mode="nolock", activable=False)
+        activable_entry = self.declare("ActhonActivableClass", None, activable_type, "ActhonActivableClass", "extern")
+        activable_entry.is_type = 1
+
+        activable_result_attr_type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(result_entry.type, []))
+        activable_result_attr_entry = activable_scope.declare_var("_active_result_class", activable_result_attr_type, None)
+
+        activable_queue_attr_entry = activable_scope.declare_var("_active_queue_class", queue_entry.type, None)
 
     def qualifying_scope(self):
         return self.parent_module
@@ -2786,7 +2806,7 @@ class CppClassScope(Scope):
         return wrapper_entry
 
     def reify_method(self, entry):
-        # TODO: clean argument list
+        # Create the reifying class
         reified_name = "reified_" + entry.name
         reified_cname = Naming.builtin_prefix + reified_name
         scope = CppClassScope(reified_name, self)
@@ -2797,6 +2817,19 @@ class CppClassScope(Scope):
         #reified_entry.is_cpp_class = 1
         reifying_entry.reified_entry = entry
         self.reifying_entries.append(reifying_entry)
+        # Add the base method to the Activated member class
+        activated_class_entry = self.lookup_here("Activated")
+        result_interface_entry = self.lookup("ActhonResultInterface")
+        sync_interface_entry = self.lookup("ActhonSyncInterface")
+        activated_method_sync_attr_type = PyrexTypes.CFuncTypeArg(
+            "sync_method", sync_interface_entry.type, entry.pos, "sync_method")
+        activated_method_type = PyrexTypes.CFuncType(result_interface_entry.type,
+            entry.type.args + [activated_method_sync_attr_type], nogil=entry.type.nogil)
+        activated_method_entry = activated_class_entry.type.scope.declare(entry.name, entry.cname,
+            activated_method_type, entry.pos, 'extern')
+        activated_method_entry.is_cfunction = 1
+        activated_method_entry.is_variable = 1
+        print activated_method_entry
 
     def declare_cfunction(self, name, type, pos,
                           cname=None, visibility='extern', api=0, in_pxd=0,

@@ -73,6 +73,42 @@
           int CyObject_TRYWLOCK();
     };
 
+    /* All this is made available by member injection inside the module scope */
+
+    struct ActhonResultInterface : CyObject {
+      virtual void pushVoidStarResult(void* result) = 0;
+      virtual void* getVoidStarResult() = 0;
+      virtual void pushIntResult(int result) = 0;
+      virtual int getIntResult() = 0;
+      operator int() { return this->getIntResult(); }
+    };
+
+    struct ActhonMessageInterface;
+
+    struct ActhonSyncInterface : CyObject {
+      virtual int isActivable() = 0;
+      virtual int isCompleted() = 0;
+      virtual void insertActivity(ActhonMessageInterface* msg) = 0;
+      virtual void removeActivity(ActhonMessageInterface* msg) = 0;
+    };
+
+    struct ActhonMessageInterface : CyObject {
+      ActhonSyncInterface* _sync_method;
+      ActhonResultInterface* _result;
+      virtual int activate() = 0;
+    };
+
+    struct ActhonQueueInterface : CyObject {
+      virtual void push(ActhonMessageInterface* message) = 0;
+      virtual int activate() = 0;
+    };
+
+    struct ActhonActivableClass : public CyObject {
+      ActhonResultInterface *(*_active_result_class)(void);
+      ActhonQueueInterface *_active_queue_class = NULL;
+      virtual ~ActhonActivableClass() {}
+    };
+
     static inline int _Cy_DECREF(CyObject *op) {
         return op->CyObject_DECREF();
     }

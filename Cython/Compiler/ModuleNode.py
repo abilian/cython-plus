@@ -912,14 +912,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 for wrapper_entry in wrapper.all_alternatives():
                     if wrapper_entry.used or entry.type.templates:
                         self.generate_cyp_class_wrapper_definition(entry.type, wrapper_entry, constructor, new, alloc, code)
-                self.generate_acthon_hacks(entry, code)
-
-    def generate_acthon_hacks(self, entry, code):
-        # HACK !!!
-        if entry.name == "ActhonResultInterface":
-            code.putln("ActhonResultInterface::operator int() {")
-            code.putln("return this->getIntResult();")
-            code.putln("}")
 
     def generate_gcc33_hack(self, env, code):
         # Workaround for spurious warning generation in gcc 3.3
@@ -1012,7 +1004,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.put("struct %s" % type.cname)
             if type.base_classes:
                 base_class_list = [base_class.empty_declaration_code() for base_class in type.base_classes]
-                if type.is_cyp_class and type.base_classes[-1] is cy_object_type:
+                if type.is_cyp_class and (type.base_classes[-1] is cy_object_type or type.base_classes[-1].name == "ActhonActivableClass"):
                     base_class_list[-1] = "virtual " + base_class_list[-1]
                 base_class_decl = ", public ".join(base_class_list)
                 code.put(" : public %s" % base_class_decl)
@@ -1184,6 +1176,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln("}")
 
     def generate_cyp_class_activated_class(self, entry, code):
+        result_interface_entry = entry.scope.lookup_here("ActhonResultInterface")
         # TODO: handle inheritance
         code.putln("struct %s::Activated : public CyObject {" % entry.type.empty_declaration_code())
         code.putln("%s * _passive_self;" % entry.type.empty_declaration_code())
@@ -1195,12 +1188,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             arg_cname_list = [arg.cname for arg in reified_function_entry.type.args]
             args_code = ", ".join([
                 arg.type.declaration_code(arg.cname) for arg in reified_function_entry.type.args
-            ])
+            ] + ["ActhonSyncInterface* sync_object"])
             function_header = reified_function_entry.type.function_header_code(reified_function_entry.cname, args_code)
-            function_code = PyrexTypes.c_void_type.declaration_code(function_header)
-            # FIXME: it should return a ResultInterface
+            function_code = result_interface_entry.type.declaration_code(function_header)
             code.putln("%s {" % function_code)
-            message_constructor_args_list = ["_passive_self"] + arg_cname_list
+            code.putln("%s = this->_passive_self->_active_result_class();" % result_interface_entry.type.declaration_code("result_object"))
+            message_constructor_args_list = ["this->_passive_self", "sync_object", "result_object"] + arg_cname_list
             message_constructor_args_code = ", ".join(message_constructor_args_list)
             code.putln("%s = new %s(%s);" % (
                 reifying_class_entry.type.declaration_code("message"),
@@ -1208,6 +1201,13 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 message_constructor_args_code
             ))
             code.putln("/* Push message in the queue */")
+            code.putln("if (this->_passive_self->_active_queue_class != NULL) {")
+            code.putln("this->_passive_self->_active_queue_class->push(message);")
+            code.putln("} else {")
+            code.putln("/* We should definitely shout here */")
+            code.putln("}")
+            code.putln("/* Return result object */")
+            code.putln("return result_object;")
             code.putln("}")
         code.putln("};")
 
@@ -1221,11 +1221,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             reified_function_entry = reifying_class_entry.reified_entry
             reifying_class_full_name = reifying_class_entry.type.empty_declaration_code()
             constructor_name = reifying_class_full_name.split('::')[-1]
-            # FIXME: it should not inherit from CyObject but from MessageInterface
-            code.putln("struct %s : public CyObject {" % reifying_class_full_name)
+            code.putln("struct %s : public ActhonMessageInterface {" % reifying_class_full_name)
             # Declaring target object & reified method arguments
             code.putln("%s;" % target_object_code)
-            arg_codes = [target_object_argument_code]
+            arg_codes = [target_object_argument_code, "ActhonSyncInterface* sync_method", "ActhonResultInterface* result_object"]
             arg_names = ["target_object"]
             arg_cnames = [target_object_cname]
             for arg in reified_function_entry.type.args:
@@ -1240,14 +1239,23 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             initializer_list = ["%s(%s)" % (cname, name)
                 for name, cname in zip(arg_names, arg_cnames)]
             constructor_initializer_list_declaration = ", ".join(initializer_list)
-            code.putln("%s(%s) : %s {}" % (
+            code.putln("%s(%s) : %s {" % (
                 constructor_name,
                 constructor_args_declaration,
                 constructor_initializer_list_declaration
             ))
-            code.putln("void activate() {")
+            # FIXME: it would be cleaner to be able to have a bare C++ two-args constructor for ActhonMessageInterface
+            code.putln("this->_sync_method = sync_method;")
+            code.putln("this->_result = result_object;")
+            code.putln("}")
+            code.putln("int activate() {")
+            code.putln("/* Activate only if its sync object agrees to do so */")
+            code.putln("if (this->_sync_method != NULL and !this->_sync_method->isActivable()) {")
+            code.putln("return 0;")
+            code.putln("}")
             result_assignment = ""
-            if reified_function_entry.type.return_type is not PyrexTypes.c_void_type:
+            does_return = reified_function_entry.type.return_type is not PyrexTypes.c_void_type
+            if does_return:
                 result_assignment = "%s =" % reified_function_entry.type.return_type.declaration_code("result")
             code.putln("%s this->%s->%s(%s);" % (
                 result_assignment,
@@ -1257,6 +1265,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 )
             )
             code.putln("/* Push result in the result object */")
+            if reified_function_entry.type.return_type is PyrexTypes.c_int_type:
+                code.putln("this->_result->pushIntResult(result);")
+            elif does_return:
+                code.putln("this->_result->pushVoidStarResult((void*)result);")
+            code.putln("return 1;")
             code.putln("}")
             code.putln("};")
 

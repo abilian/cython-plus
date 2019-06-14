@@ -1237,6 +1237,32 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         target_object_code = target_object_type.declaration_code(target_object_cname)
         target_object_argument_code = target_object_type.declaration_code(target_object_name)
 
+        def put_refcount_op_on_narg_optarg(op, func_type, opt_arg_name, code):
+            opt_arg_count = func_type.optional_arg_count
+            narg_count = len(func_type.args) - opt_arg_count
+            for narg in func_type.args[:narg_count]:
+                if narg.type.is_cyp_class:
+                    code.putln("%s(this->%s);" % (op, narg.cname))
+
+            code.putln("if (this->%s != NULL) {" % opt_arg_name)
+            num_if = 0
+            for opt_idx, optarg in enumerate(func_type.args[narg_count:]):
+                if optarg.type.is_cyp_class:
+                    code.putln("if (this->%s->%sn > %s) {" %
+                                   (opt_arg_name,
+                                    Naming.pyrex_prefix,
+                                    opt_idx
+                    ))
+                    code.putln("%s(this->%s->%s);" %
+                                   (op,
+                                    opt_arg_name,
+                                    func_type.opt_arg_cname(optarg.name)
+                    ))
+                    num_if += 1
+            for _ in range(num_if):
+                code.putln("}")
+            code.putln("}")
+
         for reifying_class_entry in entry.type.scope.reifying_entries:
             reified_function_entry = reifying_class_entry.reified_entry
             reifying_class_full_name = reifying_class_entry.type.empty_declaration_code()
@@ -1258,11 +1284,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 initialized_arg_names.append(arg.name)
                 initialized_arg_cnames.append(arg.cname)
 
+            message_opt_arg_attr_name = "opt_args"
             if opt_arg_count:
                 # We cannot initialize the struct before allocating memory, so
                 # it must be handled in constructor body, not initializer list
                 opt_decl_code = reified_function_entry.type.op_arg_struct.declaration_code(Naming.optional_args_cname)
-                message_opt_arg_attr_name = "opt_args"
                 message_opt_arg_attr_decl = reified_function_entry.type.op_arg_struct.declaration_code(message_opt_arg_attr_name)
                 code.putln("%s;" % message_opt_arg_attr_decl)
                 constructor_decl_list.append(opt_decl_code)
@@ -1292,6 +1318,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.putln("} else {")
                 code.putln("this->%s = NULL;" % message_opt_arg_attr_name)
                 code.putln("}")
+            # Acquire a ref on CyObject, as we don't know when the message will be processed
+            put_refcount_op_on_narg_optarg("Cy_INCREF", reified_function_entry.type, message_opt_arg_attr_name, code)
             code.putln("}")
             code.putln("int activate() {")
             code.putln("/* Activate only if its sync object agrees to do so */")
@@ -1324,6 +1352,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             # Destructor
             code.putln("virtual ~%s() {" % class_name)
+            put_refcount_op_on_narg_optarg("Cy_DECREF", reified_function_entry.type, message_opt_arg_attr_name, code)
             if opt_arg_count:
                 code.putln("free(this->%s);" % message_opt_arg_attr_name)
             code.putln("}")

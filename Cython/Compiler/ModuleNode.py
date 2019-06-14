@@ -1224,6 +1224,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("} else {")
             code.putln("/* We should definitely shout here */")
             code.putln("}")
+            code.putln("Cy_DECREF(message);")
             code.putln("/* Return result object */")
             code.putln("return result_object;")
             code.putln("}")

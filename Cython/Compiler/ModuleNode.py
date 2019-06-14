@@ -1237,12 +1237,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         target_object_code = target_object_type.declaration_code(target_object_cname)
         target_object_argument_code = target_object_type.declaration_code(target_object_name)
 
-        def put_refcount_op_on_narg_optarg(op, func_type, opt_arg_name, code):
+        def put_cypclass_op_on_narg_optarg(op_lbda, func_type, opt_arg_name, code):
             opt_arg_count = func_type.optional_arg_count
             narg_count = len(func_type.args) - opt_arg_count
             for narg in func_type.args[:narg_count]:
                 if narg.type.is_cyp_class:
-                    code.putln("%s(this->%s);" % (op, narg.cname))
+                    code.putln("%s(this->%s);" % (op_lbda(narg), narg.cname))
 
             code.putln("if (this->%s != NULL) {" % opt_arg_name)
             num_if = 0
@@ -1254,7 +1254,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                                     opt_idx
                     ))
                     code.putln("%s(this->%s->%s);" %
-                                   (op,
+                                   (op_lbda(optarg),
                                     opt_arg_name,
                                     func_type.opt_arg_cname(optarg.name)
                     ))
@@ -1319,7 +1319,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.putln("this->%s = NULL;" % message_opt_arg_attr_name)
                 code.putln("}")
             # Acquire a ref on CyObject, as we don't know when the message will be processed
-            put_refcount_op_on_narg_optarg("Cy_INCREF", reified_function_entry.type, message_opt_arg_attr_name, code)
+            put_cypclass_op_on_narg_optarg(lambda _: "Cy_INCREF", reified_function_entry.type, message_opt_arg_attr_name, code)
             code.putln("}")
             code.putln("int activate() {")
             code.putln("/* Activate only if its sync object agrees to do so */")
@@ -1352,7 +1352,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             # Destructor
             code.putln("virtual ~%s() {" % class_name)
-            put_refcount_op_on_narg_optarg("Cy_DECREF", reified_function_entry.type, message_opt_arg_attr_name, code)
+            put_cypclass_op_on_narg_optarg(lambda _: "Cy_DECREF", reified_function_entry.type, message_opt_arg_attr_name, code)
             if opt_arg_count:
                 code.putln("free(this->%s);" % message_opt_arg_attr_name)
             code.putln("}")

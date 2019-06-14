@@ -1269,11 +1269,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             constructor_args_declaration = ", ".join(constructor_decl_list)
             initializer_list = ["%s(%s)" % (cname, name)
                 for name, cname in zip(initialized_arg_names, initialized_arg_cnames)]
-            constructor_initializer_list_declaration = ", ".join(initializer_list)
+            constructor_initializer_list_code = ", ".join(initializer_list)
             code.putln("%s(%s) : ActhonMessageInterface(sync_method, result_object), %s {" % (
                 class_name,
                 constructor_args_declaration,
-                constructor_initializer_list_declaration
+                constructor_initializer_list_code
             ))
             if opt_arg_count:
                 mem_size = "sizeof(%s)" % reified_function_entry.type.op_arg_struct.base_type.empty_declaration_code()

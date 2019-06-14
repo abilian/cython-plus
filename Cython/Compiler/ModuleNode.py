@@ -1191,21 +1191,33 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         for reifying_class_entry in entry.type.scope.reifying_entries:
             code.putln("// generating reified of %s" % reifying_class_entry.name)
             reified_function_entry = reifying_class_entry.reified_entry
-            arg_cname_list = [arg.cname for arg in reified_function_entry.type.args]
-            args_code = ", ".join([
-                arg.type.declaration_code(arg.cname) for arg in reified_function_entry.type.args
-            ] + ["ActhonSyncInterface* sync_object"])
-            function_header = reified_function_entry.type.function_header_code(reified_function_entry.cname, args_code)
+            reified_arg_cname_list = []
+            reified_arg_decl_list = []
+
+            for i in range(len(reified_function_entry.type.args)-reified_function_entry.type.optional_arg_count):
+                arg = reified_function_entry.type.args[i]
+                reified_arg_cname_list.append(arg.cname)
+                reified_arg_decl_list.append(arg.type.declaration_code(arg.cname))
+
+            if reified_function_entry.type.optional_arg_count:
+                opt_cname = Naming.optional_args_cname
+                reified_arg_cname_list.append(opt_cname)
+                reified_arg_decl_list.append(reified_function_entry.type.op_arg_struct.declaration_code(opt_cname))
+
+            activated_method_arg_decl_code = ", ".join(["ActhonSyncInterface* sync_object"] + reified_arg_decl_list)
+            function_header = reified_function_entry.type.function_header_code(reified_function_entry.cname, activated_method_arg_decl_code)
             function_code = result_interface_entry.type.declaration_code(function_header)
             code.putln("%s {" % function_code)
             code.putln("%s = this->_passive_self->_active_result_class();" % result_interface_entry.type.declaration_code("result_object"))
-            message_constructor_args_list = ["this->_passive_self", "sync_object", "result_object"] + arg_cname_list
+
+            message_constructor_args_list = ["this->_passive_self", "sync_object", "result_object"] + reified_arg_cname_list
             message_constructor_args_code = ", ".join(message_constructor_args_list)
             code.putln("%s = new %s(%s);" % (
                 reifying_class_entry.type.declaration_code("message"),
                 reifying_class_entry.type.empty_declaration_code(),
                 message_constructor_args_code
             ))
+
             code.putln("/* Push message in the queue */")
             code.putln("if (this->_passive_self->_active_queue_class != NULL) {")
             code.putln("this->_passive_self->_active_queue_class->push(message);")
@@ -1223,40 +1235,75 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         target_object_cname = Naming.builtin_prefix + target_object_name
         target_object_code = target_object_type.declaration_code(target_object_cname)
         target_object_argument_code = target_object_type.declaration_code(target_object_name)
+
         for reifying_class_entry in entry.type.scope.reifying_entries:
             reified_function_entry = reifying_class_entry.reified_entry
             reifying_class_full_name = reifying_class_entry.type.empty_declaration_code()
-            constructor_name = reifying_class_full_name.split('::')[-1]
+            class_name = reifying_class_full_name.split('::')[-1]
             code.putln("struct %s : public ActhonMessageInterface {" % reifying_class_full_name)
             # Declaring target object & reified method arguments
             code.putln("%s;" % target_object_code)
-            arg_codes = [target_object_argument_code, "ActhonSyncInterface* sync_method", "ActhonResultInterface* result_object"]
-            arg_names = ["target_object"]
-            arg_cnames = [target_object_cname]
-            for arg in reified_function_entry.type.args:
-                arg_cname_code = arg.type.declaration_code(arg.cname)
-                arg_constructor_code = arg.type.declaration_code(arg.name)
-                code.putln("%s;" % arg_cname_code)
-                arg_codes.append(arg_constructor_code)
-                arg_names.append(arg.name)
-                arg_cnames.append(arg.cname)
+            constructor_decl_list = [target_object_argument_code, "ActhonSyncInterface* sync_method", "ActhonResultInterface* result_object"]
+            initialized_arg_names = []
+            initialized_arg_cnames = []
+            opt_arg_count = reified_function_entry.type.optional_arg_count
 
+            for i in range(len(reified_function_entry.type.args) - opt_arg_count):
+                arg = reified_function_entry.type.args[i]
+                arg_cname_code = arg.type.declaration_code(arg.cname)
+                constructor_arg_code = arg.type.declaration_code(arg.name)
+                code.putln("%s;" % arg_cname_code)
+                constructor_decl_list.append(constructor_arg_code)
+                initialized_arg_names.append(arg.name)
+                initialized_arg_cnames.append(arg.cname)
+
+            if opt_arg_count:
+                # We cannot initialize the struct before allocating memory, so
+                # it must be handled in constructor body, not initializer list
+                opt_decl_code = reified_function_entry.type.op_arg_struct.declaration_code(Naming.optional_args_cname)
+                message_opt_arg_attr_name = "opt_args"
+                message_opt_arg_attr_decl = reified_function_entry.type.op_arg_struct.declaration_code(message_opt_arg_attr_name)
+                code.putln("%s;" % message_opt_arg_attr_decl)
+                constructor_decl_list.append(opt_decl_code)
             # Putting them into constructor
-            constructor_args_declaration = ", ".join(arg_codes)
+            constructor_args_declaration = ", ".join(constructor_decl_list)
             initializer_list = ["%s(%s)" % (cname, name)
-                for name, cname in zip(arg_names, arg_cnames)]
+                for name, cname in zip(initialized_arg_names, initialized_arg_cnames)]
+            initializer_list.append("%s(%s)" % (target_object_cname, target_object_name))
             constructor_initializer_list_declaration = ", ".join(initializer_list)
-            code.putln("%s(%s) : ActhonMessageInterface(sync_method, result_object), %s {}" % (
-                constructor_name,
+            code.putln("%s(%s) : ActhonMessageInterface(sync_method, result_object), %s {" % (
+                class_name,
                 constructor_args_declaration,
                 constructor_initializer_list_declaration
             ))
+            if opt_arg_count:
+                mem_size = "sizeof(%s)" % reified_function_entry.type.op_arg_struct.base_type.empty_declaration_code()
+                code.putln("if (%s != NULL) {" % Naming.optional_args_cname)
+                code.putln("this->%s = (%s) malloc(%s);" % (
+                    message_opt_arg_attr_name,
+                    reified_function_entry.type.op_arg_struct.empty_declaration_code(),
+                    mem_size
+                ))
+                code.putln("memcpy(this->%s, %s, %s);" % (
+                    message_opt_arg_attr_name,
+                    Naming.optional_args_cname,
+                    mem_size
+                ))
+                code.putln("} else {")
+                code.putln("this->%s = NULL;" % message_opt_arg_attr_name)
+                code.putln("}")
+            code.putln("}")
             code.putln("int activate() {")
             code.putln("/* Activate only if its sync object agrees to do so */")
             code.putln("if (this->_sync_method != NULL and !this->_sync_method->isActivable()) {")
             code.putln("return 0;")
             code.putln("}")
             result_assignment = ""
+
+            reified_call_args_list = initialized_arg_cnames[:]
+            if opt_arg_count:
+                reified_call_args_list.append(message_opt_arg_attr_name)
+
             does_return = reified_function_entry.type.return_type is not PyrexTypes.c_void_type
             if does_return:
                 result_assignment = "%s = " % reified_function_entry.type.return_type.declaration_code("result")
@@ -1264,7 +1311,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 result_assignment,
                 target_object_cname,
                 reified_function_entry.cname,
-                ", ".join("this->%s" % arg_cname for arg_cname in arg_cnames[1:])
+                ", ".join("this->%s" % arg_cname for arg_cname in reified_call_args_list)
                 )
             )
             code.putln("/* Push result in the result object */")
@@ -1273,6 +1320,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             elif does_return:
                 code.putln("this->_result->pushVoidStarResult((void*)result);")
             code.putln("return 1;")
+            code.putln("}")
+
+            # Destructor
+            code.putln("virtual ~%s() {" % class_name)
+            if opt_arg_count:
+                code.putln("free(this->%s);" % message_opt_arg_attr_name)
             code.putln("}")
             code.putln("};")
 

@@ -2823,10 +2823,17 @@ class CppClassScope(Scope):
         activated_class_entry = self.lookup_here("Activated")
         result_interface_entry = self.lookup("ActhonResultInterface")
         sync_interface_entry = self.lookup("ActhonSyncInterface")
+
         activated_method_sync_attr_type = PyrexTypes.CFuncTypeArg(
             "sync_method", sync_interface_entry.type, entry.pos, "sync_method")
+
         activated_method_type = PyrexTypes.CFuncType(result_interface_entry.type,
-            entry.type.args + [activated_method_sync_attr_type], nogil=entry.type.nogil)
+            [activated_method_sync_attr_type] + entry.type.args, nogil=entry.type.nogil,
+            has_varargs = entry.type.has_varargs,
+            optional_arg_count = entry.type.optional_arg_count)
+        if hasattr(entry.type, 'op_arg_struct'):
+            activated_method_type.op_arg_struct = entry.type.op_arg_struct
+
         activated_method_entry = activated_class_entry.type.scope.declare(entry.name, entry.cname,
             activated_method_type, entry.pos, 'extern')
         activated_method_entry.is_cfunction = 1

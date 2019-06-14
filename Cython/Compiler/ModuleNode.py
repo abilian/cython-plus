@@ -1244,24 +1244,25 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 if narg.type.is_cyp_class:
                     code.putln("%s(this->%s);" % (op_lbda(narg), narg.cname))
 
-            code.putln("if (this->%s != NULL) {" % opt_arg_name)
-            num_if = 0
-            for opt_idx, optarg in enumerate(func_type.args[narg_count:]):
-                if optarg.type.is_cyp_class:
-                    code.putln("if (this->%s->%sn > %s) {" %
-                                   (opt_arg_name,
-                                    Naming.pyrex_prefix,
-                                    opt_idx
-                    ))
-                    code.putln("%s(this->%s->%s);" %
-                                   (op_lbda(optarg),
-                                    opt_arg_name,
-                                    func_type.opt_arg_cname(optarg.name)
-                    ))
-                    num_if += 1
-            for _ in range(num_if):
+            if opt_arg_count:
+                code.putln("if (this->%s != NULL) {" % opt_arg_name)
+                num_if = 0
+                for opt_idx, optarg in enumerate(func_type.args[narg_count:]):
+                    if optarg.type.is_cyp_class:
+                        code.putln("if (this->%s->%sn > %s) {" %
+                                       (opt_arg_name,
+                                        Naming.pyrex_prefix,
+                                        opt_idx
+                        ))
+                        code.putln("%s(this->%s->%s);" %
+                                       (op_lbda(optarg),
+                                        opt_arg_name,
+                                        func_type.opt_arg_cname(optarg.name)
+                        ))
+                        num_if += 1
+                for _ in range(num_if):
+                    code.putln("}")
                 code.putln("}")
-            code.putln("}")
 
         for reifying_class_entry in entry.type.scope.reifying_entries:
             reified_function_entry = reifying_class_entry.reified_entry

@@ -1332,6 +1332,16 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             if opt_arg_count:
                 reified_call_args_list.append(message_opt_arg_attr_name)
 
+            # Locking CyObjects
+            # Here we completely ignore the lock mode (nolock/checklock/autolock)
+            # because the mode is used for direct calls, when the user have the possibility
+            # to manually lock or let the compiler handle it.
+            # Here, the user cannot lock manually, so we're taking the lock automatically.
+            put_cypclass_op_on_narg_optarg(lambda arg: "Cy_RLOCK" if arg.type.is_const else "Cy_WLOCK", reified_function_entry.type, message_opt_arg_attr_name, code)
+
+            op = "Cy_RLOCK" if reified_function_entry.type.is_const_method else "Cy_WLOCK"
+            code.putln("%s(this->%s);" % (op, target_object_cname))
+
             does_return = reified_function_entry.type.return_type is not PyrexTypes.c_void_type
             if does_return:
                 result_assignment = "%s = " % reified_function_entry.type.return_type.declaration_code("result")
@@ -1342,6 +1352,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 ", ".join("this->%s" % arg_cname for arg_cname in reified_call_args_list)
                 )
             )
+            code.putln("Cy_UNLOCK(this->%s);" % target_object_cname)
+            put_cypclass_op_on_narg_optarg(lambda _: "Cy_UNLOCK", reified_function_entry.type, message_opt_arg_attr_name, code)
             code.putln("/* Push result in the result object */")
             if reified_function_entry.type.return_type is PyrexTypes.c_int_type:
                 code.putln("this->_result->pushIntResult(result);")

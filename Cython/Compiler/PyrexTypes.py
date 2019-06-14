@@ -1733,6 +1733,8 @@ class CConstOrVolatileType(BaseType):
 
     def cv_string(self):
         cvstring = ""
+        if self.is_cyp_class:
+            return cvstring
         if self.is_const:
             cvstring = "const " + cvstring
         if self.is_volatile:

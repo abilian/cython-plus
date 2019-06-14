@@ -1244,8 +1244,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             # Declaring target object & reified method arguments
             code.putln("%s;" % target_object_code)
             constructor_decl_list = [target_object_argument_code, "ActhonSyncInterface* sync_method", "ActhonResultInterface* result_object"]
-            initialized_arg_names = []
-            initialized_arg_cnames = []
+            initialized_arg_names = [target_object_name]
+            initialized_arg_cnames = [target_object_cname]
             opt_arg_count = reified_function_entry.type.optional_arg_count
 
             for i in range(len(reified_function_entry.type.args) - opt_arg_count):
@@ -1269,7 +1269,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             constructor_args_declaration = ", ".join(constructor_decl_list)
             initializer_list = ["%s(%s)" % (cname, name)
                 for name, cname in zip(initialized_arg_names, initialized_arg_cnames)]
-            initializer_list.append("%s(%s)" % (target_object_cname, target_object_name))
             constructor_initializer_list_declaration = ", ".join(initializer_list)
             code.putln("%s(%s) : ActhonMessageInterface(sync_method, result_object), %s {" % (
                 class_name,
@@ -1300,7 +1299,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("}")
             result_assignment = ""
 
-            reified_call_args_list = initialized_arg_cnames[:]
+            reified_call_args_list = initialized_arg_cnames[1:]
             if opt_arg_count:
                 reified_call_args_list.append(message_opt_arg_attr_name)
 

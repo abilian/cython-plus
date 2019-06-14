@@ -1256,8 +1256,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             result_assignment = ""
             does_return = reified_function_entry.type.return_type is not PyrexTypes.c_void_type
             if does_return:
-                result_assignment = "%s =" % reified_function_entry.type.return_type.declaration_code("result")
-            code.putln("%s this->%s->%s(%s);" % (
+                result_assignment = "%s = " % reified_function_entry.type.return_type.declaration_code("result")
+            code.putln("%sthis->%s->%s(%s);" % (
                 result_assignment,
                 target_object_cname,
                 reified_function_entry.cname,

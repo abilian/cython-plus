@@ -786,7 +786,10 @@ class ExprNode(Node):
                     self.set_autorlock(env)
 
     def ensure_lhs_locked(self, env, is_dereferenced = False):
-        self.ensure_subexpr_lhs_locked(env)
+        if not is_dereferenced:
+            self.ensure_subexpr_lhs_locked(env)
+        else:
+            self.ensure_subexpr_rhs_locked(env)
         if not self.tracked_state:
             self.get_tracked_state(env)
         if is_dereferenced and self.tracked_state:

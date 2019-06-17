@@ -1232,10 +1232,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
     def generate_cyp_class_reifying_entries(self, entry, code):
         target_object_type = entry.type
-        target_object_name = "target_object"
-        target_object_cname = Naming.builtin_prefix + target_object_name
+        target_object_cname = Naming.builtin_prefix + "target_object"
         target_object_code = target_object_type.declaration_code(target_object_cname)
-        target_object_argument_code = target_object_type.declaration_code(target_object_name)
 
         def put_cypclass_op_on_narg_optarg(op_lbda, func_type, opt_arg_name, code):
             opt_arg_count = func_type.optional_arg_count
@@ -1271,56 +1269,53 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("struct %s : public ActhonMessageInterface {" % reifying_class_full_name)
             # Declaring target object & reified method arguments
             code.putln("%s;" % target_object_code)
-            constructor_decl_list = [target_object_argument_code, "ActhonSyncInterface* sync_method", "ActhonResultInterface* result_object"]
-            initialized_arg_names = [target_object_name]
-            initialized_arg_cnames = [target_object_cname]
+            constructor_args_decl_list = [target_object_code, "ActhonSyncInterface* sync_method", "ActhonResultInterface* result_object"]
+            initialized_args_list = [target_object_cname]
             opt_arg_count = reified_function_entry.type.optional_arg_count
 
             for i in range(len(reified_function_entry.type.args) - opt_arg_count):
                 arg = reified_function_entry.type.args[i]
                 arg_cname_code = arg.type.declaration_code(arg.cname)
-                constructor_arg_code = arg.type.declaration_code(arg.name)
                 code.putln("%s;" % arg_cname_code)
-                constructor_decl_list.append(constructor_arg_code)
-                initialized_arg_names.append(arg.name)
-                initialized_arg_cnames.append(arg.cname)
+                constructor_args_decl_list.append(arg_cname_code)
+                initialized_args_list.append(arg.cname)
 
-            message_opt_arg_attr_name = "opt_args"
             if opt_arg_count:
                 # We cannot initialize the struct before allocating memory, so
                 # it must be handled in constructor body, not initializer list
                 opt_decl_code = reified_function_entry.type.op_arg_struct.declaration_code(Naming.optional_args_cname)
-                message_opt_arg_attr_decl = reified_function_entry.type.op_arg_struct.declaration_code(message_opt_arg_attr_name)
-                code.putln("%s;" % message_opt_arg_attr_decl)
-                constructor_decl_list.append(opt_decl_code)
+                code.putln("%s;" % opt_decl_code)
+                constructor_args_decl_list.append(opt_decl_code)
+
             # Putting them into constructor
-            constructor_args_declaration = ", ".join(constructor_decl_list)
-            initializer_list = ["%s(%s)" % (cname, name)
-                for name, cname in zip(initialized_arg_names, initialized_arg_cnames)]
-            constructor_initializer_list_code = ", ".join(initializer_list)
+            constructor_args_decl_code = ", ".join(constructor_args_decl_list)
+            initializer_list = ["%s(%s)" % (name, name) for name in initialized_args_list]
+            initializer_list_code = ", ".join(initializer_list)
+
             code.putln("%s(%s) : ActhonMessageInterface(sync_method, result_object), %s {" % (
                 class_name,
-                constructor_args_declaration,
-                constructor_initializer_list_code
+                constructor_args_decl_code,
+                initializer_list_code
             ))
             if opt_arg_count:
                 mem_size = "sizeof(%s)" % reified_function_entry.type.op_arg_struct.base_type.empty_declaration_code()
                 code.putln("if (%s != NULL) {" % Naming.optional_args_cname)
                 code.putln("this->%s = (%s) malloc(%s);" % (
-                    message_opt_arg_attr_name,
+                    Naming.optional_args_cname,
                     reified_function_entry.type.op_arg_struct.empty_declaration_code(),
                     mem_size
                 ))
                 code.putln("memcpy(this->%s, %s, %s);" % (
-                    message_opt_arg_attr_name,
+                    Naming.optional_args_cname,
                     Naming.optional_args_cname,
                     mem_size
                 ))
                 code.putln("} else {")
-                code.putln("this->%s = NULL;" % message_opt_arg_attr_name)
+                code.putln("this->%s = NULL;" % Naming.optional_args_cname)
                 code.putln("}")
+
             # Acquire a ref on CyObject, as we don't know when the message will be processed
-            put_cypclass_op_on_narg_optarg(lambda _: "Cy_INCREF", reified_function_entry.type, message_opt_arg_attr_name, code)
+            put_cypclass_op_on_narg_optarg(lambda _: "Cy_INCREF", reified_function_entry.type, Naming.optional_args_cname, code)
             code.putln("}")
             code.putln("int activate() {")
             code.putln("/* Activate only if its sync object agrees to do so */")
@@ -1329,16 +1324,17 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("}")
             result_assignment = ""
 
-            reified_call_args_list = initialized_arg_cnames[1:]
+            # Drop the target_object argument to perform the actual method call
+            reified_call_args_list = initialized_args_list[1:]
             if opt_arg_count:
-                reified_call_args_list.append(message_opt_arg_attr_name)
+                reified_call_args_list.append(Naming.optional_args_cname)
 
             # Locking CyObjects
             # Here we completely ignore the lock mode (nolock/checklock/autolock)
             # because the mode is used for direct calls, when the user have the possibility
             # to manually lock or let the compiler handle it.
             # Here, the user cannot lock manually, so we're taking the lock automatically.
-            put_cypclass_op_on_narg_optarg(lambda arg: "Cy_RLOCK" if arg.type.is_const else "Cy_WLOCK", reified_function_entry.type, message_opt_arg_attr_name, code)
+            put_cypclass_op_on_narg_optarg(lambda arg: "Cy_RLOCK" if arg.type.is_const else "Cy_WLOCK", reified_function_entry.type, Naming.optional_args_cname, code)
 
             op = "Cy_RLOCK" if reified_function_entry.type.is_const_method else "Cy_WLOCK"
             code.putln("%s(this->%s);" % (op, target_object_cname))
@@ -1354,7 +1350,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 )
             )
             code.putln("Cy_UNLOCK(this->%s);" % target_object_cname)
-            put_cypclass_op_on_narg_optarg(lambda _: "Cy_UNLOCK", reified_function_entry.type, message_opt_arg_attr_name, code)
+            put_cypclass_op_on_narg_optarg(lambda _: "Cy_UNLOCK", reified_function_entry.type, Naming.optional_args_cname, code)
             code.putln("/* Push result in the result object */")
             if reified_function_entry.type.return_type is PyrexTypes.c_int_type:
                 code.putln("this->_result->pushIntResult(result);")
@@ -1365,9 +1361,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             # Destructor
             code.putln("virtual ~%s() {" % class_name)
-            put_cypclass_op_on_narg_optarg(lambda _: "Cy_DECREF", reified_function_entry.type, message_opt_arg_attr_name, code)
+            put_cypclass_op_on_narg_optarg(lambda _: "Cy_DECREF", reified_function_entry.type, Naming.optional_args_cname, code)
             if opt_arg_count:
-                code.putln("free(this->%s);" % message_opt_arg_attr_name)
+                code.putln("free(this->%s);" % Naming.optional_args_cname)
             code.putln("}")
             code.putln("};")
 

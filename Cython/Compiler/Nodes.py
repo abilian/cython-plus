@@ -8471,14 +8471,15 @@ class LockCypclassNode(StatNode):
         is_rlocked = self.obj.is_rhs_locked(env)
         is_wlocked = self.obj.is_lhs_locked(env)
 
-        if self.state == "unclocked" and not (is_rlocked or is_wlocked):
-            error(self.pos, "Cannot unlock an already unlocked object !")
+        if self.obj.type.lock_mode != "nolock":
+            if self.state == "unclocked" and not (is_rlocked or is_wlocked):
+                error(self.pos, "Cannot unlock an already unlocked object !")
 
-        elif self.state == "rlocked" and is_rlocked:
-            error(self.pos, "Double read lock !")
+            elif self.state == "rlocked" and is_rlocked:
+                error(self.pos, "Double read lock !")
 
-        elif self.state == "wlocked" and is_wlocked:
-            error(self.pos, "Double write lock !")
+            elif self.state == "wlocked" and is_wlocked:
+                error(self.pos, "Double write lock !")
 
 
         # We need to save states because in case of 'with unlocked' statement,

@@ -2838,7 +2838,6 @@ class CppClassScope(Scope):
             activated_method_type, entry.pos, 'extern')
         activated_method_entry.is_cfunction = 1
         activated_method_entry.is_variable = 1
-        print activated_method_entry
 
     def declare_cfunction(self, name, type, pos,
                           cname=None, visibility='extern', api=0, in_pxd=0,

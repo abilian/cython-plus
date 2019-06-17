@@ -6147,10 +6147,11 @@ class SimpleCallNode(CallNode):
                 formal_arg = func_type.args[i]
                 actual_arg = self.args[i]
                 deref_flag = formal_arg.type.is_cyp_class
-                if isinstance(formal_arg.type, PyrexTypes.CConstOrVolatileType) and formal_arg.type.is_const:
-                    actual_arg.ensure_rhs_locked(env, is_dereferenced = deref_flag)
+                wlock_flag = deref_flag and not formal_arg.type.is_const
+                if wlock_flag:
+                    actual_arg.ensure_lhs_locked(env, is_dereferenced = True)
                 else:
-                    actual_arg.ensure_lhs_locked(env, is_dereferenced = deref_flag)
+                    actual_arg.ensure_rhs_locked(env, is_dereferenced = deref_flag)
             # XXX - Should we do something in a pyfunc case ?
             if func_type.is_const_method:
                 self.function.ensure_rhs_locked(env)

@@ -1316,6 +1316,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             # Acquire a ref on CyObject, as we don't know when the message will be processed
             put_cypclass_op_on_narg_optarg(lambda _: "Cy_INCREF", reified_function_entry.type, Naming.optional_args_cname, code)
+            code.putln("Cy_INCREF(this->%s);" % target_object_cname)
             code.putln("}")
             code.putln("int activate() {")
             code.putln("/* Activate only if its sync object agrees to do so */")

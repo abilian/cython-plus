@@ -99,7 +99,11 @@
       ActhonMessageInterface(
         ActhonSyncInterface* sync_method,
         ActhonResultInterface* result_object
-        ) : _sync_method(sync_method), _result(result_object) {}
+        ) : _sync_method(sync_method), _result(result_object)
+        {
+          Cy_INCREF(this->_sync_method);
+          Cy_INCREF(this->_result);
+        }
     };
 
     struct ActhonQueueInterface : CyObject {

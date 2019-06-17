@@ -6138,7 +6138,7 @@ class SimpleCallNode(CallNode):
         func_type = self.function_type()
         if func_type.is_pyobject:
             self.arg_tuple.ensure_rhs_locked(env)
-        else:
+        elif func_type.is_cfunction:
             max_nargs = len(func_type.args)
             actual_nargs = len(self.args)
 

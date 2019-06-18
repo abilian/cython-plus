@@ -144,7 +144,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         else:
             env.doc = self.doc
         env.directives = self.directives
-        env.inject_acthon_interfaces()
         self.body.analyse_declarations(env)
 
     def prepare_utility_code(self):
@@ -1177,7 +1176,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln("}")
 
     def generate_cyp_class_activated_class(self, entry, code):
-        result_interface_entry = entry.scope.lookup_here("ActhonResultInterface")
+        result_interface_entry = entry.scope.lookup("ActhonResultInterface")
         # TODO: handle inheritance
         activable_bases = ["public %s::Activated" % base.cname for base in entry.type.base_classes if base.activable]
         if activable_bases:

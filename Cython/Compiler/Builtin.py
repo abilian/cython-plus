@@ -4,7 +4,7 @@
 
 from __future__ import absolute_import
 
-from .Symtab import BuiltinScope, StructOrUnionScope
+from .Symtab import BuiltinScope, StructOrUnionScope, Scope
 from .Code import UtilityCode
 from .TypeSlots import Signature
 from . import PyrexTypes
@@ -378,6 +378,196 @@ builtin_structs_table = [
       ])
 ]
 
+# inject acthon interfaces
+def inject_acthon_interfaces(self):
+    def init_scope(scope):
+        scope.is_cpp_class_scope = 1
+        scope.inherited_var_entries = []
+        scope.inherited_type_entries = []
+
+    # cypclass ActhonResultInterface(CyObject):
+    #     void pushVoidStarResult(void* result){}
+    #     void* getVoidStarResult(){}
+    #     void pushIntResult(int result){}
+    #     int getIntResult(){}
+    #     operator int() { return this->getIntResult(); }
+
+    result_scope = Scope("ActhonResultInterface", self, None)
+    init_scope(result_scope)
+    result_type = PyrexTypes.CypClassType(
+                "ActhonResultInterface", result_scope, "ActhonResultInterface", (PyrexTypes.cy_object_type,),
+                lock_mode="nolock", activable=False)
+    result_scope.type = result_type
+    #result_type.set_scope is a little bit overkill here, because parent_type is only used when doing scope inheritance
+    result_entry = self.declare("ActhonResultInterface", "ActhonResultInterface", result_type, None, "extern")
+    result_entry.is_type = 1
+
+    result_pushVoidStar_arg_type = PyrexTypes.CFuncTypeArg("result", PyrexTypes.c_void_ptr_type, None)
+    result_pushVoidStar_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [result_pushVoidStar_arg_type], nogil = 1)
+    result_pushVoidStar_entry = result_scope.declare("pushVoidStarResult", "pushVoidStarResult",
+        result_pushVoidStar_type, None, "extern")
+    result_pushVoidStar_entry.is_cfunction = 1
+    result_pushVoidStar_entry.is_variable = 1
+    result_scope.var_entries.append(result_pushVoidStar_entry)
+
+    result_getVoidStar_type = PyrexTypes.CFuncType(PyrexTypes.c_void_ptr_type, [], nogil = 1)
+    result_getVoidStar_entry = result_scope.declare("getVoidStarResult", "getVoidStarResult",
+        result_getVoidStar_type, None, "extern")
+    result_getVoidStar_entry.is_cfunction = 1
+    result_getVoidStar_entry.is_variable = 1
+    result_scope.var_entries.append(result_getVoidStar_entry)
+
+    result_pushInt_arg_type = PyrexTypes.CFuncTypeArg("result", PyrexTypes.c_int_type, None)
+    result_pushInt_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [result_pushInt_arg_type], nogil = 1)
+    result_pushInt_entry = result_scope.declare("pushIntResult", "pushIntResult",
+        result_pushInt_type, None, "extern")
+    result_pushInt_entry.is_cfunction = 1
+    result_pushInt_entry.is_variable = 1
+    result_scope.var_entries.append(result_pushInt_entry)
+
+    result_getInt_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type, [], nogil = 1)
+    result_pushInt_entry = result_scope.declare("getIntResult", "getIntResult",
+        result_getInt_type, None, "extern")
+    result_pushInt_entry.is_cfunction = 1
+    result_pushInt_entry.is_variable = 1
+    result_scope.var_entries.append(result_pushInt_entry)
+
+    result_int_typecast_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type, [], nogil = 1)
+    result_int_typecast_entry = result_scope.declare("operator int", "operator int",
+        result_int_typecast_type, None, "extern")
+    result_int_typecast_entry.is_cfunction = 1
+    result_int_typecast_entry.is_variable = 1
+    result_scope.var_entries.append(result_int_typecast_entry)
+
+    # cypclass ActhonMessageInterface
+
+    message_scope = Scope("ActhonMessageInterface", self, None)
+    init_scope(message_scope)
+    message_type = PyrexTypes.CypClassType(
+                "ActhonMessageInterface", message_scope, "ActhonMessageInterface", (PyrexTypes.cy_object_type,),
+                lock_mode="nolock", activable=False)
+    message_scope.type = message_type
+
+    # cypclass ActhonSyncInterface(CyObject):
+    #     bool isActivable(){}
+    #     bool isCompleted(){}
+    #     void insertActivity(ActhonMessageInterface msg){}
+    #     void removeActivity(ActhonMessageInterface msg){}
+
+    sync_scope = Scope("ActhonSyncInterface", self, None)
+    init_scope(sync_scope)
+    sync_type = PyrexTypes.CypClassType(
+                "ActhonSyncInterface", sync_scope, "ActhonSyncInterface", (PyrexTypes.cy_object_type,),
+                lock_mode="nolock", activable=False)
+    sync_scope.type = sync_type
+    sync_entry = self.declare("ActhonSyncInterface", "ActhonSyncInterface", sync_type, None, "extern")
+    sync_entry.is_type = 1
+
+    sync_isActivable_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+    sync_isActivable_entry = sync_scope.declare("isActivable", "isActivable",
+        sync_isActivable_type, None, "extern")
+    sync_isActivable_entry.is_cfunction = 1
+    sync_isActivable_entry.is_variable = 1
+    sync_scope.var_entries.append(sync_isActivable_entry)
+
+    sync_isCompleted_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+    sync_isCompleted_entry = sync_scope.declare("isCompleted", "isCompleted",
+        sync_isCompleted_type, None, "extern")
+    sync_isCompleted_entry.is_cfunction = 1
+    sync_isCompleted_entry.is_variable = 1
+    sync_scope.var_entries.append(sync_isCompleted_entry)
+
+    sync_msg_arg = PyrexTypes.CFuncTypeArg("msg", message_type, None)
+    sync_insertActivity_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [sync_msg_arg], nogil = 1)
+    sync_removeActivity_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [sync_msg_arg], nogil = 1)
+    sync_insertActivity_entry = sync_scope.declare("insertActivity", "insertActivity",
+        sync_insertActivity_type, None, "extern")
+    sync_insertActivity_entry.is_cfunction = 1
+    sync_insertActivity_entry.is_variable = 1
+    sync_scope.var_entries.append(sync_insertActivity_entry)
+    sync_removeActivity_entry = sync_scope.declare("removeActivity", "removeActivity",
+        sync_removeActivity_type, None, "extern")
+    sync_removeActivity_entry.is_cfunction = 1
+    sync_removeActivity_entry.is_variable = 1
+    sync_scope.var_entries.append(sync_removeActivity_entry)
+
+    # cypclass ActhonMessageInterface(CyObject):
+    #     ActhonSyncInterface _sync_method
+    #     ActhonResultInterface _result
+    #     bool activate(){}
+
+    message_entry = self.declare("ActhonMessageInterface", "ActhonMessageInterface", message_type, None, "extern")
+    message_entry.is_type = 1
+
+    message_sync_attr_entry = message_scope.declare("_sync_method", "_sync_method",
+        sync_type, None, "extern")
+    message_sync_attr_entry.is_variable = 1
+    message_scope.var_entries.append(message_sync_attr_entry)
+
+    message_result_attr_entry = message_scope.declare("_result", "_result",
+        result_type, None, "extern")
+    message_result_attr_entry.is_variable = 1
+    message_scope.var_entries.append(message_result_attr_entry)
+
+    message_activate_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+    message_activate_entry = message_scope.declare("activate", "activate",
+        message_activate_type, None, "extern")
+    message_activate_entry.is_cfunction = 1
+    message_activate_entry.is_variable = 1
+    message_scope.var_entries.append(message_activate_entry)
+
+    # cypclass ActhonQueueInterface(CyObject):
+    #     void push(ActhonMessageInterface message){}
+    #     bool activate(){}
+
+    queue_scope = Scope("ActhonQueueInterface", self, None)
+    init_scope(queue_scope)
+    queue_type = PyrexTypes.CypClassType(
+                "ActhonQueueInterface", queue_scope, "ActhonQueueInterface", (PyrexTypes.cy_object_type,),
+                lock_mode="nolock", activable=False)
+    queue_scope.type = queue_type
+    queue_entry = self.declare("ActhonQueueInterface", "ActhonQueueInterface", queue_type, self, "extern")
+    queue_entry.is_type = 1
+
+    queue_msg_arg = PyrexTypes.CFuncTypeArg("msg", message_type, None)
+    queue_push_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [queue_msg_arg], nogil = 1)
+    queue_push_entry = queue_scope.declare("push", "push", queue_push_type,
+        None, "extern")
+    queue_push_entry.is_cfunction = 1
+    queue_push_entry.is_variable = 1
+    queue_scope.var_entries.append(queue_push_entry)
+
+    queue_activate_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+    queue_activate_entry = queue_scope.declare("activate", "activate",
+        queue_activate_type, None, "extern")
+    queue_activate_entry.is_cfunction = 1
+    queue_activate_entry.is_variable = 1
+    queue_scope.var_entries.append(queue_activate_entry)
+
+    # cdef cypclass ActivableClass:
+    #     ResultInterface (*_active_result_class)()
+    #     QueueInterface _active_queue_class
+
+    activable_scope = Scope("ActhonActivableClass", self, None)
+    init_scope(activable_scope)
+    activable_type = PyrexTypes.CypClassType(
+                "ActhonActivableClass", activable_scope, "ActhonActivableClass", (PyrexTypes.cy_object_type,),
+                lock_mode="nolock", activable=False)
+    activable_entry = self.declare("ActhonActivableClass", None, activable_type, "ActhonActivableClass", "extern")
+    activable_entry.is_type = 1
+
+    activable_result_attr_type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(result_entry.type, []))
+    activable_result_attr_entry = activable_scope.declare("_active_result_class", "_active_result_class",
+        activable_result_attr_type, None, "extern")
+    activable_result_attr_entry.is_variable = 1
+    activable_scope.var_entries.append(activable_result_attr_entry)
+
+    activable_queue_attr_entry = activable_scope.declare("_active_queue_class", "_active_queue_class",
+        queue_type, None, "extern")
+    activable_queue_attr_entry.is_variable = 1
+    activable_scope.var_entries.append(activable_queue_attr_entry)
+
+
 # set up builtin scope
 
 builtin_scope = BuiltinScope()
@@ -460,6 +650,7 @@ def init_builtins():
     complex_type  = builtin_scope.lookup('complex').type
     inject_cypclass_refcount_macros()
     inject_cypclass_lock_macros()
+    inject_acthon_interfaces(builtin_scope)
 
 
 init_builtins()

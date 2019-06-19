@@ -4133,7 +4133,7 @@ class CypClassType(CppClassType):
         return "((%s)%s)" % (self.declaration_code(''), expr_code)
 
     def assignable_from_resolved_type(self, other_type):
-        if other_type.is_ptr and other_type.base_type.is_cpp_class and other_type.base_type.is_subclass(self):
+        if other_type.is_ptr and other_type.base_type.is_cpp_class and other_type.base_type.is_subclass(self) or other_type.is_null_ptr:
             return 1
         return super(CypClassType, self).assignable_from_resolved_type(other_type)
 

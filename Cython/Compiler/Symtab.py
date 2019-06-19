@@ -2707,6 +2707,8 @@ class CppClassScope(Scope):
         return wrapper_entry
 
     def reify_method(self, entry):
+        if entry.type.has_varargs:
+            error(entry.pos, "Could not reify method with ellipsis (you can use optional arguments)")
         # Create the reifying class
         reified_name = "reified_" + entry.name
         reified_cname = Naming.builtin_prefix + reified_name

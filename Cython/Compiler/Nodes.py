@@ -1533,16 +1533,9 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         if self.cypclass:
             cyobject_base = False
             for base_type in base_types_list:
-                cyobject_base = cyobject_base or base_type is cy_object_type or base_type.is_cyp_class
+                cyobject_base = cyobject_base or base_type.is_cyp_class
             if not cyobject_base:
-                cyobject_class = CSimpleBaseTypeNode(self.pos,
-                    name = "cyobject", module_path = [],
-                    is_basic_c_type = 0, signed = 0,
-                    complex = 0, longness = 0,
-                    is_self_arg = 0, templates = None
-                )
-                self.base_classes.append(cyobject_class)
-                base_types_list.append(cyobject_class.analyse(scope or env))
+                base_types_list.append(cy_object_type)
         base_class_types = filter(base_ok, base_types_list)
         self.entry = env.declare_cpp_class(
             self.name, scope, self.pos,

@@ -1268,6 +1268,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("this->%s->push(message);" % queue_attr_cname)
             code.putln("} else {")
             code.putln("/* We should definitely shout here */")
+            code.putln('fprintf(stderr, "Acthon error: No queue to push to for %s remote call !\\n");' % reified_function_entry.name)
             code.putln("}")
             code.putln("Cy_DECREF(message);")
             code.putln("/* Return result object */")

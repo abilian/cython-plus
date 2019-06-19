@@ -1018,10 +1018,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             has_virtual_methods = False
             constructor = None
             destructor = None
-            activated_class_entry = scope.lookup_here("Activated")
-            if activated_class_entry:
+            if entry.type.is_cyp_class and entry.type.activable:
+                activated_class_entry = scope.lookup_here("Activated")
                 code.putln("struct %s;" % activated_class_entry.cname)
-                code.putln("%s;" % activated_class_entry.type.declaration_code("__activate__(void)"))
+                dunder_activate_entry = scope.lookup_here("__activate__")
+                code.putln("%s;" % dunder_activate_entry.type.declaration_code(dunder_activate_entry.cname))
             for attr in scope.var_entries:
                 cname = attr.cname
                 if attr.type.is_cfunction and attr.type.is_static_method:

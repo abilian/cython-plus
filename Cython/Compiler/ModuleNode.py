@@ -1213,6 +1213,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
         result_attr_cname = "_active_result_class"
         queue_attr_cname = "_active_queue_class"
+        passive_self_attr_cname = Naming.builtin_prefix + entry.type.empty_declaration_code().replace('::', '__') + "_passive_self"
 
         activable_bases_cnames = [base.cname for base in entry.type.base_classes if base.activable]
         activable_bases_inheritance_list = ["public %s::Activated" % cname for cname in activable_bases_cnames]
@@ -1223,14 +1224,15 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             base_classes_code = "public ActhonActivableClass"
             initialize_code = "ActhonActivableClass(active_queue, active_result_constructor)"
         code.putln("struct %s::Activated : %s {" % (entry.type.empty_declaration_code(), base_classes_code))
-        code.putln("%s * _passive_self;" % entry.type.empty_declaration_code())
+        code.putln("%s;" % entry.type.declaration_code(passive_self_attr_cname))
         code.putln(("Activated(%s * passive_object, %s, %s)"
-                    ": %s, _passive_self(passive_object){} // Used by _passive_self.__activate__()"
+                    ": %s, %s(passive_object){} // Used by _passive_self.__activate__()"
                     % (
                        entry.type.empty_declaration_code(),
                        queue_interface_type.declaration_code("active_queue"),
                        entry.type.scope.lookup_here("__activate__").type.args[1].type.declaration_code("active_result_constructor"),
-                       initialize_code
+                       initialize_code,
+                       passive_self_attr_cname
                       )
         ))
         for reifying_class_entry in entry.type.scope.reifying_entries:
@@ -1255,7 +1257,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("%s {" % function_code)
             code.putln("%s = this->%s();" % (result_interface_type.declaration_code("result_object"), result_attr_cname))
 
-            message_constructor_args_list = ["this->_passive_self", "sync_object", "result_object"] + reified_arg_cname_list
+            message_constructor_args_list = ["this->%s" % passive_self_attr_cname, "sync_object", "result_object"] + reified_arg_cname_list
             message_constructor_args_code = ", ".join(message_constructor_args_list)
             code.putln("%s = new %s(%s);" % (
                 reifying_class_entry.type.declaration_code("message"),

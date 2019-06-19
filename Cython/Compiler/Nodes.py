@@ -1461,6 +1461,8 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
     decorators = None
 
     def declare(self, env):
+        if not env.is_cpp():
+            error(self.pos, "Could not use cppclass in a c-only environment !")
         if self.templates is None:
             template_types = None
         else:

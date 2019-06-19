@@ -81,6 +81,7 @@
       virtual void pushIntResult(int result) = 0;
       virtual int getIntResult() = 0;
       operator int() { return this->getIntResult(); }
+      operator void*() { return this->getVoidStarResult(); }
     };
 
     struct ActhonMessageInterface;

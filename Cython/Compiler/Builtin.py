@@ -440,6 +440,13 @@ def inject_acthon_interfaces(self):
     result_int_typecast_entry.is_variable = 1
     result_scope.var_entries.append(result_int_typecast_entry)
 
+    result_voidStar_typecast_type = PyrexTypes.CFuncType(PyrexTypes.c_void_ptr_type, [], nogil = 1)
+    result_voidStar_typecast_entry = result_scope.declare("operator void *", "operator void *",
+        result_voidStar_typecast_type, None, "extern")
+    result_voidStar_typecast_entry.is_cfunction = 1
+    result_voidStar_typecast_entry.is_variable = 1
+    result_scope.var_entries.append(result_voidStar_typecast_entry)
+
     # cypclass ActhonMessageInterface
 
     message_scope = Scope("ActhonMessageInterface", self, None)

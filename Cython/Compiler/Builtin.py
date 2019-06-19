@@ -427,11 +427,11 @@ def inject_acthon_interfaces(self):
     result_scope.var_entries.append(result_pushInt_entry)
 
     result_getInt_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type, [], nogil = 1)
-    result_pushInt_entry = result_scope.declare("getIntResult", "getIntResult",
+    result_getInt_entry = result_scope.declare("getIntResult", "getIntResult",
         result_getInt_type, None, "extern")
-    result_pushInt_entry.is_cfunction = 1
-    result_pushInt_entry.is_variable = 1
-    result_scope.var_entries.append(result_pushInt_entry)
+    result_getInt_entry.is_cfunction = 1
+    result_getInt_entry.is_variable = 1
+    result_scope.var_entries.append(result_getInt_entry)
 
     result_int_typecast_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type, [], nogil = 1)
     result_int_typecast_entry = result_scope.declare("operator int", "operator int",

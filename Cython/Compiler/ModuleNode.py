@@ -1207,7 +1207,13 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
     def generate_cyp_class_activated_class(self, entry, code):
         from . import Builtin
+        sync_interface_type = Builtin.acthon_sync_type
         result_interface_type = Builtin.acthon_result_type
+        queue_interface_type = Builtin.acthon_queue_type
+
+        result_attr_cname = "_active_result_class"
+        queue_attr_cname = "_active_queue_class"
+
         activable_bases_cnames = [base.cname for base in entry.type.base_classes if base.activable]
         activable_bases_inheritance_list = ["public %s::Activated" % cname for cname in activable_bases_cnames]
         if activable_bases_cnames:
@@ -1218,11 +1224,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             initialize_code = "ActhonActivableClass(active_queue, active_result_constructor)"
         code.putln("struct %s::Activated : %s {" % (entry.type.empty_declaration_code(), base_classes_code))
         code.putln("%s * _passive_self;" % entry.type.empty_declaration_code())
-        code.putln(("Activated(%s * passive_object, %s * active_queue, %s)"
+        code.putln(("Activated(%s * passive_object, %s, %s)"
                     ": %s, _passive_self(passive_object){} // Used by _passive_self.__activate__()"
                     % (
                        entry.type.empty_declaration_code(),
-                       "ActhonQueueInterface",
+                       queue_interface_type.declaration_code("active_queue"),
                        entry.type.scope.lookup_here("__activate__").type.args[1].type.declaration_code("active_result_constructor"),
                        initialize_code
                       )
@@ -1243,11 +1249,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 reified_arg_cname_list.append(opt_cname)
                 reified_arg_decl_list.append(reified_function_entry.type.op_arg_struct.declaration_code(opt_cname))
 
-            activated_method_arg_decl_code = ", ".join(["ActhonSyncInterface* sync_object"] + reified_arg_decl_list)
+            activated_method_arg_decl_code = ", ".join([sync_interface_type.declaration_code("sync_object")] + reified_arg_decl_list)
             function_header = reified_function_entry.type.function_header_code(reified_function_entry.cname, activated_method_arg_decl_code)
             function_code = result_interface_type.declaration_code(function_header)
             code.putln("%s {" % function_code)
-            code.putln("%s = this->_active_result_class();" % result_interface_type.declaration_code("result_object"))
+            code.putln("%s = this->%s();" % (result_interface_type.declaration_code("result_object"), result_attr_cname))
 
             message_constructor_args_list = ["this->_passive_self", "sync_object", "result_object"] + reified_arg_cname_list
             message_constructor_args_code = ", ".join(message_constructor_args_list)
@@ -1258,8 +1264,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             ))
 
             code.putln("/* Push message in the queue */")
-            code.putln("if (this->_active_queue_class != NULL) {")
-            code.putln("this->_active_queue_class->push(message);")
+            code.putln("if (this->%s != NULL) {" % queue_attr_cname)
+            code.putln("this->%s->push(message);" % queue_attr_cname)
             code.putln("} else {")
             code.putln("/* We should definitely shout here */")
             code.putln("}")
@@ -1273,6 +1279,16 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         target_object_type = entry.type
         target_object_cname = Naming.builtin_prefix + "target_object"
         target_object_code = target_object_type.declaration_code(target_object_cname)
+        sync_arg_name = "sync_method"
+        result_arg_name = "result_object"
+
+        from . import Builtin
+        message_base_type = Builtin.acthon_message_type
+        sync_type = Builtin.acthon_sync_type
+        result_type = Builtin.acthon_result_type
+
+        sync_attr_cname = message_base_type.scope.lookup_here("_sync_method").cname
+        result_attr_cname = message_base_type.scope.lookup_here("_result").cname
 
         def put_cypclass_op_on_narg_optarg(op_lbda, func_type, opt_arg_name, code):
             opt_arg_count = func_type.optional_arg_count
@@ -1305,10 +1321,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             reified_function_entry = reifying_class_entry.reified_entry
             reifying_class_full_name = reifying_class_entry.type.empty_declaration_code()
             class_name = reifying_class_full_name.split('::')[-1]
-            code.putln("struct %s : public ActhonMessageInterface {" % reifying_class_full_name)
+            code.putln("struct %s : public %s {" % (reifying_class_full_name, message_base_type.empty_declaration_code()))
             # Declaring target object & reified method arguments
             code.putln("%s;" % target_object_code)
-            constructor_args_decl_list = [target_object_code, "ActhonSyncInterface* sync_method", "ActhonResultInterface* result_object"]
+            constructor_args_decl_list = [target_object_code, sync_type.declaration_code(sync_arg_name), result_type.declaration_code(result_arg_name)]
             initialized_args_list = [target_object_cname]
             opt_arg_count = reified_function_entry.type.optional_arg_count
 
@@ -1331,9 +1347,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             initializer_list = ["%s(%s)" % (name, name) for name in initialized_args_list]
             initializer_list_code = ", ".join(initializer_list)
 
-            code.putln("%s(%s) : ActhonMessageInterface(sync_method, result_object), %s {" % (
+            code.putln("%s(%s) : %s(%s, %s), %s {" % (
                 class_name,
                 constructor_args_decl_code,
+                message_base_type.empty_declaration_code(),
+                sync_arg_name,
+                result_arg_name,
                 initializer_list_code
             ))
             if opt_arg_count:
@@ -1359,7 +1378,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("}")
             code.putln("int activate() {")
             code.putln("/* Activate only if its sync object agrees to do so */")
-            code.putln("if (this->_sync_method != NULL and !this->_sync_method->isActivable()) {")
+            code.putln("if (this->%s != NULL and !this->%s->isActivable()) {" % (sync_attr_cname, sync_attr_cname))
             code.putln("return 0;")
             code.putln("}")
             result_assignment = ""
@@ -1393,9 +1412,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             put_cypclass_op_on_narg_optarg(lambda _: "Cy_UNLOCK", reified_function_entry.type, Naming.optional_args_cname, code)
             code.putln("/* Push result in the result object */")
             if reified_function_entry.type.return_type is PyrexTypes.c_int_type:
-                code.putln("this->_result->pushIntResult(result);")
+                code.putln("this->%s->pushIntResult(result);" % result_attr_cname)
             elif does_return:
-                code.putln("this->_result->pushVoidStarResult((void*)result);")
+                code.putln("this->%s->pushVoidStarResult((void*)result);" % result_attr_cname)
             code.putln("return 1;")
             code.putln("}")
 

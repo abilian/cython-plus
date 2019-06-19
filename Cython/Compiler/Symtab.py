@@ -749,9 +749,11 @@ class Scope(object):
                     # Declaring active_self member and activate function (its definition is generated automatically)
                     act_attr_name = Naming.builtin_prefix + "_active_self"
                     scope.declare_var("<active_self>", act_type, pos, cname=act_attr_name)
-                    queue_type = self.lookup("ActhonQueueInterface").type
+                    from . import Builtin
+                    queue_type = Builtin.acthon_queue_type
+                    result_type = Builtin.acthon_result_type
                     queue_arg = PyrexTypes.CFuncTypeArg("queue", queue_type, pos)
-                    result_type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(self.lookup("ActhonResultInterface").type, [], nogil = 1))
+                    result_type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(result_type, [], nogil = 1))
                     result_arg = PyrexTypes.CFuncTypeArg("result", result_type, pos)
                     activate_type = PyrexTypes.CFuncType(act_type, [queue_arg, result_arg], nogil = 1, optional_arg_count = 2)
 
@@ -2721,14 +2723,15 @@ class CppClassScope(Scope):
         reifying_entry.reified_entry = entry
         self.reifying_entries.append(reifying_entry)
         # Add the base method to the Activated member class
+        from . import Builtin
         activated_class_entry = self.lookup_here("Activated")
-        result_interface_entry = self.lookup("ActhonResultInterface")
-        sync_interface_entry = self.lookup("ActhonSyncInterface")
+        result_type = Builtin.acthon_result_type
+        sync_type = Builtin.acthon_sync_type
 
         activated_method_sync_attr_type = PyrexTypes.CFuncTypeArg(
-            "sync_method", sync_interface_entry.type, entry.pos, "sync_method")
+            "sync_method", sync_type, entry.pos, "sync_method")
 
-        activated_method_type = PyrexTypes.CFuncType(result_interface_entry.type,
+        activated_method_type = PyrexTypes.CFuncType(result_type,
             [activated_method_sync_attr_type] + entry.type.args, nogil=entry.type.nogil,
             has_varargs = entry.type.has_varargs,
             optional_arg_count = entry.type.optional_arg_count)

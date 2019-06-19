@@ -380,6 +380,7 @@ builtin_structs_table = [
 
 # inject acthon interfaces
 def inject_acthon_interfaces(self):
+    global acthon_result_type, acthon_message_type, acthon_sync_type, acthon_queue_type, acthon_activable_type
     def init_scope(scope):
         scope.is_cpp_class_scope = 1
         scope.inherited_var_entries = []
@@ -394,7 +395,7 @@ def inject_acthon_interfaces(self):
 
     result_scope = Scope("ActhonResultInterface", self, None)
     init_scope(result_scope)
-    result_type = PyrexTypes.CypClassType(
+    acthon_result_type = result_type = PyrexTypes.CypClassType(
                 "ActhonResultInterface", result_scope, "ActhonResultInterface", (PyrexTypes.cy_object_type,),
                 lock_mode="nolock", activable=False)
     result_scope.type = result_type
@@ -443,7 +444,7 @@ def inject_acthon_interfaces(self):
 
     message_scope = Scope("ActhonMessageInterface", self, None)
     init_scope(message_scope)
-    message_type = PyrexTypes.CypClassType(
+    acthon_message_type = message_type = PyrexTypes.CypClassType(
                 "ActhonMessageInterface", message_scope, "ActhonMessageInterface", (PyrexTypes.cy_object_type,),
                 lock_mode="nolock", activable=False)
     message_scope.type = message_type
@@ -456,7 +457,7 @@ def inject_acthon_interfaces(self):
 
     sync_scope = Scope("ActhonSyncInterface", self, None)
     init_scope(sync_scope)
-    sync_type = PyrexTypes.CypClassType(
+    acthon_sync_type = sync_type = PyrexTypes.CypClassType(
                 "ActhonSyncInterface", sync_scope, "ActhonSyncInterface", (PyrexTypes.cy_object_type,),
                 lock_mode="nolock", activable=False)
     sync_scope.type = sync_type
@@ -522,7 +523,7 @@ def inject_acthon_interfaces(self):
 
     queue_scope = Scope("ActhonQueueInterface", self, None)
     init_scope(queue_scope)
-    queue_type = PyrexTypes.CypClassType(
+    acthon_queue_type = queue_type = PyrexTypes.CypClassType(
                 "ActhonQueueInterface", queue_scope, "ActhonQueueInterface", (PyrexTypes.cy_object_type,),
                 lock_mode="nolock", activable=False)
     queue_scope.type = queue_type
@@ -550,7 +551,7 @@ def inject_acthon_interfaces(self):
 
     activable_scope = Scope("ActhonActivableClass", self, None)
     init_scope(activable_scope)
-    activable_type = PyrexTypes.CypClassType(
+    acthon_activable_type = activable_type = PyrexTypes.CypClassType(
                 "ActhonActivableClass", activable_scope, "ActhonActivableClass", (PyrexTypes.cy_object_type,),
                 lock_mode="nolock", activable=False)
     activable_entry = self.declare("ActhonActivableClass", None, activable_type, "ActhonActivableClass", "extern")

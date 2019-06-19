@@ -1206,7 +1206,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln("}")
 
     def generate_cyp_class_activated_class(self, entry, code):
-        result_interface_entry = entry.scope.lookup("ActhonResultInterface")
+        from . import Builtin
+        result_interface_type = Builtin.acthon_result_type
         activable_bases_cnames = [base.cname for base in entry.type.base_classes if base.activable]
         activable_bases_inheritance_list = ["public %s::Activated" % cname for cname in activable_bases_cnames]
         if activable_bases_cnames:
@@ -1244,9 +1245,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             activated_method_arg_decl_code = ", ".join(["ActhonSyncInterface* sync_object"] + reified_arg_decl_list)
             function_header = reified_function_entry.type.function_header_code(reified_function_entry.cname, activated_method_arg_decl_code)
-            function_code = result_interface_entry.type.declaration_code(function_header)
+            function_code = result_interface_type.declaration_code(function_header)
             code.putln("%s {" % function_code)
-            code.putln("%s = this->_active_result_class();" % result_interface_entry.type.declaration_code("result_object"))
+            code.putln("%s = this->_active_result_class();" % result_interface_type.declaration_code("result_object"))
 
             message_constructor_args_list = ["this->_passive_self", "sync_object", "result_object"] + reified_arg_cname_list
             message_constructor_args_code = ", ".join(message_constructor_args_list)

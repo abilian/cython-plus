@@ -1168,26 +1168,64 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
     def generate_cyp_class_activate_function(self, entry, code):
         active_self_entry = entry.type.scope.lookup_here("<active_self>")
-        code.putln("%s::Activated* %s::__activate__() {" % (entry.type.empty_declaration_code(), entry.type.empty_declaration_code()))
+        dunder_activate_entry = entry.type.scope.lookup_here("__activate__")
+        # Here we generate the function header like Nodes.CFuncDefNode would do,
+        # but we streamline the process because we know the exact prototype.
+        dunder_activate_arg = dunder_activate_entry.type.op_arg_struct.declaration_code(Naming.optional_args_cname)
+        dunder_activate_entity = dunder_activate_entry.type.function_header_code(dunder_activate_entry.func_cname, dunder_activate_arg)
+        dunder_activate_header = dunder_activate_entry.type.return_type.declaration_code(dunder_activate_entity)
+        code.putln("%s {" % dunder_activate_header)
+        code.putln("%s;" % dunder_activate_entry.type.return_type.declaration_code("activated_instance"))
+        code.putln('if (%s) {' % Naming.optional_args_cname)
+        activated_class_constructor_optargs_list = ["this"]
+        activated_class_constructor_defaultargs_list = ["this->_active_queue_class", "this->_active_result_class"]
+        for i, arg in enumerate(dunder_activate_entry.type.args):
+            code.putln("if (%s->%sn <= %s) {" %
+                       (Naming.optional_args_cname,
+                        Naming.pyrex_prefix, i))
+            code.putln("activated_instance = new %s::Activated(%s);" % (entry.type.empty_declaration_code(), ", ".join(activated_class_constructor_optargs_list + activated_class_constructor_defaultargs_list[i:])))
+            code.putln("} else {")
+            activated_class_constructor_optargs_list.append("%s->%s" % (Naming.optional_args_cname, dunder_activate_entry.type.opt_arg_cname(arg.name)))
+        # We're in the final else clause, corresponding to all optional arguments specified)
+        code.putln("activated_instance = new %s::Activated(%s);" % (entry.type.empty_declaration_code(), ", ".join(activated_class_constructor_optargs_list)))
+        for _ in dunder_activate_entry.type.args:
+            code.putln("}")
+        code.putln("}")
+        code.putln("else {")
         code.putln("if (this->%s == NULL) {" % active_self_entry.cname)
-        code.putln("this->%s = new %s::Activated(this);" % (active_self_entry.cname, entry.type.empty_declaration_code()))
+        code.putln("this->%s = new %s::Activated(this, %s);" %
+                   (active_self_entry.cname,
+                    entry.type.empty_declaration_code(),
+                    ", ".join(activated_class_constructor_defaultargs_list))
+                  )
         code.putln("}")
         code.putln("Cy_INCREF(this->%s);" % active_self_entry.cname)
-        code.putln("return this->%s;" % active_self_entry.cname)
+        code.putln("activated_instance = this->%s;" % active_self_entry.cname)
+        code.putln("}")
+        code.putln("return activated_instance;")
         code.putln("}")
 
     def generate_cyp_class_activated_class(self, entry, code):
         result_interface_entry = entry.scope.lookup("ActhonResultInterface")
-        # TODO: handle inheritance
-        activable_bases = ["public %s::Activated" % base.cname for base in entry.type.base_classes if base.activable]
-        if activable_bases:
-            base_classes_code = ", ".join(activable_bases)
+        activable_bases_cnames = [base.cname for base in entry.type.base_classes if base.activable]
+        activable_bases_inheritance_list = ["public %s::Activated" % cname for cname in activable_bases_cnames]
+        if activable_bases_cnames:
+            base_classes_code = ", ".join(activable_bases_inheritance_list)
+            initialize_code = ", ".join(["%s::Activated(passive_object, active_queue, active_result_constructor)" % cname for cname in activable_bases_cnames])
         else:
-            base_classes_code = "public CyObject"
+            base_classes_code = "public ActhonActivableClass"
+            initialize_code = "ActhonActivableClass(active_queue, active_result_constructor)"
         code.putln("struct %s::Activated : %s {" % (entry.type.empty_declaration_code(), base_classes_code))
         code.putln("%s * _passive_self;" % entry.type.empty_declaration_code())
-        code.putln("Activated(){} // Used for inheritance, never used for classic instantiation")
-        code.putln("Activated(%s * passive_object):_passive_self(passive_object){} // Used by _passive_self.activate()" % entry.type.empty_declaration_code())
+        code.putln(("Activated(%s * passive_object, %s * active_queue, %s)"
+                    ": %s, _passive_self(passive_object){} // Used by _passive_self.__activate__()"
+                    % (
+                       entry.type.empty_declaration_code(),
+                       "ActhonQueueInterface",
+                       entry.type.scope.lookup_here("__activate__").type.args[1].type.declaration_code("active_result_constructor"),
+                       initialize_code
+                      )
+        ))
         for reifying_class_entry in entry.type.scope.reifying_entries:
             code.putln("// generating reified of %s" % reifying_class_entry.name)
             reified_function_entry = reifying_class_entry.reified_entry
@@ -1208,7 +1246,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             function_header = reified_function_entry.type.function_header_code(reified_function_entry.cname, activated_method_arg_decl_code)
             function_code = result_interface_entry.type.declaration_code(function_header)
             code.putln("%s {" % function_code)
-            code.putln("%s = this->_passive_self->_active_result_class();" % result_interface_entry.type.declaration_code("result_object"))
+            code.putln("%s = this->_active_result_class();" % result_interface_entry.type.declaration_code("result_object"))
 
             message_constructor_args_list = ["this->_passive_self", "sync_object", "result_object"] + reified_arg_cname_list
             message_constructor_args_code = ", ".join(message_constructor_args_list)
@@ -1219,8 +1257,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             ))
 
             code.putln("/* Push message in the queue */")
-            code.putln("if (this->_passive_self->_active_queue_class != NULL) {")
-            code.putln("this->_passive_self->_active_queue_class->push(message);")
+            code.putln("if (this->_active_queue_class != NULL) {")
+            code.putln("this->_active_queue_class->push(message);")
             code.putln("} else {")
             code.putln("/* We should definitely shout here */")
             code.putln("}")

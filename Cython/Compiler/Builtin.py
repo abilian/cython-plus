@@ -418,6 +418,10 @@ def init_builtin_structs():
         builtin_scope.declare_struct_or_union(
             name, "struct", scope, 1, None, cname = cname)
 
+def inject_cypclass_refcount_macros():
+    macro_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)], nogil = 1)
+    for macro in ["Cy_INCREF", "Cy_DECREF", "Cy_XDECREF"]:
+        builtin_scope.declare_builtin_cfunction(macro, macro_type, macro)
 
 def init_builtins():
     init_builtin_structs()
@@ -446,6 +450,7 @@ def init_builtins():
     float_type = builtin_scope.lookup('float').type
     bool_type  = builtin_scope.lookup('bool').type
     complex_type  = builtin_scope.lookup('complex').type
+    inject_cypclass_refcount_macros()
 
 
 init_builtins()

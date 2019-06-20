@@ -252,8 +252,7 @@ class LetNodeMixin:
             if self.temp_type.is_pyobject:
                 code.put_decref_clear(self.temp, self.temp_type)
             elif self.temp_type.is_cyp_class:
-                pass
-                #code.put_decref_clear(self.temp, self.temp_type)
+                code.put_cyxdecref(self.temp)
             code.funcstate.release_temp(self.temp)
 
 

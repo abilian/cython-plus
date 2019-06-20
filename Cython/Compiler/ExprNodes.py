@@ -5650,18 +5650,7 @@ class CallNode(ExprNode):
                 constructor = wrapper = type.scope.lookup_here("<constructor>")
                 if not wrapper:
                     error(self.function.pos, "no constructor wrapper found for Cypclass  type '%s'" % self.function.name)
-                namespace_list = wrapper.func_cname.split('::')
-                templates = ''
-                if type.templates:
-                    templates = '<' + ','.join([param.declaration_code('')
-                                for param in type.templates
-                                if not PyrexTypes.is_optional_template_param(param) and not param.is_fused]) + '>'
-                if len(namespace_list) > 2:
-                    # We do this because cypclass wrappers are outside of the class namespace
-                    # in the C++ code, but they are declared within the class scope
-                    constructor_cname = '::'.join(namespace_list[:-2] + [namespace_list[-1]]) + templates
-                else:
-                    constructor_cname = namespace_list[-1] + templates
+                constructor_cname = wrapper.func_cname
                 constructor_type = wrapper.type
             elif not constructor:
                 error(self.function.pos, "no constructor found for C++  type '%s'" % self.function.name)

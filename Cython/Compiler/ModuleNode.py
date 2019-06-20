@@ -1049,7 +1049,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 else:
                     code.putln("%s(%s);" % (type.cname, ", ".join(arg_decls)))
 
-            if not type.is_cyp_class and (constructor or py_attrs):
+            if type.is_cyp_class:
+                constructor = scope.lookup_here("<constructor>")
+                for constructor_alternative in constructor.all_alternatives():
+                    code.putln("static %s;" % constructor_alternative.type.declaration_code(constructor_alternative.cname))
+            elif constructor or py_attrs:
                 if constructor:
                     for constructor_alternative in constructor.all_alternatives():
                         arg_decls = []
@@ -1159,7 +1163,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         self_type = wrapper_entry.type.return_type.declaration_code('')
         type_string = type.empty_declaration_code()
         class_name = type.name
-        wrapper_cname = "%s__constructor__%s" % (Naming.func_prefix, class_name)
+        wrapper_cname = "%s::%s__constructor__%s" % (type_string, Naming.func_prefix, class_name)
         wrapper_type = wrapper_entry.type
 
         arg_decls = []
@@ -1181,7 +1185,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             arg_decls = ["void"]
 
         decl_arg_string = ', '.join(arg_decls)
-        code.putln("static %s %s(%s)" % (self_type, wrapper_cname, decl_arg_string))
+        code.putln("%s %s(%s)" % (self_type, wrapper_cname, decl_arg_string))
         code.putln("{")
 
         wrapper_arg_types = [arg.type for arg in wrapper_entry.type.args]

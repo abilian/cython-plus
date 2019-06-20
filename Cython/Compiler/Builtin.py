@@ -423,6 +423,11 @@ def inject_cypclass_refcount_macros():
     for macro in ["Cy_INCREF", "Cy_DECREF", "Cy_XDECREF"]:
         builtin_scope.declare_builtin_cfunction(macro, macro_type, macro)
 
+def inject_cypclass_lock_macros():
+    blocking_macro_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)], nogil = 1)
+    for macro in ("Cy_RLOCK", "Cy_WLOCK", "Cy_UNLOCK"):
+        builtin_scope.declare_builtin_cfunction(macro, blocking_macro_type, macro)
+
 def init_builtins():
     init_builtin_structs()
     init_builtin_types()
@@ -451,6 +456,7 @@ def init_builtins():
     bool_type  = builtin_scope.lookup('bool').type
     complex_type  = builtin_scope.lookup('complex').type
     inject_cypclass_refcount_macros()
+    inject_cypclass_lock_macros()
 
 
 init_builtins()

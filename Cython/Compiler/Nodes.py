@@ -8446,9 +8446,9 @@ class EnsureGILNode(GILExitNode):
         code.put_ensure_gil(declare_gilstate=False)
 
 class LockCypclassNode(StatNode):
-    #  'with locked [cypclass object]' or 'with unlocked [cypclass object]' statement
+    #  'with rlocked / wlocked [cypclass object]' or 'with unlocked [cypclass object]' statement
     #
-    #   state   string   'locked' or 'unlocked'
+    #   state   string   'rlocked' or 'wlocked' or 'unlocked'
     #   obj     ExprNode the (un)locked object
     #   body    StatNode
 

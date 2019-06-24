@@ -1541,6 +1541,8 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
             if self.activable:
                 activable_base = False
                 for base_type in base_types_list:
+                    if not base_type.activable:
+                        error(self.pos, "Activable class cannot inherit from not activable one.")
                     activable_base = activable_base or base_type.activable
                 if not activable_base:
                     from . import Builtin

@@ -1396,10 +1396,84 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             # because the mode is used for direct calls, when the user have the possibility
             # to manually lock or let the compiler handle it.
             # Here, the user cannot lock manually, so we're taking the lock automatically.
-            put_cypclass_op_on_narg_optarg(lambda arg: "Cy_RLOCK" if arg.type.is_const else "Cy_WLOCK", reified_function_entry.type, Naming.optional_args_cname, code)
+            #put_cypclass_op_on_narg_optarg(lambda arg: "Cy_RLOCK" if arg.type.is_const else "Cy_WLOCK", reified_function_entry.type, Naming.optional_args_cname, code)
 
-            op = "Cy_RLOCK" if reified_function_entry.type.is_const_method else "Cy_WLOCK"
-            code.putln("%s(this->%s);" % (op, target_object_cname))
+            func_type = reified_function_entry.type
+            opt_arg_name = Naming.optional_args_cname
+            trylock_result = "trylock_result"
+            failed_trylock = "failed_trylock"
+            code.putln("int %s = 0;" % trylock_result)
+            code.putln("int %s = 0;" % failed_trylock)
+            opt_arg_count = func_type.optional_arg_count
+            narg_count = len(func_type.args) - opt_arg_count
+            num_trylock = 1
+
+            op = "Cy_TRYRLOCK" if reified_function_entry.type.is_const_method else "Cy_TRYWLOCK"
+            code.putln("%s = %s(this->%s) != 0;" % (failed_trylock, op, target_object_cname))
+            code.putln("if (!%s) {" % failed_trylock)
+            code.putln("++%s;" % trylock_result)
+
+            for i, narg in enumerate(func_type.args[:narg_count]):
+                if narg.type.is_cyp_class:
+                    try_op = "Cy_TRYRLOCK" if narg.type.is_const else "Cy_TRYWLOCK"
+                    code.putln("%s = %s(this->%s) != 0;" % (failed_trylock, try_op, narg.cname))
+                    code.putln("if (!%s) {" % failed_trylock)
+                    code.putln("++%s;" % trylock_result)
+                    num_trylock += 1
+
+
+            if opt_arg_count:
+                num_optional_if = 0
+                code.putln("if (this->%s != NULL) {" % opt_arg_name)
+                for opt_idx, optarg in enumerate(func_type.args[narg_count:]):
+                    if optarg.type.is_cyp_class:
+                        try_op = "Cy_TRYRLOCK" if optarg.type.is_const else "Cy_TRYWLOCK"
+                        code.putln("if (this->%s->%sn > %s) {" %
+                                       (opt_arg_name,
+                                        Naming.pyrex_prefix,
+                                        opt_idx,
+                        ))
+                        code.putln("%s = %s(this->%s->%s) != 0;" % (
+                                    failed_trylock,
+                                    try_op,
+                                    opt_arg_name,
+                                    func_type.opt_arg_cname(optarg.name)
+                        ))
+                        code.putln("if (!%s) {" % failed_trylock)
+                        code.putln("++%s;" % trylock_result)
+                        num_optional_if += 1
+                        num_trylock += 1
+                for _ in range(num_optional_if):
+                    code.putln("}")
+                code.putln("}") # The check for optional_args != NULL
+            for _ in range(num_trylock):
+                code.putln("}")
+
+            if num_trylock:
+                # If there is any lock failure, we unlock all and return 0
+                code.putln("if (%s) {" % failed_trylock)
+                num_unlock = 0
+                # Target object first, then arguments
+                code.putln("if (%s > %s) {" % (trylock_result, num_unlock))
+                code.putln("Cy_UNLOCK(this->%s);" % target_object_cname)
+                num_unlock += 1
+                for i, narg in enumerate(func_type.args[:narg_count]):
+                    if narg.type.is_cyp_class:
+                        code.putln("if (%s > %s) {" % (trylock_result, num_unlock))
+                        code.putln("Cy_UNLOCK(this->%s);" % narg.cname)
+                        num_unlock += 1
+                if opt_arg_count:
+                    code.putln("if (this->%s != NULL) {" % opt_arg_name)
+                    for opt_idx, optarg in enumerate(func_type.args[narg_count:]):
+                        if optarg.type.is_cyp_class:
+                            code.putln("if (%s > %s) {" % (trylock_result, num_unlock))
+                            code.putln("Cy_UNLOCK(this->%s->%s);" % (opt_arg_name, func_type.opt_arg_cname(optarg.name)))
+                            num_unlock += 1
+                for _ in range(num_unlock):
+                    code.putln("}")
+                code.putln("}")
+                code.putln("return 0;")
+                code.putln("}")
 
             does_return = reified_function_entry.type.return_type is not PyrexTypes.c_void_type
             if does_return:

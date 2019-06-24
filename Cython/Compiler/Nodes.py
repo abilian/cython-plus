@@ -1543,8 +1543,8 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                 for base_type in base_types_list:
                     activable_base = activable_base or base_type.activable
                 if not activable_base:
-                    activable_base_entry = env.lookup("ActhonActivableClass")
-                    base_types_list.append(activable_base_entry.type)
+                    from . import Builtin
+                    base_types_list.append(Builtin.acthon_activable_type)
 
             cyobject_base = False
             for base_type in base_types_list:

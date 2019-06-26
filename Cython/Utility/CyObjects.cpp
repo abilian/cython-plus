@@ -75,7 +75,7 @@
 
     /* All this is made available by member injection inside the module scope */
 
-    struct ActhonResultInterface : CyObject {
+    struct ActhonResultInterface : public CyObject {
       virtual void pushVoidStarResult(void* result) = 0;
       virtual void* getVoidStarResult() = 0;
       virtual void pushIntResult(int result) = 0;
@@ -86,14 +86,14 @@
 
     struct ActhonMessageInterface;
 
-    struct ActhonSyncInterface : CyObject {
+    struct ActhonSyncInterface : public CyObject {
       virtual int isActivable() = 0;
       virtual int isCompleted() = 0;
       virtual void insertActivity(ActhonMessageInterface* msg) = 0;
       virtual void removeActivity(ActhonMessageInterface* msg) = 0;
     };
 
-    struct ActhonMessageInterface : CyObject {
+    struct ActhonMessageInterface : public CyObject {
       ActhonSyncInterface* _sync_method;
       ActhonResultInterface* _result;
       virtual int activate() = 0;
@@ -101,7 +101,7 @@
         ActhonResultInterface* result_object);
     };
 
-    struct ActhonQueueInterface : CyObject {
+    struct ActhonQueueInterface : public CyObject {
       virtual void push(ActhonMessageInterface* message) = 0;
       virtual int activate() = 0;
     };

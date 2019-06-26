@@ -97,14 +97,8 @@
       ActhonSyncInterface* _sync_method;
       ActhonResultInterface* _result;
       virtual int activate() = 0;
-      ActhonMessageInterface(
-        ActhonSyncInterface* sync_method,
-        ActhonResultInterface* result_object
-        ) : _sync_method(sync_method), _result(result_object)
-        {
-          Cy_INCREF(this->_sync_method);
-          Cy_INCREF(this->_result);
-        }
+      ActhonMessageInterface(ActhonSyncInterface* sync_method,
+        ActhonResultInterface* result_object);
     };
 
     struct ActhonQueueInterface : CyObject {
@@ -116,13 +110,8 @@
       ActhonQueueInterface *_active_queue_class = NULL;
       ActhonResultInterface *(*_active_result_class)(void);
       ActhonActivableClass(){} // Used in Activated classes inheritance chain (base Activated calls this, derived calls the 2 args version below)
-      ActhonActivableClass(ActhonQueueInterface * queue_object, ActhonResultInterface *(*result_constructor)(void))
-      : _active_queue_class(queue_object), _active_result_class(result_constructor) {
-        Cy_INCREF(this->_active_queue_class);
-      }
-      virtual ~ActhonActivableClass() {
-        Cy_XDECREF(this->_active_queue_class);
-      }
+      ActhonActivableClass(ActhonQueueInterface * queue_object, ActhonResultInterface *(*result_constructor)(void));
+      virtual ~ActhonActivableClass();
     };
 
     static inline int _Cy_DECREF(CyObject *op) {
@@ -412,4 +401,23 @@ int CyObject::CyObject_TRYRLOCK()
 int CyObject::CyObject_TRYWLOCK()
 {
   return this->ob_lock.trywlock();
+}
+
+
+ActhonMessageInterface::ActhonMessageInterface(ActhonSyncInterface* sync_method,
+    ActhonResultInterface* result_object) : _sync_method(sync_method), _result(result_object)
+{
+    Cy_INCREF(this->_sync_method);
+    Cy_INCREF(this->_result);
+}
+
+ActhonActivableClass::ActhonActivableClass(ActhonQueueInterface * queue_object, ActhonResultInterface *(*result_constructor)(void))
+    : _active_queue_class(queue_object), _active_result_class(result_constructor)
+{
+    Cy_INCREF(this->_active_queue_class);
+}
+
+ActhonActivableClass::~ActhonActivableClass()
+{
+    Cy_XDECREF(this->_active_queue_class);
 }

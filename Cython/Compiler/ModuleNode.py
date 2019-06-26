@@ -1322,7 +1322,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 if num_if:
                     opt_arg_guard.putln("if (this->%s != NULL) {" % opt_arg_name)
                     code.putln("}")
-                code.putln("}")
 
         for reifying_class_entry in entry.type.scope.reifying_entries:
             reified_function_entry = reifying_class_entry.reified_entry

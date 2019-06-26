@@ -1322,6 +1322,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 if num_if:
                     opt_arg_guard.putln("if (this->%s != NULL) {" % opt_arg_name)
                     code.putln("}")
+                else:
+                    code.decrease_indent()
 
         for reifying_class_entry in entry.type.scope.reifying_entries:
             reified_function_entry = reifying_class_entry.reified_entry
@@ -1451,6 +1453,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 if num_optional_if > 0:
                     opt_arg_guard.putln("if (this->%s != NULL) {" % opt_arg_name)
                     code.putln("}") # The check for optional_args != NULL
+                else:
+                    code.decrease_indent()
             for _ in range(num_trylock):
                 code.putln("}")
 

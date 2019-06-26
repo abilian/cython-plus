@@ -1506,10 +1506,13 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("Cy_UNLOCK(this->%s);" % target_object_cname)
             put_cypclass_op_on_narg_optarg(lambda _: "Cy_UNLOCK", reified_function_entry.type, Naming.optional_args_cname, code)
             code.putln("/* Push result in the result object */")
-            if reified_function_entry.type.return_type is PyrexTypes.c_int_type:
-                code.putln("this->%s->pushIntResult(result);" % result_attr_cname)
-            elif does_return:
-                code.putln("this->%s->pushVoidStarResult((void*)result);" % result_attr_cname)
+            if does_return:
+                code.putln("Cy_WLOCK(this->%s);" % result_attr_cname)
+                if reified_function_entry.type.return_type is PyrexTypes.c_int_type:
+                    code.putln("this->%s->pushIntResult(result);" % result_attr_cname)
+                else:
+                    code.putln("this->%s->pushVoidStarResult((void*)result);" % result_attr_cname)
+                code.putln("Cy_UNLOCK(this->%s);" % result_attr_cname)
             code.putln("return 1;")
             code.putln("}")
 

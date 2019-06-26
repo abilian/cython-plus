@@ -1390,7 +1390,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("/* Activate only if its sync object agrees to do so */")
             code.putln("if (this->%s != NULL) {" % sync_attr_cname)
             code.putln("if (!Cy_TRYRLOCK(this->%s)) {" % sync_attr_cname)
-            code.putln("%s = !this->%s->isActivable();" % (sync_result, sync_attr_cname))
+            code.putln("%s = this->%s->isActivable();" % (sync_result, sync_attr_cname))
             code.putln("Cy_UNLOCK(this->%s);" % sync_attr_cname)
             code.putln("}")
             code.putln("if (%s == 0) return 0;" % sync_result)

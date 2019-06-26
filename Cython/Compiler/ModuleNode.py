@@ -1385,9 +1385,15 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("Cy_INCREF(this->%s);" % target_object_cname)
             code.putln("}")
             code.putln("int activate() {")
+            sync_result = "sync_result"
+            code.putln("int %s = 0;" % sync_result)
             code.putln("/* Activate only if its sync object agrees to do so */")
-            code.putln("if (this->%s != NULL and !this->%s->isActivable()) {" % (sync_attr_cname, sync_attr_cname))
-            code.putln("return 0;")
+            code.putln("if (this->%s != NULL) {" % sync_attr_cname)
+            code.putln("if (!Cy_TRYRLOCK(this->%s)) {" % sync_attr_cname)
+            code.putln("%s = !this->%s->isActivable();" % (sync_result, sync_attr_cname))
+            code.putln("Cy_UNLOCK(this->%s);" % sync_attr_cname)
+            code.putln("}")
+            code.putln("if (%s == 0) return 0;" % sync_result)
             code.putln("}")
             result_assignment = ""
 

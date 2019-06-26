@@ -1301,7 +1301,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     code.putln("%s(this->%s);" % (op_lbda(narg), narg.cname))
 
             if opt_arg_count:
-                code.putln("if (this->%s != NULL) {" % opt_arg_name)
+                opt_arg_guard = code.insertion_point()
+                code.increase_indent()
                 num_if = 0
                 for opt_idx, optarg in enumerate(func_type.args[narg_count:]):
                     if optarg.type.is_cyp_class:
@@ -1317,6 +1318,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                         ))
                         num_if += 1
                 for _ in range(num_if):
+                    code.putln("}")
+                if num_if:
+                    opt_arg_guard.putln("if (this->%s != NULL) {" % opt_arg_name)
                     code.putln("}")
                 code.putln("}")
 
@@ -1421,10 +1425,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     code.putln("++%s;" % trylock_result)
                     num_trylock += 1
 
-
+            num_optional_if = 0
             if opt_arg_count:
-                num_optional_if = 0
-                code.putln("if (this->%s != NULL) {" % opt_arg_name)
+                opt_arg_guard = code.insertion_point()
+                code.increase_indent()
                 for opt_idx, optarg in enumerate(func_type.args[narg_count:]):
                     if optarg.type.is_cyp_class:
                         try_op = "Cy_TRYRLOCK" if optarg.type.is_const else "Cy_TRYWLOCK"
@@ -1445,7 +1449,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                         num_trylock += 1
                 for _ in range(num_optional_if):
                     code.putln("}")
-                code.putln("}") # The check for optional_args != NULL
+                if num_optional_if > 0:
+                    opt_arg_guard.putln("if (this->%s != NULL) {" % opt_arg_name)
+                    code.putln("}") # The check for optional_args != NULL
             for _ in range(num_trylock):
                 code.putln("}")
 
@@ -1462,16 +1468,19 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                         code.putln("if (%s > %s) {" % (trylock_result, num_unlock))
                         code.putln("Cy_UNLOCK(this->%s);" % narg.cname)
                         num_unlock += 1
-                if opt_arg_count:
+                if opt_arg_count and num_optional_if:
                     code.putln("if (this->%s != NULL) {" % opt_arg_name)
                     for opt_idx, optarg in enumerate(func_type.args[narg_count:]):
                         if optarg.type.is_cyp_class:
                             code.putln("if (%s > %s) {" % (trylock_result, num_unlock))
                             code.putln("Cy_UNLOCK(this->%s->%s);" % (opt_arg_name, func_type.opt_arg_cname(optarg.name)))
                             num_unlock += 1
+                    # Note: we do not respect the semantic order of end-blocks here for simplification purpose.
+                    # This one is for the "not NULL opt arg" check
+                    code.putln("}")
+                # These ones are all the checks for mandatory and optional arguments
                 for _ in range(num_unlock):
                     code.putln("}")
-                code.putln("}")
                 code.putln("return 0;")
                 code.putln("}")
 

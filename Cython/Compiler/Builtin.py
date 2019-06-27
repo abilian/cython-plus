@@ -412,6 +412,7 @@ def inject_acthon_interfaces(self):
     result_scope.var_entries.append(result_pushVoidStar_entry)
 
     result_getVoidStar_type = PyrexTypes.CFuncType(PyrexTypes.c_void_ptr_type, [], nogil = 1)
+    result_getVoidStar_type.is_const_method = 1
     result_getVoidStar_entry = result_scope.declare("getVoidStarResult", "getVoidStarResult",
         result_getVoidStar_type, None, "extern")
     result_getVoidStar_entry.is_cfunction = 1
@@ -427,6 +428,7 @@ def inject_acthon_interfaces(self):
     result_scope.var_entries.append(result_pushInt_entry)
 
     result_getInt_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type, [], nogil = 1)
+    result_getInt_type.is_const_method = 1
     result_getInt_entry = result_scope.declare("getIntResult", "getIntResult",
         result_getInt_type, None, "extern")
     result_getInt_entry.is_cfunction = 1
@@ -472,6 +474,7 @@ def inject_acthon_interfaces(self):
     sync_entry.is_type = 1
 
     sync_isActivable_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+    sync_isActivable_type.is_const_method = 1
     sync_isActivable_entry = sync_scope.declare("isActivable", "isActivable",
         sync_isActivable_type, None, "extern")
     sync_isActivable_entry.is_cfunction = 1
@@ -479,6 +482,7 @@ def inject_acthon_interfaces(self):
     sync_scope.var_entries.append(sync_isActivable_entry)
 
     sync_isCompleted_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+    sync_isCompleted_type.is_const_method = 1
     sync_isCompleted_entry = sync_scope.declare("isCompleted", "isCompleted",
         sync_isCompleted_type, None, "extern")
     sync_isCompleted_entry.is_cfunction = 1

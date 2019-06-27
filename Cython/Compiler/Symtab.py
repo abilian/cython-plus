@@ -2610,8 +2610,7 @@ class CppClassScope(Scope):
                                      pos, 'extern')
         wrapper_type.entry = wrapper_entry
         wrapper_entry.is_cfunction = 1
-        if defining:
-            wrapper_entry.func_cname = "%s::%s" % (class_type.empty_declaration_code(), wrapper_cname)
+        wrapper_entry.func_cname = "%s::%s" % (class_type.empty_declaration_code(), wrapper_cname)
         return wrapper_entry
 
     def declare_cfunction(self, name, type, pos,

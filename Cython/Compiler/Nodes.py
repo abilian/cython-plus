@@ -8464,8 +8464,10 @@ class LockCypclassNode(StatNode):
         self.obj.ensure_rhs_locked(env)
         if not hasattr(self.obj, 'entry'):
             error(self.pos, "The (un)locking target has no entry")
+            return
         if not self.obj.type.is_cyp_class:
             error(self.pos, "Cannot (un)lock a non-cypclass variable !")
+            return
 
         # FIXME: this is a bit redundant here
         self.obj.get_tracked_state(env)

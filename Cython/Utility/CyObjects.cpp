@@ -104,6 +104,7 @@
     struct ActhonQueueInterface : public CyObject {
       virtual void push(ActhonMessageInterface* message) = 0;
       virtual int activate() = 0;
+      virtual int is_empty() const = 0;
     };
 
     struct ActhonActivableClass : public CyObject {

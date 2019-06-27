@@ -552,6 +552,14 @@ def inject_acthon_interfaces(self):
     queue_activate_entry.is_variable = 1
     queue_scope.var_entries.append(queue_activate_entry)
 
+    queue_is_empty_type = PyrexTypes.CFuncType(PyrexTypes.c_bint_type, [], nogil = 1)
+    queue_is_empty_type.is_const_method = 1
+    queue_is_empty_entry = queue_scope.declare("is_empty", "is_empty",
+        queue_activate_type, None, "extern")
+    queue_is_empty_entry.is_cfunction = 1
+    queue_is_empty_entry.is_variable = 1
+    queue_scope.var_entries.append(queue_is_empty_entry)
+
     # cdef cypclass ActivableClass:
     #     ResultInterface (*_active_result_class)()
     #     QueueInterface _active_queue_class

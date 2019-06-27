@@ -1906,7 +1906,7 @@ class LocalScope(Scope):
         if type.is_pyobject:
             entry.init = "0"
         entry.is_arg = 1
-        if type.is_cyp_class and type.lock_mode == "autolock":
+        if type.is_cyp_class and type.lock_mode != "nolock":
             arg_lock_state = self.declare_tracked(entry)
             arg_lock_state.is_rlocked = type.is_const
             arg_lock_state.is_wlocked = not type.is_const

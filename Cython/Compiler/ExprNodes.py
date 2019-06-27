@@ -13901,6 +13901,12 @@ class CoerceToTempNode(CoercionNode):
     def may_be_none(self):
         return self.arg.may_be_none()
 
+    def ensure_rhs_locked(self, env, is_dereferenced = False):
+        self.arg.ensure_rhs_locked(env, is_dereferenced)
+
+    def ensure_lhs_locked(self, env, is_dereferenced = False):
+        self.arg.ensure_lhs_locked(env, is_dereferenced)
+
     def coerce_to_boolean(self, env):
         self.arg = self.arg.coerce_to_boolean(env)
         if self.arg.is_simple():

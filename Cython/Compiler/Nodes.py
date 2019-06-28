@@ -2643,7 +2643,8 @@ class CFuncDefNode(FuncDefNode):
             entry.is_variable = 1
             # Even if it is checklock it should be OK to mess with self without locking
             self_locking_state = self.local_scope.declare_tracked(entry)
-            self_locking_state.is_wlocked = True
+            self_locking_state.is_rlocked = self.is_const_method
+            self_locking_state.is_wlocked = not self.is_const_method
 
     def declare_cpdef_wrapper(self, env):
         if self.overridable:

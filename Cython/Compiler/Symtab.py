@@ -1908,7 +1908,8 @@ class LocalScope(Scope):
         entry.is_arg = 1
         if type.is_cyp_class and type.lock_mode == "autolock":
             arg_lock_state = self.declare_tracked(entry)
-            arg_lock_state.is_wlocked = True
+            arg_lock_state.is_rlocked = type.is_const
+            arg_lock_state.is_wlocked = not type.is_const
         #entry.borrowed = 1 # Not using borrowed arg refs for now
         self.arg_entries.append(entry)
         return entry

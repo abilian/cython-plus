@@ -2729,7 +2729,7 @@ class CppClassScope(Scope):
         sync_type = Builtin.acthon_sync_type
 
         activated_method_sync_attr_type = PyrexTypes.CFuncTypeArg(
-            "sync_method", sync_type, entry.pos, "sync_method")
+            "sync_method", PyrexTypes.CConstOrVolatileType(sync_type, is_const=1), entry.pos, "sync_method")
 
         activated_method_type = PyrexTypes.CFuncType(result_type,
             [activated_method_sync_attr_type] + entry.type.args, nogil=entry.type.nogil,

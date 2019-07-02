@@ -740,7 +740,7 @@ class Scope(object):
                     # Declare activated class
                     act_scope = CppClassScope("Activated", scope)
                     act_type = PyrexTypes.CypClassType(
-                        "Activated", act_scope, "Activated", None, templates = templates, lock_mode="nolock")
+                        "Activated", act_scope, "Activated", None, templates = templates, lock_mode=entry.type.lock_mode)
                     act_type.set_scope(act_scope)
                     act_type.namespace = entry.type
                     #scope.declare_cpp_class("Activated", act_scope, pos)

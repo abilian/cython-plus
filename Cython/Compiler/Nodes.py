@@ -5814,7 +5814,7 @@ class SingleAssignmentNode(AssignmentNode):
         self.lhs = self.lhs.analyse_target_types(env)
         self.lhs.gil_assignment_check(env)
         self.rhs.ensure_rhs_locked(env)
-        self.lhs.ensure_lhs_locked(env)
+        self.lhs.ensure_lhs_locked(env, is_top_lhs = True)
         unrolled_assignment = self.unroll_lhs(env)
         if unrolled_assignment:
             return unrolled_assignment
@@ -6038,7 +6038,7 @@ class CascadedAssignmentNode(AssignmentNode):
         for i, lhs in enumerate(self.lhs_list):
             lhs = self.lhs_list[i] = lhs.analyse_target_types(env)
             lhs.gil_assignment_check(env)
-            lhs.ensure_lhs_locked(env)
+            lhs.ensure_lhs_locked(env, is_top_lhs = True)
             lhs_types.add(lhs.type)
 
         rhs = self.rhs.analyse_types(env)

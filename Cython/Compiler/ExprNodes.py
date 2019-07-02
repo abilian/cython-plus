@@ -747,8 +747,6 @@ class ExprNode(Node):
         self.tracked_state = env.lookup_tracked(self.entry)
         if self.tracked_state is None:
             self.tracked_state = env.declare_tracked(self.entry)
-            if self.is_autolock():
-                env.declare_autolocked(self)
         self.was_locked = self.tracked_state.was_locked
         self.tracked_state.was_locked = True
 
@@ -785,13 +783,15 @@ class ExprNode(Node):
                 elif self.is_autolock():
                     self.set_autorlock(env)
 
-    def ensure_lhs_locked(self, env, is_dereferenced = False):
+    def ensure_lhs_locked(self, env, is_dereferenced = False, is_top_lhs = False):
         if not is_dereferenced:
             self.ensure_subexpr_lhs_locked(env)
         else:
             self.ensure_subexpr_rhs_locked(env)
         if not self.tracked_state:
             self.get_tracked_state(env)
+            if self.is_autolock() and is_top_lhs:
+                env.declare_autolocked(self)
         if is_dereferenced and self.tracked_state:
             if not self.is_lhs_locked(env):
                 if self.is_checklock():
@@ -7616,6 +7616,9 @@ class AttributeNode(ExprNode):
             # mirror condition for putting the memview incref here:
             code.put_xdecref_clear(self.result(), self.type, have_gil=True)
         else:
+            if self.is_temp and self.type.is_cyp_class and self.is_autolock()\
+               and self.tracked_state and (tracked_state.needs_rlock or tracked_state.needs_wlock):
+                code.putln("Cy_UNLOCK(%s);" % self.result())
             ExprNode.generate_disposal_code(self, code)
 
     def generate_assignment_code(self, rhs, code, overloaded_assignment=False,

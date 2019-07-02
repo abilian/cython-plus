@@ -5807,6 +5807,7 @@ class SimpleCallNode(CallNode):
     explicit_cpp_self = None
     rlocked = False
     wlocked = False
+    tracked_state = True # Something random, anything that is not None
 
     def compile_time_value(self, denv):
         function = self.function.compile_time_value(denv)

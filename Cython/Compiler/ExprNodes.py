@@ -735,6 +735,19 @@ class ExprNode(Node):
         self.tracked_state.is_wlocked = True
         self.tracked_state.needs_wlock = True
 
+    def needs_rlock(self):
+        if self.tracked_state is None:
+            return False
+        return self.tracked_state.needs_rlock
+
+    def needs_wlock(self):
+        if self.tracked_state is None:
+            return False
+        return self.tracked_state.needs_wlock
+
+    def get_was_locked(self):
+        return self.was_locked
+
     def is_autolock(self):
         return self.type.is_cyp_class and self.type.lock_mode == "autolock"
 
@@ -6179,6 +6192,12 @@ class SimpleCallNode(CallNode):
     def set_autowlock(self, env):
         self.wlocked = True
 
+    def needs_rlock(self):
+        return self.rlocked
+
+    def needs_wlock(self):
+        return self.wlocked
+
     def calculate_result_code(self):
         return self.c_call_code()
 
@@ -7669,9 +7688,9 @@ class AttributeNode(ExprNode):
                         rhs.move_result_rhs_as(self.ctype())))
                         #rhs.result()))
             if self.is_autolock():
-                if tracked_state.needs_wlock:
+                if self.needs_wlock():
                     code.putln("Cy_WLOCK(%s);" % select_code)
-                elif tracked_state.needs_rlock:
+                elif self.needs_rlock():
                     code.putln("Cy_RLOCK(%s);" % select_code)
 
             rhs.generate_post_assignment_code(code)
@@ -13905,11 +13924,16 @@ class CoerceToTempNode(CoercionNode):
     def may_be_none(self):
         return self.arg.may_be_none()
 
+    def get_was_locked(self):
+        return self.arg.get_was_locked()
+
     def ensure_rhs_locked(self, env, is_dereferenced = False):
         self.arg.ensure_rhs_locked(env, is_dereferenced)
+        self.tracked_state = self.arg.tracked_state
 
     def ensure_lhs_locked(self, env, is_dereferenced = False):
         self.arg.ensure_lhs_locked(env, is_dereferenced)
+        self.tracked_state = self.arg.tracked_state
 
     def coerce_to_boolean(self, env):
         self.arg = self.arg.coerce_to_boolean(env)

@@ -321,7 +321,7 @@ class ExprNode(Node):
     result_is_used = True
     is_numpy_attribute = False
     tracked_state = None
-    was_locked = True
+    was_locked = False
 
     #  The Analyse Expressions phase for expressions is split
     #  into two sub-phases:
@@ -760,6 +760,8 @@ class ExprNode(Node):
         self.tracked_state = env.lookup_tracked(self.entry)
         if self.tracked_state is None:
             self.tracked_state = env.declare_tracked(self.entry)
+            if self.is_autolock() and self.entry.is_variable:
+                env.declare_autolocked(self)
         self.was_locked = self.tracked_state.was_locked
         self.tracked_state.was_locked = True
 
@@ -804,7 +806,8 @@ class ExprNode(Node):
         if not self.tracked_state:
             self.get_tracked_state(env)
             if self.is_autolock() and is_top_lhs:
-                env.declare_autolocked(self)
+                #env.declare_autolocked(self)
+                self.tracked_as_lhs = True
         if is_dereferenced and self.tracked_state:
             if not self.is_lhs_locked(env):
                 if self.is_checklock():
@@ -2421,12 +2424,6 @@ class NameNode(AtomicExprNode):
 
         elif entry.type.is_cyp_class:
             code.put_cygotref(self.result())
-            if not self.was_locked and self.is_autolock():
-                tracked_state = self.tracked_state
-                if tracked_state.needs_wlock:
-                    code.putln("Cy_WLOCK(%s);" % self.result())
-                elif tracked_state.needs_rlock:
-                    code.putln("Cy_RLOCK(%s);" % self.result())
             #pass
             # code.putln(entry.cname)
         elif entry.is_local or entry.in_closure or entry.from_closure or entry.type.is_memoryviewslice:
@@ -7615,12 +7612,6 @@ class AttributeNode(ExprNode):
                                         '"Memoryview is not initialized");'
                         '%s'
                     '}' % (self.result(), code.error_goto(self.pos)))
-        elif self.is_autolock():
-            if not self.was_locked:
-                if self.tracked_state.needs_wlock:
-                    code.putln("Cy_WLOCK(%s);" % self.result())
-                elif self.tracked_state.needs_rlock:
-                    code.putln("Cy_RLOCK(%s);" % self.result())
         else:
             # result_code contains what is needed, but we may need to insert
             # a check and raise an exception
@@ -7635,9 +7626,6 @@ class AttributeNode(ExprNode):
             # mirror condition for putting the memview incref here:
             code.put_xdecref_clear(self.result(), self.type, have_gil=True)
         else:
-            if self.is_temp and self.type.is_cyp_class and self.is_autolock()\
-               and self.tracked_state and (tracked_state.needs_rlock or tracked_state.needs_wlock):
-                code.putln("Cy_UNLOCK(%s);" % self.result())
             ExprNode.generate_disposal_code(self, code)
 
     def generate_assignment_code(self, rhs, code, overloaded_assignment=False,

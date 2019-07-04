@@ -6359,6 +6359,7 @@ class DelStatNode(StatNode):
 
     child_attrs = ["args"]
     ignore_nonexisting = False
+    was_locked = False
 
     def analyse_declarations(self, env):
         for arg in self.args:
@@ -6373,6 +6374,8 @@ class DelStatNode(StatNode):
                     error(arg.pos, "Deletion of global C variable")
             elif arg.type.is_ptr and arg.type.base_type.is_cpp_class or arg.type.is_cyp_class:
                 self.cpp_check(env)
+                if arg.type.is_cyp_class:
+                    self.was_locked = arg.needs_rlock() or arg.needs_wlock()
             elif arg.type.is_cpp_class:
                 error(arg.pos, "Deletion of non-heap C++ object")
             elif arg.is_subscript and arg.base.type is Builtin.bytearray_type:
@@ -6404,7 +6407,7 @@ class DelStatNode(StatNode):
                 arg.free_temps(code)
             elif arg.type.is_cyp_class:
                 arg.generate_evaluation_code(code)
-                if arg.type.lock_mode == "autolock":
+                if arg.type.lock_mode == "autolock" and self.was_locked:
                     code.putln("Cy_UNLOCK(%s);" % arg.result())
                 code.putln("Cy_DECREF(%s);" % arg.result())
                 code.putln("%s = NULL;" % arg.result())

@@ -1518,6 +1518,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             # Destructor
             code.putln("virtual ~%s() {" % class_name)
+            code.putln("Cy_DECREF(this->%s);" % target_object_cname)
             put_cypclass_op_on_narg_optarg(lambda _: "Cy_DECREF", reified_function_entry.type, Naming.optional_args_cname, code)
             if opt_arg_count:
                 code.putln("free(this->%s);" % Naming.optional_args_cname)

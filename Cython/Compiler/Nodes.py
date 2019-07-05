@@ -6354,6 +6354,7 @@ class DelStatNode(StatNode):
             elif arg.type.is_cyp_class:
                 arg.generate_evaluation_code(code)
                 code.putln("Cy_DECREF(%s);" % arg.result())
+                code.putln("%s = NULL;" % arg.result())
                 arg.generate_disposal_code(code)
             # else error reported earlier
 

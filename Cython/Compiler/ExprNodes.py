@@ -743,10 +743,10 @@ class ExprNode(Node):
         return self.tracked_state.needs_wlock
 
     def is_autolock(self):
-        return self.type.is_cyp_class and self.type.lock_mode == "autolock"
+        return self.type is not None and self.type.is_cyp_class and self.type.lock_mode == "autolock"
 
     def is_checklock(self):
-        return self.type.is_cyp_class and self.type.lock_mode == "checklock"
+        return self.type is not None and self.type.is_cyp_class and self.type.lock_mode == "checklock"
 
     def get_tracked_state(self, env):
         if not hasattr(self, 'entry') or not self.entry or not self.entry.type.is_cyp_class:
@@ -758,14 +758,14 @@ class ExprNode(Node):
                 env.declare_autolocked(self)
 
     def is_rhs_locked(self, env):
-        if not hasattr(self, 'entry') or not self.entry.type.is_cyp_class:
+        if not hasattr(self, 'entry') or self.entry.type is None or not self.entry.type.is_cyp_class:
             # These nodes couldn't be tracked (because it is for example a constant),
             # so we let them pass silently
             return True
         return self.tracked_state.is_rlocked or self.tracked_state.is_wlocked
 
     def is_lhs_locked(self, env):
-        if not hasattr(self, 'entry') or not self.entry.type.is_cyp_class:
+        if not hasattr(self, 'entry') or self.entry.type is None or not self.entry.type.is_cyp_class:
             # These nodes couldn't be tracked (because it is for example a constant),
             # so we let them pass silently
             return True

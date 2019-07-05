@@ -321,7 +321,6 @@ class ExprNode(Node):
     result_is_used = True
     is_numpy_attribute = False
     tracked_state = None
-    was_locked = False
 
     #  The Analyse Expressions phase for expressions is split
     #  into two sub-phases:
@@ -726,12 +725,10 @@ class ExprNode(Node):
         error(self.pos, "Address is not constant")
 
     def set_autorlock(self, env):
-        self.tracked_state.was_locked = True
         self.tracked_state.is_rlocked = True
         self.tracked_state.needs_rlock = True
 
     def set_autowlock(self, env):
-        self.tracked_state.was_locked = True
         self.tracked_state.is_wlocked = True
         self.tracked_state.needs_wlock = True
 
@@ -744,9 +741,6 @@ class ExprNode(Node):
         if self.tracked_state is None:
             return False
         return self.tracked_state.needs_wlock
-
-    def get_was_locked(self):
-        return self.was_locked
 
     def is_autolock(self):
         return self.type.is_cyp_class and self.type.lock_mode == "autolock"
@@ -762,8 +756,6 @@ class ExprNode(Node):
             self.tracked_state = env.declare_tracked(self.entry)
             if self.is_autolock() and self.entry.is_variable:
                 env.declare_autolocked(self)
-        self.was_locked = self.tracked_state.was_locked
-        self.tracked_state.was_locked = True
 
     def is_rhs_locked(self, env):
         if not hasattr(self, 'entry') or not self.entry.type.is_cyp_class:
@@ -13911,9 +13903,6 @@ class CoerceToTempNode(CoercionNode):
 
     def may_be_none(self):
         return self.arg.may_be_none()
-
-    def get_was_locked(self):
-        return self.arg.get_was_locked()
 
     def ensure_rhs_locked(self, env, is_dereferenced = False):
         self.arg.ensure_rhs_locked(env, is_dereferenced)

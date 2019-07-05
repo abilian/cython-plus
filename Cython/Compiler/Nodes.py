@@ -2071,7 +2071,7 @@ class FuncDefNode(StatNode, BlockNode):
             code.funcstate.gil_owned = False
 
         for node in lenv.autolocked_nodes:
-            if node.entry.is_variable and not node.entry.is_local and (node.tracked_state.needs_wlock or node.tracked_state.needs_rlock):
+            if node.entry.is_variable and not node.entry.is_local and (node.needs_wlock() or node.needs_rlock()):
                 node_result = node.result()
                 code.putln("if (%s != NULL)" % node_result)
                 if node.needs_wlock():
@@ -2248,7 +2248,7 @@ class FuncDefNode(StatNode, BlockNode):
             # which leads to a dangling lock on the previous reference
             # (and attempt to unlock a non-locked ref).
 
-            if not node.get_was_locked() and (node.tracked_state.needs_wlock or node.tracked_state.needs_rlock):
+            if node.needs_wlock() or node.needs_rlock():
                 code.putln("Cy_UNLOCK(%s);" % node.result())
 
         for entry in lenv.var_entries:

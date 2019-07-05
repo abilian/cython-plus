@@ -162,7 +162,6 @@ class Entry(object):
     # is_rlocked       boolean    Is locked with a read lock (used for cypclass)
     # needs_rlock      boolean    The entry needs a read lock (used in autolock mode)
     # needs_wlock      boolean    The entry needs a write lock (used in autolock mode)
-    # was_locked       boolean    Indicates to nodes falling through that the first lock already took place
 
     # TODO: utility_code and utility_code_definition serves the same purpose...
 
@@ -238,7 +237,6 @@ class Entry(object):
     is_rlocked = False
     needs_rlock = False
     needs_wlock = False
-    was_locked = False
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name
@@ -321,7 +319,6 @@ class TrackedLockedEntry:
         self.is_rlocked = False
         self.needs_wlock = False
         self.needs_rlock = False
-        self.was_locked = False
 
 class Scope(object):
     # name              string             Unqualified name

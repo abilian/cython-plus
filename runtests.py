@@ -295,6 +295,14 @@ def update_cpp11_extension(ext):
 
     return EXCLUDE_EXT
 
+def update_pthread_extension(ext):
+    """
+      use pthread to link and compile on platform which supports it
+    """
+    if sys.platform in ('linux', 'linux2', 'freebsd', 'netbsd', 'openbsd'):
+        # FIXME: this check on the platform is hacky
+        ext.extra_compile_args.append("-pthread")
+        ext.extra_link_args.append("-pthread")
 
 def get_cc_version(language):
     """
@@ -379,6 +387,7 @@ EXT_EXTRAS = {
     'tag:openmp': update_openmp_extension,
     'tag:cpp11': update_cpp11_extension,
     'tag:trace' : update_linetrace_extension,
+    'tag:pthread': update_pthread_extension,
     'tag:bytesformat':  exclude_extension_in_pyver((3, 3), (3, 4)),  # no %-bytes formatting
     'tag:no-macos':  exclude_extension_on_platform('darwin'),
     'tag:py3only':  exclude_extension_in_pyver((2, 7)),

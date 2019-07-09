@@ -1,5 +1,5 @@
 # mode: error
-# tag: cpp, cpp11
+# tag: cpp, cpp11, pthread
 # cython: experimental_cpp_class_def=True, language_level=2
 
 def GILHoldingFunction():

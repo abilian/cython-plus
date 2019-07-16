@@ -99,6 +99,7 @@
       virtual int activate() = 0;
       ActhonMessageInterface(ActhonSyncInterface* sync_method,
         ActhonResultInterface* result_object);
+      virtual ~ActhonMessageInterface();
     };
 
     struct ActhonQueueInterface : public CyObject {
@@ -410,6 +411,12 @@ ActhonMessageInterface::ActhonMessageInterface(ActhonSyncInterface* sync_method,
 {
     Cy_INCREF(this->_sync_method);
     Cy_INCREF(this->_result);
+}
+
+ActhonMessageInterface::~ActhonMessageInterface()
+{
+    Cy_XDECREF(this->_sync_method);
+    Cy_XDECREF(this->_result);
 }
 
 ActhonActivableClass::ActhonActivableClass(ActhonQueueInterface * queue_object, ActhonResultInterface *(*result_constructor)(void))

@@ -1236,8 +1236,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                       )
         ))
         for reifying_class_entry in entry.type.scope.reifying_entries:
-            code.putln("// generating reified of %s" % reifying_class_entry.name)
             reified_function_entry = reifying_class_entry.reified_entry
+            code.putln("// generating reified of %s" % reified_function_entry.name)
             reified_arg_cname_list = []
             reified_arg_decl_list = []
 

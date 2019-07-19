@@ -3026,6 +3026,8 @@ class NextNode(AtomicExprNode):
 
     def generate_result_code(self, code):
         self.iterator.generate_iter_next_result_code(self.result(), code)
+        if self.type.is_cyp_class:
+            code.put_cyincref(self.result())
 
 
 class AsyncIteratorNode(ExprNode):

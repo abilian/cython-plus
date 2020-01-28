@@ -125,15 +125,30 @@
     }
 
     static inline void _Cy_RLOCK(CyObject *op) {
-        op->CyObject_RLOCK();
+        if (op != NULL) {
+            op->CyObject_RLOCK();
+        }
+        else {
+            fprintf(stderr, "ERROR: trying to read lock NULL !\n");
+        }
     }
 
     static inline void _Cy_WLOCK(CyObject *op) {
-        op->CyObject_WLOCK();
+        if (op != NULL) {
+            op->CyObject_WLOCK();
+        }
+        else {
+            fprintf(stderr, "ERROR: trying to write lock NULL !\n");
+        }
     }
 
     static inline void _Cy_UNLOCK(CyObject *op) {
-        if (op != NULL) op->CyObject_UNLOCK();
+        if (op != NULL) {
+            op->CyObject_UNLOCK();
+        }
+        else {
+            fprintf(stderr, "ERROR: trying to unlock NULL !\n");
+        }
     }
 
     static inline int _Cy_TRYRLOCK(CyObject *op) {

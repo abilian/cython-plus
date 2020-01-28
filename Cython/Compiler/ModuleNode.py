@@ -1267,7 +1267,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             code.putln("/* Push message in the queue */")
             code.putln("if (this->%s != NULL) {" % queue_attr_cname)
+            code.putln("Cy_WLOCK(%s);" % queue_attr_cname)
             code.putln("this->%s->push(message);" % queue_attr_cname)
+            code.putln("Cy_UNLOCK(%s);" % queue_attr_cname)
             code.putln("} else {")
             code.putln("/* We should definitely shout here */")
             code.putln('fprintf(stderr, "Acthon error: No queue to push to for %s remote call !\\n");' % reified_function_entry.name)

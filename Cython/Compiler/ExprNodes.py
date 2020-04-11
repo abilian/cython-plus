@@ -11676,6 +11676,8 @@ class NumBinopNode(BinopNode):
             if cpp_type is None and (type2.is_cpp_class or type2.is_ptr):
                 cpp_type = type2.find_cpp_operation_type(operator, type1)
             # FIXME: do we need to handle other cases here?
+            if self.inplace and type1.is_subclass(cpp_type):
+                cpp_type = type1
             return cpp_type
 
     def may_be_none(self):

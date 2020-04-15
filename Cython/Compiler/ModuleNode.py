@@ -911,6 +911,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 for wrapper_entry in wrapper.all_alternatives():
                     if wrapper_entry.used or entry.type.templates:
                         self.generate_cyp_class_wrapper_definition(entry.type, wrapper_entry, constructor, new, alloc, code)
+                # Generate deferred definitions for any nested types
+                self.generate_cyp_class_deferred_definitions(scope.sue_entries, code)
 
     def generate_gcc33_hack(self, env, code):
         # Workaround for spurious warning generation in gcc 3.3
@@ -1009,7 +1011,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.put(" : public %s" % base_class_decl)
             code.putln(" {")
             self.generate_type_header_code(scope.type_entries, code)
-            self.generate_cyp_class_deferred_definitions(scope.sue_entries, code)
             py_attrs = [e for e in scope.entries.values()
                         if e.type.is_pyobject and not e.is_inherited]
             cypclass_attrs = [e for e in scope.var_entries

@@ -6211,7 +6211,12 @@ class SimpleCallNode(CallNode):
 
         if func_type.optional_arg_count:
             if expected_nargs == actual_nargs:
-                optional_args = 'NULL'
+                # Cast NULL to optional struct type to avoid ambiguous calls
+                opt_struct_type = func_type.op_arg_struct.base_type
+                if opt_struct_type.typedef_flag:
+                    optional_args = '(%s *)NULL' % opt_struct_type.cname
+                else:
+                    optional_args = '(%s %s *)NULL' % (opt_struct_type.kind, opt_struct_type.cname)
             else:
                 optional_args = "&%s" % self.opt_arg_struct
             arg_list_code.append(optional_args)

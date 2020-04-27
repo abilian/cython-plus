@@ -514,7 +514,7 @@ class Scope(object):
 
             # Reject redeclared C++ functions only if they have the same type signature.
             cpp_override_allowed = False
-            if type.is_cfunction and old_entry.type.is_cfunction and self.is_cpp_class_scope:
+            if type.is_cfunction and old_entry.type.is_cfunction and self.is_cpp():
                 for index, alt_entry in enumerate(old_entry.all_alternatives()):
                     if type.compatible_signature_with(alt_entry.type):
                         if alt_entry.is_inherited:

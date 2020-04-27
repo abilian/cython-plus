@@ -1146,7 +1146,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 alloc_entry = scope.lookup_here("<alloc>")
                 if alloc_entry.is_builtin_cmethod:
                     code.putln("// Generating default __alloc__ function (used for __new__ calls)")
-                    code.putln("static %s { return new %s(); }" % (alloc_entry.type.declaration_code(alloc_entry.cname), type.declaration_code("", deref=1)))
+                    code.putln("static %s { return new %s(); }" %
+                               (alloc_entry.type.declaration_code(alloc_entry.cname),
+                               type.declaration_code("", deref=1)))
             code.putln("};")
 
         if type.is_cyp_class:
@@ -1184,11 +1186,17 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("if (%s->%sn <= %s) {" %
                        (Naming.optional_args_cname,
                         Naming.pyrex_prefix, i))
-            code.putln("activated_instance = new %s::Activated(%s);" % (entry.type.empty_declaration_code(), ", ".join(activated_class_constructor_optargs_list + activated_class_constructor_defaultargs_list[i:])))
+            code.putln("activated_instance = new %s::Activated(%s);" %
+                       (entry.type.empty_declaration_code(),
+                       ", ".join(activated_class_constructor_optargs_list + activated_class_constructor_defaultargs_list[i:])))
             code.putln("} else {")
-            activated_class_constructor_optargs_list.append("%s->%s" % (Naming.optional_args_cname, dunder_activate_entry.type.opt_arg_cname(arg.name)))
+            activated_class_constructor_optargs_list.append("%s->%s" %
+                                                            (Naming.optional_args_cname,
+                                                            dunder_activate_entry.type.opt_arg_cname(arg.name)))
         # We're in the final else clause, corresponding to all optional arguments specified)
-        code.putln("activated_instance = new %s::Activated(%s);" % (entry.type.empty_declaration_code(), ", ".join(activated_class_constructor_optargs_list)))
+        code.putln("activated_instance = new %s::Activated(%s);" %
+                   (entry.type.empty_declaration_code(),
+                   ", ".join(activated_class_constructor_optargs_list)))
         for _ in dunder_activate_entry.type.args:
             code.putln("}")
         code.putln("}")
@@ -1220,7 +1228,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         activable_bases_inheritance_list = ["public %s::Activated" % cname for cname in activable_bases_cnames]
         if activable_bases_cnames:
             base_classes_code = ", ".join(activable_bases_inheritance_list)
-            initialize_code = ", ".join(["%s::Activated(passive_object, active_queue, active_result_constructor)" % cname for cname in activable_bases_cnames])
+            initialize_code = ", ".join([
+                "%s::Activated(passive_object, active_queue, active_result_constructor)" % cname
+                for cname in activable_bases_cnames
+            ])
         else:
             base_classes_code = "public ActhonActivableClass"
             initialize_code = "ActhonActivableClass(active_queue, active_result_constructor)"
@@ -1335,7 +1346,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("struct %s : public %s {" % (reifying_class_full_name, message_base_type.empty_declaration_code()))
             # Declaring target object & reified method arguments
             code.putln("%s;" % target_object_code)
-            constructor_args_decl_list = [target_object_code, sync_type.declaration_code(sync_arg_name), result_type.declaration_code(result_arg_name)]
+            constructor_args_decl_list = [
+                target_object_code,
+                sync_type.declaration_code(sync_arg_name),
+                result_type.declaration_code(result_arg_name)
+            ]
             initialized_args_list = [target_object_cname]
             opt_arg_count = reified_function_entry.type.optional_arg_count
 
@@ -1410,7 +1425,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             # because the mode is used for direct calls, when the user have the possibility
             # to manually lock or let the compiler handle it.
             # Here, the user cannot lock manually, so we're taking the lock automatically.
-            #put_cypclass_op_on_narg_optarg(lambda arg: "Cy_RLOCK" if arg.type.is_const else "Cy_WLOCK", reified_function_entry.type, Naming.optional_args_cname, code)
+            #put_cypclass_op_on_narg_optarg(lambda arg: "Cy_RLOCK" if arg.type.is_const else "Cy_WLOCK",
+            #                               reified_function_entry.type, Naming.optional_args_cname, code)
 
             func_type = reified_function_entry.type
             opt_arg_name = Naming.optional_args_cname

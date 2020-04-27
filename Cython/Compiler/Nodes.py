@@ -656,7 +656,9 @@ class CFuncDeclaratorNode(CDeclaratorNode):
         for i, arg_node in enumerate(self.args):
             name_declarator, type = arg_node.analyse(
                 env, nonempty=nonempty,
-                is_self_arg=(i == 0 and (env.is_c_class_scope or env.is_cpp_class_scope and env.parent_type.is_cyp_class) and 'staticmethod' not in env.directives))
+                is_self_arg=(i == 0
+                             and (env.is_c_class_scope or  env.is_cpp_class_scope and env.parent_type.is_cyp_class)
+                             and 'staticmethod' not in env.directives))
             name = name_declarator.name
             if name in directive_locals:
                 type_node = directive_locals[name]
@@ -1519,7 +1521,8 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                 error(self.pos, "Required template parameters must precede optional template parameters.")
         self.entry = env.declare_cpp_class(
             self.name, None, self.pos, self.cname,
-            base_classes=[], visibility=self.visibility, templates=template_types, cypclass=self.cypclass, lock_mode=self.lock_mode, activable=self.activable)
+            base_classes=[], visibility=self.visibility, templates=template_types,
+            cypclass=self.cypclass, lock_mode=self.lock_mode, activable=self.activable)
 
     def analyse_declarations(self, env):
         if self.templates is None:

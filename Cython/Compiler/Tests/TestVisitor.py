@@ -16,6 +16,7 @@ class TestMethodDispatcherTransform(TransformTest):
 
             def fake_module(node):
                 scope = ModuleScope('test', None, None)
+                scope.cpp = False
                 return ModuleNode(node.pos, doc=None, body=node,
                                   scope=scope, full_module_name='test',
                                   directive_comments={})

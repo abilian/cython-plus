@@ -5795,6 +5795,14 @@ class SimpleCallNode(CallNode):
     #  wrapper_call   bool                 used internally
     #  has_optional_args   bool            used internally
     #  nogil          bool                 used internally
+    #
+    #  analysed       bool                 used internally
+    #  overflowcheck  bool                 used internally
+    #  explicit_cpp_self   bool            used internally
+    #  rlocked        bool                 used internally
+    #  wlocked        bool                 used internally
+    #  tracked_state  bool                 used internally
+    #  is_in_cpp      bool                 used internally
 
     subexprs = ['self', 'coerced_self', 'function', 'args', 'arg_tuple']
 
@@ -5810,6 +5818,7 @@ class SimpleCallNode(CallNode):
     rlocked = False
     wlocked = False
     tracked_state = True # Something random, anything that is not None
+    is_in_cpp = False
 
     def compile_time_value(self, denv):
         function = self.function.compile_time_value(denv)
@@ -5850,6 +5859,7 @@ class SimpleCallNode(CallNode):
         return self.args, None
 
     def analyse_types(self, env):
+        self.is_in_cpp = env.is_cpp()
         if self.analyse_as_type_constructor(env):
             return self
         if self.analysed:
@@ -6211,12 +6221,11 @@ class SimpleCallNode(CallNode):
 
         if func_type.optional_arg_count:
             if expected_nargs == actual_nargs:
-                # Cast NULL to optional struct type to avoid ambiguous calls
-                opt_struct_type = func_type.op_arg_struct.base_type
-                if opt_struct_type.typedef_flag:
-                    optional_args = '(%s *)NULL' % opt_struct_type.cname
+                # Cast NULL to optional struct type to avoid ambiguous calls in C++
+                if self.is_in_cpp:
+                    optional_args = '(%s *)NULL' % func_type.op_arg_struct.base_type.cname
                 else:
-                    optional_args = '(%s %s *)NULL' % (opt_struct_type.kind, opt_struct_type.cname)
+                    optional_args = 'NULL'
             else:
                 optional_args = "&%s" % self.opt_arg_struct
             arg_list_code.append(optional_args)

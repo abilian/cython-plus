@@ -5802,7 +5802,6 @@ class SimpleCallNode(CallNode):
     #  rlocked        bool                 used internally
     #  wlocked        bool                 used internally
     #  tracked_state  bool                 used internally
-    #  is_in_cpp      bool                 used internally
 
     subexprs = ['self', 'coerced_self', 'function', 'args', 'arg_tuple']
 
@@ -5818,7 +5817,6 @@ class SimpleCallNode(CallNode):
     rlocked = False
     wlocked = False
     tracked_state = True # Something random, anything that is not None
-    is_in_cpp = False
 
     def compile_time_value(self, denv):
         function = self.function.compile_time_value(denv)
@@ -6222,6 +6220,7 @@ class SimpleCallNode(CallNode):
         if func_type.optional_arg_count:
             if expected_nargs == actual_nargs:
                 # Cast NULL to optional struct type to avoid ambiguous calls in C++
+                # is_in_cpp is set in above analyse_types, called earlier in the compilation process
                 if self.is_in_cpp:
                     optional_args = '(%s *)NULL' % func_type.op_arg_struct.base_type.cname
                 else:

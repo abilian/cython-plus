@@ -56,7 +56,7 @@
             int trywlock();
     };
 
-    class CyObject {
+    class CyObject : public PyObject {
         private:
           CyObject_ATOMIC_REFCOUNT_TYPE ob_refcnt;
           //pthread_rwlock_t ob_lock;

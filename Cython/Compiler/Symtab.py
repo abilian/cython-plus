@@ -345,6 +345,7 @@ class Scope(object):
     # pyfunc_entries    [Entry]            Python function entries
     # cfunc_entries     [Entry]            C function entries
     # c_class_entries   [Entry]            All extension type entries
+    # cypclass_entries  [Entry]            All cypclass entries
     # autolocked_nodes  [ExprNodes]        All autolocked nodes that needs unlocking
     # cname_to_entry    {string : Entry}   Temp cname to entry mapping
     # return_type       PyrexType or None  Return type of function owning scope
@@ -406,6 +407,7 @@ class Scope(object):
         self.pyfunc_entries = []
         self.cfunc_entries = []
         self.c_class_entries = []
+        self.cypclass_entries = []
         self.defined_c_classes = []
         self.autolocked_nodes = []
         self.imported_c_classes = {}
@@ -738,6 +740,8 @@ class Scope(object):
             entry = self.declare_type(name, type, pos, cname,
                 visibility = visibility, defining = scope is not None)
             self.sue_entries.append(entry)
+            if cypclass:
+                self.cypclass_entries.append(entry)
         else:
             if not (entry.is_type and entry.type.is_cpp_class):
                 error(pos, "'%s' redeclared " % name)

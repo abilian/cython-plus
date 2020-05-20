@@ -58,11 +58,11 @@
 
     class CyObject : public PyObject {
         private:
-          CyObject_ATOMIC_REFCOUNT_TYPE ob_refcnt;
+          CyObject_ATOMIC_REFCOUNT_TYPE nogil_ob_refcnt;
           //pthread_rwlock_t ob_lock;
           RecursiveUpgradeableRWLock ob_lock;
         public:
-          CyObject(): ob_refcnt(1) {}
+          CyObject(): nogil_ob_refcnt(1) {}
           virtual ~CyObject() {}
           void CyObject_INCREF();
           int CyObject_DECREF();
@@ -383,12 +383,12 @@ int RecursiveUpgradeableRWLock::trywlock() {
 
 void CyObject::CyObject_INCREF()
 {
-  atomic_fetch_add(&(this->ob_refcnt), 1);
+  atomic_fetch_add(&(this->nogil_ob_refcnt), 1);
 }
 
 int CyObject::CyObject_DECREF()
 {
-  if (atomic_fetch_sub(&(this->ob_refcnt), 1) == 1) {
+  if (atomic_fetch_sub(&(this->nogil_ob_refcnt), 1) == 1) {
     delete this;
     return 1;
   }

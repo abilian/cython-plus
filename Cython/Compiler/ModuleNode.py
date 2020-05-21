@@ -680,6 +680,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             modulecode.putln("")
             modulecode.putln("/* Module declarations from %s */" % module.qualified_name.as_c_string_literal())
             self.generate_c_class_declarations(module, modulecode, defined_here, globalstate)
+            self.generate_cypclass_typeobj_declarations(module, modulecode, defined_here)
             self.generate_cvariable_declarations(module, modulecode, defined_here)
             self.generate_cfunction_declarations(module, modulecode, defined_here)
 
@@ -1911,6 +1912,16 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                         "Py_VISIT(traverse_module_state->%s);" % (
                         entry.type.typeobj_cname))
         code.putln("#endif")
+    
+    def generate_cypclass_typeobj_declarations(self, env, code, definition):
+        for entry in env.cypclass_entries:
+            if definition or entry.defined_in_pxd:
+                code.putln("static PyTypeObject *%s = 0;" % (
+                    entry.type.typeptr_cname))
+            cyp_scope = entry.type.scope
+            if cyp_scope:
+                # generate declarations for nested cycplasses
+                self.generate_cypclass_typeobj_declarations(cyp_scope, code, definition)
 
     def generate_cvariable_declarations(self, env, code, definition):
         if env.is_cython_builtin:

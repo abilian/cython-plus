@@ -4181,6 +4181,7 @@ class CypClassType(CppClassType):
         self.lock_mode = lock_mode if lock_mode else "autolock"
         self.activable = activable
         self._mro = None
+        self.typeptr_cname = None # set externally
 
     # Return the MRO for this cypclass
     # Compute all the mro needed when a previous computation is not available
@@ -4202,6 +4203,7 @@ class CypClassType(CppClassType):
         self._mro = mro_C3_merge(inputs)
         return self._mro
 
+    
     def empty_declaration_code(self):
         if self._empty_declaration is None:
             self._empty_declaration = self.declaration_code('', deref=1)

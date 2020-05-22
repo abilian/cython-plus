@@ -24,17 +24,25 @@
 #
 
 
+def cypclass_iter(scope):
+    """
+        Recursively iterate over nested cypclasses
+    """
+
+    for entry in scope.cypclass_entries:
+        yield entry
+        cypclass_scope = entry.type.scope
+        if cypclass_scope:
+            for e in cypclass_iter(cypclass_scope):
+                yield e
+
 def generate_cypclass_typeobj_declarations(env, code, definition):
     """
         Generate declarations of global pointers to the PyTypeObject for each cypclass
     """
 
-    for entry in env.cypclass_entries:
+    for entry in cypclass_iter(env):
         if definition or entry.defined_in_pxd:
             code.putln("static PyTypeObject *%s = 0;" % (
                 entry.type.typeptr_cname))
-        cyp_scope = entry.type.scope
-        if cyp_scope:
-            # generate declarations for nested cycplasses
-            generate_cypclass_typeobj_declarations(cyp_scope, code, definition)
 

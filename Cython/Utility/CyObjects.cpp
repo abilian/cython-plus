@@ -159,6 +159,25 @@
         return op->CyObject_TRYWLOCK();
     }
 
+    /*
+     * Cast from PyObject to CyObject:
+     *  - borrow an atomic reference
+     *  - return a new Python reference
+     * 
+     * Note: an optimisation could be to steal a reference but only decrement
+     * when Python already has a reference, because calls to this function
+     * are likely (certain even?) to be followed by a Cy_DECREF; stealing the
+     * reference would mean that Cy_DECREF should not be called after this.
+     */
+    static inline PyObject* __Pyx_PyObject_FromCyObject(CyObject * ob) {
+        // artificial atomic increment the first time Python gets a reference
+        if (ob->ob_refcnt == 0)
+            ob->CyObject_INCREF();
+        // return a new Python reference
+        Py_INCREF((PyObject *)ob);
+        return (PyObject *)ob;
+    }
+
     /* Cast argument to CyObject* type. */
     #define _CyObject_CAST(op) op
 

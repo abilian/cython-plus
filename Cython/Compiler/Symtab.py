@@ -459,6 +459,9 @@ class Scope(object):
             return punycodify_name("%s%s%s" % (prefix, self.scope_prefix, name))
         else:
             return self.parent_scope.mangle(prefix, self.name)
+    
+    # mangle cypclass related C names in the global namespace
+    c_mangle = mangle
 
     def mangle_internal(self, name):
         # Mangle an internal name so as not to clash with any
@@ -734,7 +737,7 @@ class Scope(object):
             if cypclass:
                 type = PyrexTypes.CypClassType(
                     name, scope, cname, base_classes, templates = templates, lock_mode=lock_mode, activable=activable)
-                type.typeptr_cname = self.mangle(Naming.typeptr_prefix, cname)
+                type.typeptr_cname = self.c_mangle(Naming.typeptr_prefix, name)
             else:
                 type = PyrexTypes.CppClassType(
                     name, scope, cname, base_classes, templates = templates)
@@ -2734,6 +2737,13 @@ class CppClassScope(Scope):
         self.inherited_var_entries = []
         self.inherited_type_entries = []
         self.reifying_entries = []
+        # _scope_prefix is used interally for mangling in cases where c++ namespaces aren't used
+        # it is used in conjunction with 'c_mangle'
+        if (outer_scope):
+            outer_prefix = outer_scope._scope_prefix if outer_scope.is_cpp_class_scope else outer_scope.scope_prefix
+            self._scope_prefix = outer_prefix + self.scope_prefix
+        else:
+            self._scope_prefix = self.scope_prefix
         if templates is not None:
             for T in templates:
                 template_entry = self.declare(
@@ -3097,6 +3107,20 @@ class CppClassScope(Scope):
                 if as_operator_name:
                     name = 'operator ' + as_operator_name
         return super(CppClassScope,self).lookup_here(name)
+    
+    # mangle names in the global namespace.
+    # Normally 'mangle' would be used for this, but CppClassScope doesn't
+    # have a parent_scope, and therefore no qualified 'scope_prefix':
+    # unneeded thanks to C++ namespaces.
+    # '_scope_prefix' is used instead to use a scope-qualified name
+    # only when required.
+    def c_mangle(self, prefix, name = None):
+        if name:
+            return "%s%s%s" % (prefix, self._scope_prefix, name)
+        elif self.outer_scope:
+            return self.outer_scope.mangle(prefix, self.name)
+        else:
+            return self.mangle(prefix, name)
 
 
 class CppScopedEnumScope(Scope):

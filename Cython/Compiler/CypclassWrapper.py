@@ -70,16 +70,44 @@ def cypclass_iter(scope):
             for e in cypclass_iter(cypclass_scope):
                 yield e
 
+def cypclass_iter_scopes(scope):
+    """
+        Recursively iterate over nested cypclasses and their associated scope
+    """
+
+    for entry in scope.cypclass_entries:
+        cypclass_scope = entry.type.scope
+        yield entry, cypclass_scope
+        if cypclass_scope:
+            for e, s in cypclass_iter_scopes(cypclass_scope):
+                yield e, s
+
 def generate_cypclass_typeobj_declarations(env, code, definition):
     """
         Generate declarations of global pointers to the PyTypeObject for each cypclass
     """
 
-    for entry in cypclass_iter(env):
+    for entry, scope in cypclass_iter_scopes(env):
         if definition or entry.defined_in_pxd:
-            code.putln("static PyTypeObject *%s = 0;" % (
-                entry.type.typeptr_cname))
 
+            # the entry regrouping the constructors for this cypclass
+            c = scope.lookup_here("<constructor>")
+
+            # Todo: determine whether the __new__ called in the constructor 
+            # actually returns an instance of the cypclass type.
+            # and do this computation only once 
+            # (cf generate_cyp_class_wrapper_definition)
+            #
+            # n = scope.lookup_here("<new>")
+            
+            # # whether a user-defined __new__ actually returns another type
+            # is_new_return_type = not n or (n.type.return_type == entry.type)
+
+            # if a constructor is unused it will not be defined, and if none are 
+            # defined the PyTypeObject pointer is never assigned to an instance, 
+            # so no need to declare it.
+            if entry.type.templates or any(map(lambda e: e.used, c.all_alternatives())):
+                code.putln("static PyTypeObject *%s = 0;" % (entry.type.typeptr_cname))
 
 
 
@@ -88,13 +116,13 @@ def generate_cypclass_typeobj_declarations(env, code, definition):
 #   Cypclass generation, originally authored by Gwenaël Samain, moved here from ModuleNode.py
 #
 
-def generate_cyp_class_deferred_definitions(type_entries, code):
+def generate_cyp_class_deferred_definitions(env, code, definition):
     """
         Generate all cypclass method definitions, deferred till now
     """
 
-    for entry in type_entries:
-        if entry.type.is_cyp_class:
+    for entry, scope in cypclass_iter_scopes(env):
+        if definition or entry.defined_in_pxd:
             if entry.type.activable:
                 # Generate acthon-specific classes
                 generate_cyp_class_reifying_entries(entry, code)
@@ -103,7 +131,6 @@ def generate_cyp_class_deferred_definitions(type_entries, code):
             # Generate cypclass attr destructor
             generate_cyp_class_attrs_destructor_definition(entry, code)
             # Generate wrapper constructor
-            scope = entry.type.scope
             wrapper = scope.lookup_here("<constructor>")
             constructor = scope.lookup_here("<init>")
             new = scope.lookup_here("__new__")
@@ -111,9 +138,6 @@ def generate_cyp_class_deferred_definitions(type_entries, code):
             for wrapper_entry in wrapper.all_alternatives():
                 if wrapper_entry.used or entry.type.templates:
                     generate_cyp_class_wrapper_definition(entry.type, wrapper_entry, constructor, new, alloc, code)
-            # Generate deferred definitions for any nested types
-            generate_cyp_class_deferred_definitions(scope.sue_entries, code)
-
 
 def generate_cyp_class_attrs_destructor_definition(entry, code):
     """
@@ -578,10 +602,21 @@ def generate_cyp_class_wrapper_definition(type, wrapper_entry, constructor_entry
     else:
         code.putln("%s self = %s();" % (self_type, alloc_entry.func_cname))
 
+    # __new__ can be defined by user and return another type
+    is_new_return_type = not new_entry or new_entry.type.return_type == type
+
+    # initialise PyObject fields
+    if (is_new_return_type):
+        code.putln("if(self) {")
+        code.putln("self->ob_refcnt = 0;")
+        # code.putln("self->ob_type = NULL;")
+        code.putln("self->ob_type = %s;" % type.typeptr_cname)
+        code.putln("}")
+
     if init_entry:
         init_entry = PyrexTypes.best_match(wrapper_arg_types,
         init_entry.all_alternatives(), None)
-    if init_entry and (not new_entry or new_entry.type.return_type == type):
+    if init_entry and (is_new_return_type):
         # Calling __init__
 
         max_init_nargs = len(init_entry.type.args)

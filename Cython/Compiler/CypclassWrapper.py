@@ -87,27 +87,13 @@ def generate_cypclass_typeobj_declarations(env, code, definition):
         Generate declarations of global pointers to the PyTypeObject for each cypclass
     """
 
-    for entry, scope in cypclass_iter_scopes(env):
+    for entry in cypclass_iter(env):
         if definition or entry.defined_in_pxd:
-
-            # the entry regrouping the constructors for this cypclass
-            c = scope.lookup_here("<constructor>")
-
             # Todo: determine whether the __new__ called in the constructor 
             # actually returns an instance of the cypclass type.
             # and do this computation only once 
             # (cf generate_cyp_class_wrapper_definition)
-            #
-            # n = scope.lookup_here("<new>")
-            
-            # # whether a user-defined __new__ actually returns another type
-            # is_new_return_type = not n or (n.type.return_type == entry.type)
-
-            # if a constructor is unused it will not be defined, and if none are 
-            # defined the PyTypeObject pointer is never assigned to an instance, 
-            # so no need to declare it.
-            if entry.type.templates or any(map(lambda e: e.used, c.all_alternatives())):
-                code.putln("static PyTypeObject *%s = 0;" % (entry.type.typeptr_cname))
+            code.putln("static PyTypeObject *%s = 0;" % (entry.type.typeptr_cname))
 
 
 
@@ -136,8 +122,7 @@ def generate_cyp_class_deferred_definitions(env, code, definition):
             new = scope.lookup_here("__new__")
             alloc = scope.lookup_here("<alloc>")
             for wrapper_entry in wrapper.all_alternatives():
-                if wrapper_entry.used or entry.type.templates:
-                    generate_cyp_class_wrapper_definition(entry.type, wrapper_entry, constructor, new, alloc, code)
+                generate_cyp_class_wrapper_definition(entry.type, wrapper_entry, constructor, new, alloc, code)
 
 def generate_cyp_class_attrs_destructor_definition(entry, code):
     """

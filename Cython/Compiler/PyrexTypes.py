@@ -4182,7 +4182,7 @@ class CypClassType(CppClassType):
         self.lock_mode = lock_mode if lock_mode else "autolock"
         self.activable = activable
         self._mro = None
-        self.typeptr_cname = None # set externally
+        self.typeobj_cname = None # set externally
 
     # Return the MRO for this cypclass
     # Compute all the mro needed when a previous computation is not available

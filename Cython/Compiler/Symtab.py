@@ -737,7 +737,8 @@ class Scope(object):
             if cypclass:
                 type = PyrexTypes.CypClassType(
                     name, scope, cname, base_classes, templates = templates, lock_mode=lock_mode, activable=activable)
-                type.typeptr_cname = self.c_mangle(Naming.typeptr_prefix, name)
+                # generate PyTypeObject cname for cypclass
+                type.typeobj_cname = self.c_mangle(Naming.typeobj_prefix, name)
             else:
                 type = PyrexTypes.CppClassType(
                     name, scope, cname, base_classes, templates = templates)

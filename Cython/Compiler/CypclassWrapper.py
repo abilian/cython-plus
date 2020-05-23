@@ -84,7 +84,7 @@ def cypclass_iter_scopes(scope):
 
 def generate_cypclass_typeobj_declarations(env, code, definition):
     """
-        Generate declarations of global pointers to the PyTypeObject for each cypclass
+        Generate pre-declarations of the PyTypeObject for each cypclass
     """
 
     for entry in cypclass_iter(env):
@@ -93,7 +93,7 @@ def generate_cypclass_typeobj_declarations(env, code, definition):
             # actually returns an instance of the cypclass type.
             # and do this computation only once 
             # (cf generate_cyp_class_wrapper_definition)
-            code.putln("static PyTypeObject *%s = 0;" % (entry.type.typeptr_cname))
+            code.putln("static PyTypeObject %s;" % (entry.type.typeobj_cname))
 
 
 
@@ -595,7 +595,7 @@ def generate_cyp_class_wrapper_definition(type, wrapper_entry, constructor_entry
         code.putln("if(self) {")
         code.putln("self->ob_refcnt = 0;")
         # code.putln("self->ob_type = NULL;")
-        code.putln("self->ob_type = %s;" % type.typeptr_cname)
+        code.putln("self->ob_type = &%s;" % type.typeobj_cname)
         code.putln("}")
 
     if init_entry:

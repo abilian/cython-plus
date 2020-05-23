@@ -2532,6 +2532,7 @@ class CFuncDefNode(FuncDefNode):
     #  is_const_method whether this is a const method
     #  is_static_method whether this is a static method
     #  is_c_class_method whether this is a cclass method
+    #  is_cyp_class_method whether this is a cypclass method
 
     child_attrs = ["base_type", "declarator", "body", "decorators", "py_func_stat"]
     outer_attrs = ["decorators", "py_func_stat"]
@@ -2558,6 +2559,7 @@ class CFuncDefNode(FuncDefNode):
 
     def analyse_declarations(self, env):
         self.is_c_class_method = env.is_c_class_scope
+        self.is_cyp_class_method = env.is_cpp_class_scope and env.parent_type.is_cyp_class
         if self.directive_locals is None:
             self.directive_locals = {}
         self.directive_locals.update(env.directives.get('locals', {}))
@@ -2599,8 +2601,7 @@ class CFuncDefNode(FuncDefNode):
         # It is reinserted here, as __new__ MUST be static in a cypclass,
         # so there is no self arg (the first arg is actually the allocator).
 
-        if env.is_cpp_class_scope and env.parent_type.is_cyp_class\
-           and name in ("__new__", "__alloc__") and not self.is_static_method:
+        if self.is_cyp_class_method and name in ("__new__", "__alloc__") and not self.is_static_method:
             self.is_static_method = 1
             if declarator.skipped_self:
                 _name, _type, _pos, _arg = declarator.skipped_self
@@ -2676,7 +2677,7 @@ class CFuncDefNode(FuncDefNode):
                 # An error will be produced in the cdef function
                 self.overridable = False
 
-        if env.is_cpp_class_scope and env.parent_type.is_cyp_class and not declarator.skipped_self and not self.is_static_method:
+        if self.is_cyp_class_method and not declarator.skipped_self and not self.is_static_method:
             # It means we have a cypclass method without the self argument
             # => shout
             error(self.pos, "Cypclass methods must have a self argument")
@@ -2694,6 +2695,7 @@ class CFuncDefNode(FuncDefNode):
             self_locking_state = self.local_scope.declare_tracked(entry)
             self_locking_state.is_rlocked = self.is_const_method
             self_locking_state.is_wlocked = not self.is_const_method
+
 
     def declare_cpdef_wrapper(self, env):
         if self.overridable:

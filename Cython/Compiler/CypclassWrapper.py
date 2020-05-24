@@ -114,7 +114,7 @@ def generate_cypclass_method_py_wrappers(method_entry, cyp_entry, code):
     
     # header
     self_arg_cname = "%s_self" % Naming.arg_prefix
-    self_arg_decl = "PyObject *%s" % self_arg_cname
+    self_arg_decl = "CyPyObject *%s" % self_arg_cname
     code.put("PyObject *%s(%s" % (py_wrapper_cname, self_arg_decl))
     for i in range(0, max_args):
         code.put(", PyObject *%s%d" % (Naming.arg_prefix, i))
@@ -123,6 +123,10 @@ def generate_cypclass_method_py_wrappers(method_entry, cyp_entry, code):
     # body
     code.putln("{")
     code.enter_cfunc_scope()
+
+    this_var_cname = "%s_this" % Naming.var_prefix
+    this_var_decl = "%s *%s" % (cyp_entry.cname, this_var_cname)
+    code.putln("%s = reinterpret_cast<%s *>(%s->nogil_cyobject);" % (this_var_decl, cyp_entry.cname, self_arg_cname))
 
     # - the simple case: only 1 signature
     if (nb_alt == 1):
@@ -143,11 +147,25 @@ def generate_cypclass_method_py_wrappers(method_entry, cyp_entry, code):
             code.putln("%s;" % c_var_decl)
             code.putln(cast_code)
         
-        # call C method
-        # code.put("%s->%s(" % (this_var_cname, method_entry.cname))
-        # for i, c_arg in enumerate(c_arg_names, 1):
-        #     code.put("%s%s" % (c_arg, ", " if i < len(c_arg_names) else ""))
-        # code.put(")")
+        # declare result, mangle with existing argument to avoid collision
+        c_return_type = method_entry.type.return_type
+        if not c_return_type.is_void:
+            c_result_cname = "%s_%s_result" % (Naming.var_prefix,  c_arg_names[0] if c_arg_names else "")
+            c_result_decl = method_entry.type.return_type.declaration_code(c_result_cname)
+            code.putln("%s;" % c_result_decl)
+
+            # store result
+            c_call_code_begin = "%s = %s->%s" % (c_result_cname, this_var_cname, method_entry.cname)
+
+        else:
+            # no result to be stored
+            c_call_code_begin = "%s->%s" % (this_var_cname, method_entry.cname)
+        
+        # call c method
+        code.put("%s(" % c_call_code_begin)
+        for i, c_arg in enumerate(c_arg_names, 1):
+            code.put("%s%s" % (c_arg, ", " if i < len(c_arg_names) else ""))
+        code.putln(");")
 
     # else:
     code.putln("return %s; // for now" % self_arg_cname)
@@ -651,9 +669,8 @@ def generate_cyp_class_wrapper_definition(type, wrapper_entry, constructor_entry
     # initialise PyObject fields
     if (is_new_return_type):
         code.putln("if(self) {")
-        code.putln("self->ob_refcnt = 0;")
-        # code.putln("self->ob_type = NULL;")
-        code.putln("self->ob_type = &%s;" % type.typeobj_cname)
+        code.putln("self->ob_cypyobject->ob_refcnt = 0;")
+        code.putln("self->ob_cypyobject->ob_type = &%s;" % type.typeobj_cname)
         code.putln("}")
 
     if init_entry:

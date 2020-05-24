@@ -56,7 +56,13 @@
             int trywlock();
     };
 
-    class CyObject : public PyObject {
+    template<typename T>
+    struct CyPyObject {
+        PyObject_HEAD
+        T * cyobject;
+    }
+
+    class CyObject {
         private:
           CyObject_ATOMIC_REFCOUNT_TYPE nogil_ob_refcnt;
           //pthread_rwlock_t ob_lock;

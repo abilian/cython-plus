@@ -57,7 +57,6 @@ from .StringEncoding import EncodedString
 from .Pythran import has_np_pythran
 
 
-
 def cypclass_iter(scope):
     """
         Recursively iterate over nested cypclasses
@@ -86,7 +85,6 @@ def generate_cypclass_typeobj_declarations(env, code, definition):
     """
         Generate pre-declarations of the PyTypeObject for each cypclass
     """
-
     for entry in cypclass_iter(env):
         if definition or entry.defined_in_pxd:
             # Todo: determine whether the __new__ called in the constructor 
@@ -95,7 +93,67 @@ def generate_cypclass_typeobj_declarations(env, code, definition):
             # (cf generate_cyp_class_wrapper_definition)
             code.putln("static PyTypeObject %s;" % (entry.type.typeobj_cname))
 
+cyp_special_methods = (
+    "<alloc>",
+    "<new>",
+    "<constructor>"
+)
+def generate_cypclass_py_wrappers(env, code):
+    for cyp_entry, scope in cypclass_iter_scopes(env):
+        for name, entry in scope.entries.items():
+            if (entry.is_cfunction):
+                if name in cyp_special_methods:
+                    continue # for now skip those
+                generate_cypclass_method_py_wrappers(entry, cyp_entry, code)
 
+def generate_cypclass_method_py_wrappers(method_entry, cyp_entry, code):
+    py_wrapper_cname = "%s%s_%s" % (Naming.pywrap_prefix, cyp_entry.cname, method_entry.cname)
+
+    nb_alt = len(method_entry.all_alternatives())
+    max_args = max(map(lambda e : len(e.type.args), method_entry.all_alternatives()))
+    
+    # header
+    self_arg_cname = "%s_self" % Naming.arg_prefix
+    self_arg_decl = "PyObject *%s" % self_arg_cname
+    code.put("PyObject *%s(%s" % (py_wrapper_cname, self_arg_decl))
+    for i in range(0, max_args):
+        code.put(", PyObject *%s%d" % (Naming.arg_prefix, i))
+    code.putln(")")
+
+    # body
+    code.putln("{")
+    code.enter_cfunc_scope()
+
+    # - the simple case: only 1 signature
+    if (nb_alt == 1):
+
+        # cast arguments
+        c_arg_names = []
+        for i, arg in enumerate(method_entry.type.args):
+            c_var_name = "%s%s" % (Naming.var_prefix, arg.name)
+            c_arg_names.append(c_var_name)
+            c_var_decl = arg.type.declaration_code(c_var_name)
+            source_code = "%s%d" % (Naming.arg_prefix, i) # same as in the header
+            cast_code = arg.type.from_py_call_code(
+                source_code,
+                c_var_name,
+                method_entry.pos,
+                code
+            )
+            code.putln("%s;" % c_var_decl)
+            code.putln(cast_code)
+        
+        # call C method
+        # code.put("%s->%s(" % (this_var_cname, method_entry.cname))
+        # for i, c_arg in enumerate(c_arg_names, 1):
+        #     code.put("%s%s" % (c_arg, ", " if i < len(c_arg_names) else ""))
+        # code.put(")")
+
+    # else:
+    code.putln("return %s; // for now" % self_arg_cname)
+
+    code.putln("}")
+    code.exit_cfunc_scope()
 
 
 #

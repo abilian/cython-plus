@@ -463,11 +463,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         self.generate_filename_table(globalstate['filename_table'])
 
         self.generate_declarations_for_modules(env, modules, globalstate)
-        
-        code.putln("")
-        code.putln("/* Python wrapper for cypclass methods */")
-        CypclassWrapper.generate_cypclass_py_wrappers(env, code)
-
         h_code.write('\n')
 
         for utilcode in env.utility_code_list[:]:

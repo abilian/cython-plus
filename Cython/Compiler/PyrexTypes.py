@@ -4178,7 +4178,7 @@ class CypClassType(CppClassType):
     #  wrapper_type       PyExtensionType or None      the type of the cclass wrapper
 
     is_cyp_class = 1
-    to_py_function = "__Pyx_PyObject_FromCyObject"
+    to_py_function = None
 
     def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0, lock_mode=None, activable=False):
         CppClassType.__init__(self, name, scope, cname, base_classes, templates, template_type, nogil)
@@ -4207,6 +4207,12 @@ class CypClassType(CppClassType):
         self._mro = mro_C3_merge(inputs)
         return self._mro
 
+    # allow conversion to Python only when wrapping is supported    
+    def create_to_py_utility_code(self, env):
+        if not self.wrapper_type:
+            return False
+        self.to_py_function = "__Pyx_PyObject_FromCyObject"
+        return True
     
     def empty_declaration_code(self):
         if self._empty_declaration is None:

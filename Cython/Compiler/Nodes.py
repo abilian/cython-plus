@@ -1636,7 +1636,8 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         cclass_bases = TupleNode(self.pos, args=[])
 
         if self.templates:
-            print("Quick warning: Python wrappers for templated cypclasses are not supported yet")
+            # Python wrapper for templated cypclasses not supported yet
+            # this is signaled to the compiler by not doing what is below
             return
 
         if self.attributes is not None:

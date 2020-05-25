@@ -82,19 +82,6 @@ def cypclass_iter_scopes(scope):
             for e, s in cypclass_iter_scopes(cypclass_scope):
                 yield e, s
 
-def generate_cypclass_typeobj_declarations(env, code, definition):
-    """
-        Generate pre-declarations of the PyTypeObject for each cypclass
-    """
-
-    for entry in cypclass_iter(env):
-        if definition or entry.defined_in_pxd:
-            # Todo: determine whether the __new__ called in the constructor 
-            # actually returns an instance of the cypclass type.
-            # and do this computation only once 
-            # (cf generate_cyp_class_wrapper_definition)
-            code.putln("static PyTypeObject %s;" % (entry.type.typeobj_cname))
-
 
 
 
@@ -595,7 +582,7 @@ def generate_cyp_class_wrapper_definition(type, wrapper_entry, constructor_entry
         code.putln("if(self) {")
         code.putln("self->ob_cypyobject = new CyPyObject(); // for now")
         code.putln("self->ob_cypyobject->ob_refcnt = 0;")
-        code.putln("self->ob_cypyobject->ob_type = &%s;" % type.typeobj_cname)
+        code.putln("self->ob_cypyobject->ob_type = %s;" % type.wrapper_type.typeptr_cname)
         code.putln("}")
 
     if init_entry:

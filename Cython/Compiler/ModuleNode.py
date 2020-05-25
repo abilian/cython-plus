@@ -633,7 +633,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         env.c_class_entries[:] = self.sort_types_by_inheritance(
             entry_dict, entry_order, key_func)
 
-    def generate_type_definitions(self, env, modules, vtab_list, vtabslot_list, code):
+    def generate_type_definitions(self, env, modules, vtab_list, vtabslot_list, code, globalstate):
         # TODO: Why are these separated out?
         for entry in vtabslot_list:
             self.generate_objstruct_predeclaration(entry.type, code)
@@ -652,11 +652,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             type_entries = [t for t in type_entries if t not in vtabslot_entries]
             self.generate_type_header_code(type_entries, code)
             code.putln("")
-            code.putln("/* PyTypeObject pointer declarations for cypclasses */")
-            CypclassWrapper.generate_cypclass_typeobj_declarations(module, code, definition)
+            code.putln("/* PyTypeObject pointer declarations for all c classes */")
+            self.generate_c_class_declarations(module, code, definition, globalstate)
             code.putln("")
             code.putln("/* Deferred definitions for cypclasses */")
             CypclassWrapper.generate_cyp_class_deferred_definitions(env, code, definition)
+
         for entry in vtabslot_list:
             self.generate_objstruct_definition(entry.type, code)
             self.generate_typeobj_predeclaration(entry, code)
@@ -679,13 +680,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             typecode.putln('#endif')
         vtab_list, vtabslot_list = self.sort_type_hierarchy(modules, env)
         self.generate_type_definitions(
-            env, modules, vtab_list, vtabslot_list, typecode)
+            env, modules, vtab_list, vtabslot_list, typecode, globalstate)
         modulecode = globalstate['module_declarations']
         for module in modules:
             defined_here = module is env
             modulecode.putln("")
             modulecode.putln("/* Module declarations from %s */" % module.qualified_name.as_c_string_literal())
-            self.generate_c_class_declarations(module, modulecode, defined_here, globalstate)
             self.generate_cvariable_declarations(module, modulecode, defined_here)
             self.generate_cfunction_declarations(module, modulecode, defined_here)
 

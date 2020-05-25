@@ -1498,10 +1498,12 @@ class PyExtensionType(PyObjectType):
     #  early_init       boolean          Whether to initialize early (as opposed to during module execution).
     #  defered_declarations [thunk]      Used to declare class hierarchies in order
     #  check_size       'warn', 'error', 'ignore'    What to do if tp_basicsize does not match
+    #  is_cyp_wrapper   boolean          Whether this extension type wraps a cypclass
 
     is_extension_type = 1
     has_attributes = 1
     early_init = 1
+    is_cyp_wrapper = 0
 
     objtypedef_cname = None
 
@@ -4173,6 +4175,8 @@ def compute_mro_generic(cls):
 class CypClassType(CppClassType):
     #  lock_mode          string (tri-state: "nolock"/"checklock"/"autolock")
     #  _mro               [CppClassType] or None         The Method Resolution Order of this cypclass according to Python
+    #  wrapper_type       PyExtensionType       the type of the cclass wrapper
+
 
     is_cyp_class = 1
     to_py_function = "__Pyx_PyObject_FromCyObject"
@@ -4182,7 +4186,7 @@ class CypClassType(CppClassType):
         self.lock_mode = lock_mode if lock_mode else "autolock"
         self.activable = activable
         self._mro = None
-        self.typeobj_cname = None # set externally
+        self.wrapper_type = None # set during
 
     # Return the MRO for this cypclass
     # Compute all the mro needed when a previous computation is not available

@@ -1663,6 +1663,8 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
             wrapper.declare(module_scope)
             if self.scope:
                 wrapper.analyse_declarations(module_scope)
+            self.entry.type.wrapper_type = wrapper.entry.type
+            wrapper.entry.type.is_cyp_wrapper = 1
         self.cyp_wrapper = wrapper
 
 

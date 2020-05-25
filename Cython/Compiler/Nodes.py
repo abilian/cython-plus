@@ -32,7 +32,6 @@ from . import DebugFlags
 from .Pythran import has_np_pythran, pythran_type, is_pythran_buffer
 from ..Utils import add_metaclass
 
-
 if sys.version_info[0] >= 3:
     _py_int_types = int
 else:
@@ -1505,10 +1504,12 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
     #  base_classes  [CBaseTypeNode]
     #  templates     [(string, bool)] or None
     #  decorators    [DecoratorNode] or None
+    #  cyp_wrapper   CClassDefNode or None
 
     decorators = None
     scope = None
     template_types = None
+    cyp_wrapper = None
 
     cpp_message = "Cypclass"
 
@@ -1618,6 +1619,52 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         # analyse the subclasses that were waiting for this class (their base) to be analysed
         for thunk in self.entry.type.deferred_declarations:
             thunk()
+
+        if self.cypclass:
+            self.declare_cypclass_wrapper_cclass(env)       
+    
+    def find_module_scope(self, scope):
+        module_scope = scope
+        while module_scope and not module_scope.is_module_scope:
+            module_scope = module_scope.outer_scope
+        return module_scope
+    
+    def declare_cypclass_wrapper_cclass(self, env):
+        module_scope = self.find_module_scope(env)
+
+        cclass_name = EncodedString("%s_cyp_wrapper" % self.name)
+        from .ExprNodes import TupleNode
+        cclass_bases = TupleNode(self.pos, args=[])
+
+        if self.attributes is not None:
+            # for now
+            cclass_body = StatListNode(pos=self.pos, stats=[])
+        else:
+            cclass_body = None
+
+        wrapper = CClassDefNode(
+            self.pos,
+            visibility = 'private',
+            typedef_flag = 0,
+            api = 0,
+            module_name = "",
+            class_name = cclass_name,
+            as_name = cclass_name,
+            bases = cclass_bases,
+            objstruct_name = None,
+            typeobj_name = None,
+            check_size = None,
+            in_pxd = 0,
+            doc = EncodedString("Python Object wrapper for underlying cypclass %s" % self.name),
+            body = cclass_body,
+            is_cyp_wrapper = 1
+        )
+        if module_scope:
+            wrapper.declare(module_scope)
+            if self.scope:
+                wrapper.analyse_declarations(module_scope)
+        self.cyp_wrapper = wrapper
+
 
     def analyse_expressions(self, env):
         self.body = self.body.analyse_expressions(self.entry.type.scope)
@@ -5117,6 +5164,7 @@ class CClassDefNode(ClassDefNode):
     #  base_type          PyExtensionType or None
     #  buffer_defaults_node DictNode or None Declares defaults for a buffer
     #  buffer_defaults_pos
+    #  is_cyp_wrapper     boolean           Whether this cclass wraps a cypclass
 
     child_attrs = ["body"]
     buffer_defaults_node = None
@@ -5128,6 +5176,7 @@ class CClassDefNode(ClassDefNode):
     check_size = None
     decorators = None
     shadow = False
+    is_cyp_wrapper = False
 
     @property
     def punycode_class_name(self):

@@ -1510,6 +1510,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
     scope = None
     template_types = None
     cyp_wrapper = None
+    # child_attrs = ['attributes', 'cyp_wrapper']
 
     cpp_message = "Cypclass"
 
@@ -1644,7 +1645,13 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
             # the underlying cyobject must come first thing after PyObject_HEAD in the memory layout
             # long term, only the base class will declare the underlying attribute
             underlying_cyobject = self.synthesise_underlying_cyobject_attribute(env)
-            cclass_body = StatListNode(pos=self.pos, stats=[underlying_cyobject])
+            stats = [underlying_cyobject]
+            for attr in self.attributes:
+                if isinstance(attr, CFuncDefNode):
+                    py_method_wrapper = self.synthesise_cypclass_method_wrapper(attr)
+                    if py_method_wrapper:
+                        stats.append(py_method_wrapper)
+            cclass_body = StatListNode(pos=self.pos, stats=stats)
         else:
             cclass_body = None
 
@@ -1669,10 +1676,13 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
             wrapper.declare(module_scope)
             if self.scope:
                 wrapper.analyse_declarations(module_scope)
-            self.entry.type.wrapper_type = wrapper.entry.type
-            wrapper.entry.type.is_cyp_wrapper = 1
-        self.cyp_wrapper = wrapper
+                self._cyp_wrapper_analysed = 1
+                self.cyp_wrapper = wrapper
+                self.entry.type.wrapper_type = wrapper.entry.type
+                wrapper.entry.type.is_cyp_wrapper = 1
     
+    underlying_name = "nogil_cyobject"
+
     def synthesise_underlying_cyobject_attribute(self, env):
         nested_path = [] if env.is_module_scope else env.qualified_name.split(".")
 
@@ -1688,7 +1698,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
             templates = None
         )
 
-        underlying_name_declarator = CNameDeclaratorNode(self.pos, name = "nogil_cyobject", cname = None)
+        underlying_name_declarator = CNameDeclaratorNode(self.pos, name=self.underlying_name, cname=None)
 
         underlying_cyobject = CVarDefNode(
             pos = self.pos,
@@ -1703,13 +1713,76 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         )
 
         return underlying_cyobject
+    
+    # cypclass entries that take on a special name: reverse mapping
+    cycplass_special_entry_names = {
+        "<init>": "__init__"
+    }
+
+    def synthesise_cypclass_method_wrapper(self, cfunc_method):
+        if cfunc_method.is_static_method:
+            return # for now skip static methods
+
+        cfunc_declarator = cfunc_method.cfunc_declarator
+        py_name = cfunc_method.entry.name
+        
+        # transform e.g. <init> back into __init__
+        try:
+            py_name = self.cycplass_special_entry_names[py_name]
+        except KeyError:
+            pass
+        py_args = cfunc_declarator.args
+        py_doc = cfunc_method.doc
+
+        arg_names = [arg.name for arg in py_args]
+
+        # C++ methods have an implict 'this', so the 'self' argument is skipped in the declarator
+        skipped_self = cfunc_method.cfunc_declarator.skipped_self
+        if not skipped_self:
+            print("Non static cypclass method without self argument ... ??")
+            # should not happen
+            return
+        
+        from . import ExprNodes
+
+        self_name, self_type, self_pos, self_arg = skipped_self
+        type_entry = self_type.entry
+        type_arg = ExprNodes.NameNode(self.pos, name=type_entry.name)
+        type_arg.entry = type_entry
+
+        cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=type_arg, attribute=self.underlying_name)
+
+        c_call = ExprNodes.SimpleCallNode(
+            cfunc_method.pos,
+            function=cfunc,
+            args=[ExprNodes.NameNode(cfunc_method.pos, name=n) for n in arg_names]
+        )
+
+        py_body = ReturnStatNode(pos=cfunc_method.pos, return_type=PyrexTypes.py_object_type, value=c_call)
+
+        return DefNode(
+            cfunc_method.pos,
+            name = py_name,
+            args = py_args,
+            star_arg = None,
+            starstar_arg = None,
+            doc = py_doc,
+            body = py_body,
+            decorators = None,
+            is_async_def = 0,
+            return_type_annotation = None
+        )
 
     def analyse_expressions(self, env):
         self.body = self.body.analyse_expressions(self.entry.type.scope)
+        if self.cyp_wrapper:
+            self.cyp_wrapper.analyse_expressions(env.global_scope())
         return self
 
     def generate_function_definitions(self, env, code):
         self.body.generate_function_definitions(self.entry.type.scope, code)
+        if self.cyp_wrapper:
+            self.cyp_wrapper.generate_function_definitions(env.global_scope(), code)
 
     def generate_execution_code(self, code):
         self.body.generate_execution_code(code)

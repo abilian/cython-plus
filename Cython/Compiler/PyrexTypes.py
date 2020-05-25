@@ -4174,9 +4174,8 @@ def compute_mro_generic(cls):
 
 class CypClassType(CppClassType):
     #  lock_mode          string (tri-state: "nolock"/"checklock"/"autolock")
-    #  _mro               [CppClassType] or None         The Method Resolution Order of this cypclass according to Python
-    #  wrapper_type       PyExtensionType       the type of the cclass wrapper
-
+    #  _mro               [CppClassType] or None       the Method Resolution Order of this cypclass according to Python
+    #  wrapper_type       PyExtensionType or None      the type of the cclass wrapper
 
     is_cyp_class = 1
     to_py_function = "__Pyx_PyObject_FromCyObject"

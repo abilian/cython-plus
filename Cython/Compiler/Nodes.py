@@ -1499,7 +1499,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
     #  cname         string or None
     #  visibility    "extern"
     #  in_pxd        boolean
-    #  attributes    [CVarDefNode] or None
+    #  attributes    [StatNode] or None
     #  entry         Entry
     #  base_classes  [CBaseTypeNode]
     #  templates     [(string, bool)] or None
@@ -1606,8 +1606,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
             if self.in_pxd and not env.in_cinclude:
                 self.entry.defined_in_pxd = 1
             for attr in self.attributes:
-                declare = getattr(attr, 'declare', None)
-                if declare:
+                if hasattr(attr, 'declare'):
                     attr.declare(scope)
                 attr.analyse_declarations(scope)
             for func in func_attributes(self.attributes):
@@ -1636,9 +1635,15 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         from .ExprNodes import TupleNode
         cclass_bases = TupleNode(self.pos, args=[])
 
+        if self.templates:
+            print("Quick warning: Python wrappers for templated cypclasses are not supported yet")
+            return
+
         if self.attributes is not None:
-            # for now
-            cclass_body = StatListNode(pos=self.pos, stats=[])
+            # the underlying cyobject must come first thing after PyObject_HEAD in the memory layout
+            # long term, only the base class will declare the underlying attribute
+            underlying_cyobject = self.synthesise_underlying_cyobject_attribute(env)
+            cclass_body = StatListNode(pos=self.pos, stats=[underlying_cyobject])
         else:
             cclass_body = None
 
@@ -1654,7 +1659,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
             objstruct_name = None,
             typeobj_name = None,
             check_size = None,
-            in_pxd = 0,
+            in_pxd = self.in_pxd,
             doc = EncodedString("Python Object wrapper for underlying cypclass %s" % self.name),
             body = cclass_body,
             is_cyp_wrapper = 1
@@ -1666,7 +1671,37 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
             self.entry.type.wrapper_type = wrapper.entry.type
             wrapper.entry.type.is_cyp_wrapper = 1
         self.cyp_wrapper = wrapper
+    
+    def synthesise_underlying_cyobject_attribute(self, env):
+        nested_path = [] if env.is_module_scope else env.qualified_name.split(".")
 
+        underlying_base_type = CSimpleBaseTypeNode(
+            self.pos,
+            name = self.name,
+            module_path = nested_path,
+            is_basic_c_type = 0,
+            signed = 1,
+            complex = 0,
+            longness = 0,
+            is_self_arg = 0,
+            templates = None
+        )
+
+        underlying_name_declarator = CNameDeclaratorNode(self.pos, name = "nogil_cyobject", cname = None)
+
+        underlying_cyobject = CVarDefNode(
+            pos = self.pos,
+            visibility = 'private',
+            base_type = underlying_base_type,
+            declarators = [underlying_name_declarator],
+            in_pxd = self.in_pxd,
+            doc = None,
+            api = 0,
+            modifiers = [],
+            overridable = 0
+        )
+
+        return underlying_cyobject
 
     def analyse_expressions(self, env):
         self.body = self.body.analyse_expressions(self.entry.type.scope)

@@ -56,12 +56,19 @@
             int trywlock();
     };
 
-    class CyObject : public PyObject {
+    class CyObject;
+
+    struct CyPyObject : public PyObject {
+        CyObject * nogil_cyobject;
+    };
+
+    class CyObject {
         private:
           CyObject_ATOMIC_REFCOUNT_TYPE nogil_ob_refcnt;
           //pthread_rwlock_t ob_lock;
           RecursiveUpgradeableRWLock ob_lock;
         public:
+          CyPyObject * ob_cypyobject;
           CyObject(): nogil_ob_refcnt(1) {}
           virtual ~CyObject() {}
           void CyObject_INCREF();
@@ -169,13 +176,14 @@
      * are likely (certain even?) to be followed by a Cy_DECREF; stealing the
      * reference would mean that Cy_DECREF should not be called after this.
      */
-    static inline PyObject* __Pyx_PyObject_FromCyObject(CyObject * ob) {
+    static inline PyObject* __Pyx_PyObject_FromCyObject(CyObject * cy) {
+        CyPyObject * ob = cy->ob_cypyobject;
         // artificial atomic increment the first time Python gets a reference
         if (ob->ob_refcnt == 0)
-            ob->CyObject_INCREF();
+            cy->CyObject_INCREF();
         // return a new Python reference
-        Py_INCREF((PyObject *)ob);
-        return (PyObject *)ob;
+        Py_INCREF(ob);
+        return ob;
     }
 
     /* Cast argument to CyObject* type. */

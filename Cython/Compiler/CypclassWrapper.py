@@ -593,9 +593,9 @@ def generate_cyp_class_wrapper_definition(type, wrapper_entry, constructor_entry
     # initialise PyObject fields
     if (is_new_return_type):
         code.putln("if(self) {")
-        code.putln("self->ob_refcnt = 0;")
-        # code.putln("self->ob_type = NULL;")
-        code.putln("self->ob_type = &%s;" % type.typeobj_cname)
+        code.putln("self->ob_cypyobject = new CyPyObject(); // for now")
+        code.putln("self->ob_cypyobject->ob_refcnt = 0;")
+        code.putln("self->ob_cypyobject->ob_type = &%s;" % type.typeobj_cname)
         code.putln("}")
 
     if init_entry:

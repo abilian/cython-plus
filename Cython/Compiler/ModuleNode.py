@@ -2009,8 +2009,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         if scope.is_internal:
             # internal classes (should) never need None inits, normal zeroing will do
             py_attrs = []
+
+        # cyp_class attributes should not be treated as normal cpp_class attributes
         cpp_class_attrs = [entry for entry in scope.var_entries
-                           if entry.type.is_cpp_class]
+                           if entry.type.is_cpp_class and not entry.type.is_cyp_class]
 
         cinit_func_entry = scope.lookup_here("__cinit__")
         if cinit_func_entry and not cinit_func_entry.is_special:

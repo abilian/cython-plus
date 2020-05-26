@@ -4207,7 +4207,7 @@ class CypClassType(CppClassType):
         self._mro = mro_C3_merge(inputs)
         return self._mro
 
-    # allow conversion to Python only when wrapping is supported    
+    # allow conversion to Python only when there is a wrapper type
     def create_to_py_utility_code(self, env):
         if not self.wrapper_type:
             return False

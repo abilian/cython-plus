@@ -1635,52 +1635,85 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                         self.cyp_wrapper.body.stats.append(py_method_wrapper)
 
     def synthesize_cypclass_method_wrapper(self, cfunc_method):
-        from .CypclassWrapper import underlying_name, cycplass_special_entry_names
-
+        
         if cfunc_method.is_static_method:
             return # for now skip static methods
-
-        cfunc_declarator = cfunc_method.cfunc_declarator
-        py_name = cfunc_method.entry.name
         
-        # transform e.g. <init> back into __init__
-        try:
-            py_name = cycplass_special_entry_names[py_name]
-        except KeyError:
-            pass
-        
-        py_args = [arg.clone_node() for arg in cfunc_declarator.args]
-
-        py_doc = cfunc_method.doc
-
-        arg_names = [arg.name for arg in py_args]
-
         # C++ methods have an implict 'this', so the 'self' argument is skipped in the declarator
         skipped_self = cfunc_method.cfunc_declarator.skipped_self
         if not skipped_self:
             return # if this ever happens (?), skip non-static methods without a self argument
-        
+
+        from .CypclassWrapper import underlying_name, cycplass_special_entry_names
         from . import ExprNodes
 
-        # self_name, self_type, self_pos, self_arg = skipped_self
-        type_entry = self.cyp_wrapper.entry
-        type_arg = ExprNodes.NameNode(self.pos, name=type_entry.name)
-        type_arg.entry = type_entry
+        cfunc_declarator = cfunc_method.cfunc_declarator
 
-        cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=type_arg, attribute=underlying_name)
+        # > name of the wrapping method: same name
+        cfunc_name = cfunc_method.entry.name
+        py_name = cfunc_name
+        try:
+            # transform e.g. <init> back into __init__
+            py_name = cycplass_special_entry_names[py_name]
+        except KeyError:
+            # no need to transform this name
+            pass
 
+        # > self argument of the wrapper method: same name, but type of the wrapper cclass
+        self_name, self_type, self_pos, self_arg = skipped_self
+        py_self_arg = CArgDeclNode(
+            self_pos,
+            base_type = CSimpleBaseTypeNode(
+                self_pos,
+                name = self.cyp_wrapper.class_name,
+                module_path = [],
+                signed = 1,
+                is_basic_c_type = 0,
+                longness = 0,
+                is_self_arg = 0, # only true for C methods
+                templates = None
+            ),
+            declarator = CNameDeclaratorNode(self_pos, name=self_name, cname=None),
+            not_none = 0,
+            or_none = 0,
+            default = None,
+            annotation = None,
+            kw_only = 0
+        )
+
+        # > all arguments of the wrapper method declaration
+        py_args = [py_self_arg]
+        for arg in cfunc_declarator.args:
+            py_args.append(arg.clone_node())
+
+        # > same docstring
+        py_doc = cfunc_method.doc
+
+        # > names of the arguments passed when calling the underlying method; self not included
+        arg_objs = [ExprNodes.NameNode(arg.pos, name=arg.name) for arg in cfunc_declarator.args]
+
+        # > reference to the self argument of the wrapper method
+        self_obj = ExprNodes.NameNode(self_pos, name=self_name)
+
+        # > access the method of the underlying cyobject from the self argument of the wrapper method
+        underlying_obj = ExprNodes.AttributeNode(cfunc_method.pos, obj=self_obj, attribute=underlying_name)
+        cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=underlying_obj, attribute=cfunc_name)
+
+        # > call to the underlying method
         c_call = ExprNodes.SimpleCallNode(
             cfunc_method.pos,
             function=cfunc,
-            args=[ExprNodes.NameNode(cfunc_method.pos, name=n) for n in arg_names]
+            args=arg_objs
         )
 
+        # > return the result of the call if the underlying return type is not void
         if cfunc_method.type.return_type.is_void:
             py_stat = ExprStatNode(pos=cfunc_method.pos, expr=c_call)
         else:
             py_stat = ReturnStatNode(pos=cfunc_method.pos, return_type=PyrexTypes.py_object_type, value=c_call)
         py_body = StatListNode(cfunc_method.pos, stats=[py_stat])
 
+        # > the wrapper method
         return DefNode(
             cfunc_method.pos,
             name = py_name,

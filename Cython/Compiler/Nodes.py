@@ -1622,6 +1622,78 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         for thunk in self.entry.type.deferred_declarations:
             thunk()
 
+        self.insert_cypclass_method_wrappers()
+
+    def insert_cypclass_method_wrappers(self):
+        if self.cyp_wrapper:
+            for attr in self.attributes:
+                if isinstance(attr, CFuncDefNode):
+                    py_method_wrapper = self.synthesize_cypclass_method_wrapper(attr)
+                    if py_method_wrapper:
+                        # the wrapper cclasses are inserted after the wrapped node
+                        # so their declaration analysis will still occur
+                        self.cyp_wrapper.body.stats.append(py_method_wrapper)
+
+    def synthesize_cypclass_method_wrapper(self, cfunc_method):
+        from .CypclassWrapper import underlying_name, cycplass_special_entry_names
+
+        if cfunc_method.is_static_method:
+            return # for now skip static methods
+
+        cfunc_declarator = cfunc_method.cfunc_declarator
+        py_name = cfunc_method.entry.name
+        
+        # transform e.g. <init> back into __init__
+        try:
+            py_name = cycplass_special_entry_names[py_name]
+        except KeyError:
+            pass
+        
+        py_args = [arg.clone_node() for arg in cfunc_declarator.args]
+
+        py_doc = cfunc_method.doc
+
+        arg_names = [arg.name for arg in py_args]
+
+        # C++ methods have an implict 'this', so the 'self' argument is skipped in the declarator
+        skipped_self = cfunc_method.cfunc_declarator.skipped_self
+        if not skipped_self:
+            return # if this ever happens (?), skip non-static methods without a self argument
+        
+        from . import ExprNodes
+
+        # self_name, self_type, self_pos, self_arg = skipped_self
+        type_entry = self.cyp_wrapper.entry
+        type_arg = ExprNodes.NameNode(self.pos, name=type_entry.name)
+        type_arg.entry = type_entry
+
+        cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=type_arg, attribute=underlying_name)
+
+        c_call = ExprNodes.SimpleCallNode(
+            cfunc_method.pos,
+            function=cfunc,
+            args=[ExprNodes.NameNode(cfunc_method.pos, name=n) for n in arg_names]
+        )
+
+        if cfunc_method.type.return_type.is_void:
+            py_stat = ExprStatNode(pos=cfunc_method.pos, expr=c_call)
+        else:
+            py_stat = ReturnStatNode(pos=cfunc_method.pos, return_type=PyrexTypes.py_object_type, value=c_call)
+        py_body = StatListNode(cfunc_method.pos, stats=[py_stat])
+
+        return DefNode(
+            cfunc_method.pos,
+            name = py_name,
+            args = py_args,
+            star_arg = None,
+            starstar_arg = None,
+            doc = py_doc,
+            body = py_body,
+            decorators = None,
+            is_async_def = 0,
+            return_type_annotation = None
+        )
+
     def analyse_expressions(self, env):
         self.body = self.body.analyse_expressions(self.entry.type.scope)
         return self

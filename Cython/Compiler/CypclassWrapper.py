@@ -58,7 +58,9 @@ from .Pythran import has_np_pythran
 from .Visitor import VisitorTransform, CythonTransform
 
 
-
+#
+#   Utilities for cypclasses
+#
 def cypclass_iter(scope):
     """
         Recursively iterate over nested cypclasses
@@ -83,6 +85,12 @@ def cypclass_iter_scopes(scope):
             for e, s in cypclass_iter_scopes(cypclass_scope):
                 yield e, s
 
+# cypclass entries that take on a special name: reverse mapping
+cycplass_special_entry_names = {
+    "<init>": "__init__"
+}
+
+underlying_name = EncodedString("nogil_cyobject")
 
 #
 #   Visitor for wrapper cclass injection
@@ -106,6 +114,7 @@ class CypclassWrapperInjection(VisitorTransform):
         return node
 
     # TODO: can cypclasses be nested in something other than this ?
+    # can cypclasses even be nested in non-cypclass cpp classes, or structs ?
     def visit_CStructOrUnionDefNode(self, node):
         self.nesting_stack.append(node)
         self.visitchildren(node)
@@ -121,7 +130,7 @@ class CypclassWrapperInjection(VisitorTransform):
 
     def visit_CppClassNode(self, node):
         if node.cypclass:
-            wrapper = self.synthesise_cypclass_wrapper_cclass(node)
+            wrapper = self.synthesize_wrapper_cclass(node)
             if wrapper is not None:
                 self.cypclass_wrappers_stack.append(wrapper)
         # visit children and return all wrappers when at the top level
@@ -138,7 +147,7 @@ class CypclassWrapperInjection(VisitorTransform):
             if isinstance(node, Nodes.DefNode):
                 yield node
     
-    def synthesise_cypclass_wrapper_cclass(self, node):
+    def synthesize_wrapper_cclass(self, node):
         if node.templates:
             # Python wrapper for templated cypclasses not supported yet
             # this is signaled to the compiler by not doing what is below
@@ -150,7 +159,7 @@ class CypclassWrapperInjection(VisitorTransform):
         if not node_has_suite:
             return None
         
-        # Todo: take nesting into account
+        # TODO: take nesting into account for the name
         cclass_name = EncodedString("%s_cyp_wrapper" % node.name)
 
         from .ExprNodes import TupleNode
@@ -158,13 +167,8 @@ class CypclassWrapperInjection(VisitorTransform):
 
         # the underlying cyobject must come first thing after PyObject_HEAD in the memory layout
         # long term, only the base class will declare the underlying attribute
-        underlying_cyobject = self.synthesise_underlying_cyobject_attribute(node)
+        underlying_cyobject = self.synthesize_underlying_cyobject_attribute(node)
         stats = [underlying_cyobject]
-        for attr in node.attributes:
-            if isinstance(attr, Nodes.CFuncDefNode):
-                py_method_wrapper = self.synthesise_cypclass_method_wrapper(attr)
-                if py_method_wrapper:
-                    stats.append(py_method_wrapper)
         cclass_body = Nodes.StatListNode(pos=node.pos, stats=stats)
         cclass_doc = EncodedString("Python Object wrapper for underlying cypclass %s" % node.name)
 
@@ -189,9 +193,7 @@ class CypclassWrapperInjection(VisitorTransform):
         node.cyp_wrapper = wrapper
         return wrapper
     
-    underlying_name = "nogil_cyobject"
-
-    def synthesise_underlying_cyobject_attribute(self, node):
+    def synthesize_underlying_cyobject_attribute(self, node):
         nested_names = [node.name for node in self.nesting_stack]
 
         underlying_base_type = Nodes.CSimpleBaseTypeNode(
@@ -206,7 +208,7 @@ class CypclassWrapperInjection(VisitorTransform):
             templates = None
         )
 
-        underlying_name_declarator = Nodes.CNameDeclaratorNode(node.pos, name=self.underlying_name, cname=None)
+        underlying_name_declarator = Nodes.CNameDeclaratorNode(node.pos, name=underlying_name, cname=None)
 
         underlying_cyobject = Nodes.CVarDefNode(
             pos = node.pos,
@@ -221,67 +223,6 @@ class CypclassWrapperInjection(VisitorTransform):
         )
 
         return underlying_cyobject
-    
-    # cypclass entries that take on a special name: reverse mapping
-    cycplass_special_entry_names = {
-        "<init>": "__init__"
-    }
-
-    def synthesise_cypclass_method_wrapper(self, cfunc_method):
-        return
-        if cfunc_method.is_static_method:
-            return # for now skip static methods
-
-        cfunc_declarator = cfunc_method.cfunc_declarator
-        py_name = cfunc_method.entry.name
-        
-        # transform e.g. <init> back into __init__
-        try:
-            py_name = self.cycplass_special_entry_names[py_name]
-        except KeyError:
-            pass
-        py_args = cfunc_declarator.args
-        py_doc = cfunc_method.doc
-
-        arg_names = [arg.name for arg in py_args]
-
-        # C++ methods have an implict 'this', so the 'self' argument is skipped in the declarator
-        skipped_self = cfunc_method.cfunc_declarator.skipped_self
-        if not skipped_self:
-            print("Non static cypclass method without self argument ... ??")
-            # should not happen
-            return
-        
-        from . import ExprNodes
-
-        self_name, self_type, self_pos, self_arg = skipped_self
-        type_entry = self_type.entry
-        type_arg = ExprNodes.NameNode(node.pos, name=type_entry.name)
-        type_arg.entry = type_entry
-
-        cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=type_arg, attribute=self.underlying_name)
-
-        c_call = ExprNodes.SimpleCallNode(
-            cfunc_method.pos,
-            function=cfunc,
-            args=[ExprNodes.NameNode(cfunc_method.pos, name=n) for n in arg_names]
-        )
-
-        py_body = ReturnStatNode(pos=cfunc_method.pos, return_type=PyrexTypes.py_object_type, value=c_call)
-
-        return Nodes.DefNode(
-            cfunc_method.pos,
-            name = py_name,
-            args = py_args,
-            star_arg = None,
-            starstar_arg = None,
-            doc = py_doc,
-            body = py_body,
-            decorators = None,
-            is_async_def = 0,
-            return_type_annotation = None
-        )
-
 
 #
 #   Post declaration analysis visitor for wrapped cypclasses
@@ -486,7 +427,7 @@ def generate_cyp_class_activated_class(entry, code):
 
 def generate_cyp_class_reifying_entries(entry, code):
     """
-        Generate code to reify the cypclass entry ?? TODO
+        Generate code to reify the cypclass entry ? -> TODO what does this do exactly ?
     """
 
     target_object_type = entry.type
@@ -742,7 +683,7 @@ def generate_cyp_class_reifying_entries(entry, code):
 
 def generate_cyp_class_wrapper_definition(type, wrapper_entry, constructor_entry, new_entry, alloc_entry, code):
     """
-        Generate cypclass constructor wrapper ?? TODO
+        Generate cypclass constructor wrapper ? -> TODO what does this do exactly ?
     """
 
     if type.templates:

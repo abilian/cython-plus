@@ -1651,7 +1651,8 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         if not skipped_self:
             return # if this ever happens (?), skip non-static methods without a self argument
 
-        cfunc_return_type = cfunc_method.type.return_type
+        cfunc_type = cfunc_method.type
+        cfunc_return_type = cfunc_type.return_type
 
         # we pass the global scope as argument, should not affect the result (?)
         if not cfunc_return_type.can_coerce_to_pyobject(env.global_scope()):
@@ -1713,10 +1714,21 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
 
         # > return the result of the call if the underlying return type is not void
         if cfunc_return_type.is_void:
-            py_stat = ExprStatNode(pos=cfunc_method.pos, expr=c_call)
+            py_stat = ExprStatNode(cfunc_method.pos, expr=c_call)
         else:
-            py_stat = ReturnStatNode(pos=cfunc_method.pos, return_type=PyrexTypes.py_object_type, value=c_call)
+            py_stat = ReturnStatNode(cfunc_method.pos, return_type=PyrexTypes.py_object_type, value=c_call)
         py_body = StatListNode(cfunc_method.pos, stats=[py_stat])
+
+        # > lock around the call in checklock mode
+        if self.lock_mode == 'checklock':
+            need_wlock = not cfunc_type.is_const_method
+            lock_node = LockCypclassNode(
+                cfunc_method.pos,
+                state = 'wlocked' if need_wlock else 'rlocked',
+                obj = underlying_obj,
+                body = py_body
+            )
+            py_body = lock_node
 
         # > the wrapper method
         return DefNode(

@@ -4208,6 +4208,9 @@ class CypClassType(CppClassType):
         return self._mro
 
     # allow conversion to Python only when there is a wrapper type
+    def can_coerce_to_pyobject(self, env):
+        return self.wrapper_type is not None
+
     def create_to_py_utility_code(self, env):
         if not self.wrapper_type:
             return False

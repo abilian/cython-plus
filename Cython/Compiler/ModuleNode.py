@@ -654,9 +654,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("")
             code.putln("/* PyTypeObject pointer declarations for all c classes */")
             self.generate_c_class_declarations(module, code, definition, globalstate)
-            code.putln("")
-            code.putln("/* Deferred definitions for cypclasses */")
-            CypclassWrapper.generate_cyp_class_deferred_definitions(env, code, definition)
 
         for entry in vtabslot_list:
             self.generate_objstruct_definition(entry.type, code)
@@ -666,6 +663,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             self.generate_exttype_vtable_struct(entry, code)
             self.generate_exttype_vtabptr_declaration(entry, code)
             self.generate_exttype_final_methods_declaration(entry, code)
+        
+        for module in modules:
+            definition = module is env
+            code.putln("")
+            code.putln("/* Deferred definitions for cypclasses */")
+            CypclassWrapper.generate_cyp_class_deferred_definitions(env, code, definition)
 
     def generate_declarations_for_modules(self, env, modules, globalstate):
         typecode = globalstate['type_declarations']

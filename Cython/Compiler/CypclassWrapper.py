@@ -85,11 +85,6 @@ def cypclass_iter_scopes(scope):
             for e, s in cypclass_iter_scopes(cypclass_scope):
                 yield e, s
 
-# cypclass entries that take on a special name: reverse mapping
-cycplass_special_entry_names = {
-    "<init>": "__init__"
-}
-
 underlying_name = EncodedString("nogil_cyobject")
 
 #

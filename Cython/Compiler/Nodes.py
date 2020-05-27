@@ -1634,30 +1634,27 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                         # so their declaration analysis will still occur
                         self.cyp_wrapper.body.stats.append(py_method_wrapper)
 
-    def synthesize_cypclass_method_wrapper(self, cfunc_method):
-        
+    def synthesize_cypclass_method_wrapper(self, cfunc_method):        
         if cfunc_method.is_static_method:
             return # for now skip static methods
+
+        alternatives = cfunc_method.entry.all_alternatives()
+        if len(alternatives) > 1:
+            return # for now skip overloaded methods
         
+        cfunc_declarator = cfunc_method.cfunc_declarator
+
         # C++ methods have an implict 'this', so the 'self' argument is skipped in the declarator
-        skipped_self = cfunc_method.cfunc_declarator.skipped_self
+        skipped_self = cfunc_declarator.skipped_self
         if not skipped_self:
             return # if this ever happens (?), skip non-static methods without a self argument
 
-        from .CypclassWrapper import underlying_name, cycplass_special_entry_names
+        from .CypclassWrapper import underlying_name
         from . import ExprNodes
 
-        cfunc_declarator = cfunc_method.cfunc_declarator
-
-        # > name of the wrapping method: same name
-        cfunc_name = cfunc_method.entry.name
+        # > name of the wrapping method: same name as in the original code
+        cfunc_name = cfunc_declarator.base.name
         py_name = cfunc_name
-        try:
-            # transform e.g. <init> back into __init__
-            py_name = cycplass_special_entry_names[py_name]
-        except KeyError:
-            # no need to transform this name
-            pass
 
         # > self argument of the wrapper method: same name, but type of the wrapper cclass
         self_name, self_type, self_pos, self_arg = skipped_self

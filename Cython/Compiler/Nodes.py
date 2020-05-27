@@ -1646,7 +1646,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         
         cfunc_declarator = cfunc_method.cfunc_declarator
 
-        # C++ methods have an implict 'this', so the 'self' argument is skipped in the declarator
+        # > c++ methods have an implict 'this', so the 'self' argument is skipped in the declarator
         skipped_self = cfunc_declarator.skipped_self
         if not skipped_self:
             return # if this ever happens (?), skip non-static methods without a self argument
@@ -1654,9 +1654,17 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         cfunc_type = cfunc_method.type
         cfunc_return_type = cfunc_type.return_type
 
+        # > TODO: the Python-incompatibility is too conservative: 
+        # some types have not yet resolved that they can coerce to PyObject
+        # in particular, any cypclass not yet examined ?
+
         # we pass the global scope as argument, should not affect the result (?)
         if not cfunc_return_type.can_coerce_to_pyobject(env.global_scope()):
             return # skip c methods with Python-incompatible return types
+
+        for argtype in cfunc_type.args:
+            if not argtype.type.can_coerce_to_pyobject(env.global_scope()):
+                return # skip c methods with Python-incompatible argument types
 
         from .CypclassWrapper import underlying_name
         from . import ExprNodes

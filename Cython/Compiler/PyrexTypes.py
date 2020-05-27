@@ -4213,6 +4213,21 @@ class CypClassType(CppClassType):
             return False
         self.to_py_function = "__Pyx_PyObject_FromCyObject"
         return True
+
+    def create_from_py_utility_code(self, env):
+        if not self.wrapper_type:
+            return False
+        wrapper_objstruct = self.wrapper_type.objstruct_cname
+        underlying_type_name = self.cname
+        self.from_py_function = "__Pyx_PyObject_AsCyObject<%s, %s>" % (wrapper_objstruct, underlying_type_name)
+        return True
+    
+    def from_py_call_code(self, source_code, result_code, error_pos, code,
+                          from_py_function=None, error_condition=None):
+        extra_args = [self.wrapper_type.typeptr_cname if self.wrapper_type else None]
+        return self._assign_from_py_code(
+            source_code, result_code, error_pos, code, from_py_function, error_condition, extra_args=extra_args)
+
     
     def empty_declaration_code(self):
         if self._empty_declaration is None:

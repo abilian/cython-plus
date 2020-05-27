@@ -185,6 +185,31 @@
         return ob;
     }
 
+    /*
+     * Cast from CyObject to PyObject:
+     *  - borrow an Python reference
+     *  - return a new atomic reference
+     * 
+     * template:
+     *  - W: the type of the extension type wrapper
+     *  - U: the type of the underlying cypclass
+     *  - T: pointer to the PyTypeObject instance of the wrapper
+     */
+    template <typename W, typename U>
+    static inline U* __Pyx_PyObject_AsCyObject(PyObject * ob, PyTypeObject * type) {
+        // the PyObject is not of the expected type
+        if (ob->ob_type != type)
+            return NULL;
+        W * wrapper = (W *)ob;
+        U * underlying = dynamic_cast<U *>(wrapper->nogil_cyobject);
+        // no underlying cyobject: shouldn't happen, playing it safe for now
+        if (underlying == NULL)
+            return NULL;
+        // return a new atomic reference
+        underlying->CyObject_INCREF();
+        return underlying;
+    }
+
     /* Cast argument to CyObject* type. */
     #define _CyObject_CAST(op) op
 

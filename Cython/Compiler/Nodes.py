@@ -1505,6 +1505,8 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
     #  templates     [(string, bool)] or None
     #  decorators    [DecoratorNode] or None
     #  cypclass      boolean
+    #  lock_mode     'nolock', 'checklock', 'autolock', or None
+    #  activable     boolean
     #  cyp_wrapper   CClassDefNode or None
 
 
@@ -1622,19 +1624,19 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         for thunk in self.entry.type.deferred_declarations:
             thunk()
 
-        self.insert_cypclass_method_wrappers()
+        self.insert_cypclass_method_wrappers(env)
 
-    def insert_cypclass_method_wrappers(self):
+    def insert_cypclass_method_wrappers(self, env):
         if self.cyp_wrapper:
             for attr in self.attributes:
                 if isinstance(attr, CFuncDefNode):
-                    py_method_wrapper = self.synthesize_cypclass_method_wrapper(attr)
+                    py_method_wrapper = self.synthesize_cypclass_method_wrapper(attr, env)
                     if py_method_wrapper:
                         # the wrapper cclasses are inserted after the wrapped node
                         # so their declaration analysis will still occur
                         self.cyp_wrapper.body.stats.append(py_method_wrapper)
 
-    def synthesize_cypclass_method_wrapper(self, cfunc_method):        
+    def synthesize_cypclass_method_wrapper(self, cfunc_method, env):
         if cfunc_method.is_static_method:
             return # for now skip static methods
 
@@ -1648,6 +1650,12 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         skipped_self = cfunc_declarator.skipped_self
         if not skipped_self:
             return # if this ever happens (?), skip non-static methods without a self argument
+
+        cfunc_return_type = cfunc_method.type.return_type
+
+        # we pass the global scope as argument, should not affect the result (?)
+        if not cfunc_return_type.can_coerce_to_pyobject(env.global_scope()):
+            return # skip c methods with Python-incompatible return types
 
         from .CypclassWrapper import underlying_name
         from . import ExprNodes
@@ -1704,7 +1712,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         )
 
         # > return the result of the call if the underlying return type is not void
-        if cfunc_method.type.return_type.is_void:
+        if cfunc_return_type.is_void:
             py_stat = ExprStatNode(pos=cfunc_method.pos, expr=c_call)
         else:
             py_stat = ReturnStatNode(pos=cfunc_method.pos, return_type=PyrexTypes.py_object_type, value=c_call)

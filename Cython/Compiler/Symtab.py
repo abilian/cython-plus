@@ -2775,6 +2775,43 @@ class CppClassScope(Scope):
         activated_method_entry.is_cfunction = 1
         activated_method_entry.is_variable = 1
 
+
+    # Return the type declaration string if stripped_name corresponds to a known type, None otherwise.
+    # The returned string is intended to be used to build an operator of the form "operator <type name>".
+    def _as_type_operator(self, stripped_name):
+        as_operator_name = None
+
+        signed = 1
+        longness = 0
+        ctypename = None
+
+        exploded_name = stripped_name.split('_')
+        for index, token in enumerate(exploded_name):
+            # Basically, it is the same code than Parsing.p_sign_and_longness
+            if token == 'unsigned':
+                signed = 0
+            elif token == 'signed':
+                signed = 2
+            elif token == 'short':
+                longness = -1
+            elif token == 'long':
+                longness += 1
+            else:
+                ctypename = '_'.join(exploded_name[index:])
+                break
+        
+        known_type = PyrexTypes.simple_c_type(signed, longness, ctypename)
+        if not known_type:
+            if stripped_name == "bool":
+                # This one is hardcoded because it is declared as an int
+                # in PyrexTypes
+                as_operator_name = 'bool'
+            else:
+                known_type = self.lookup_type(stripped_name)
+        if known_type:
+            as_operator_name = known_type.declaration_code('')
+        return as_operator_name
+
     def declare_cfunction(self, name, type, pos,
                           cname=None, visibility='extern', api=0, in_pxd=0,
                           defining=0, modifiers=(), utility_code=None, overridable=False, inheriting=0):
@@ -2840,36 +2877,10 @@ class CppClassScope(Scope):
                 name = 'operator'+operator
             elif name.startswith('__') and name.endswith('__'):
                 stripped_name = name[2:-2]
-                signed = 1
-                longness = 0
-                ctypename = None
-                exploded_name = stripped_name.split('_')
-                for index, token in enumerate(exploded_name):
-                    # Basically, it is the same code than Parsing.p_sign_and_longness
-                    if token == 'unsigned':
-                        signed = 0
-                    elif token == 'signed':
-                        signed = 2
-                    elif token == 'short':
-                        longness = -1
-                    elif token == 'long':
-                        longness += 1
-                    else:
-                        ctypename = '_'.join(exploded_name[index:])
-                        break
-                known_type = PyrexTypes.simple_c_type(signed, longness, ctypename)
-                if not known_type:
-                    if stripped_name == "bool":
-                        reify = False
-                        # This one is hardcoded because it is declared as an int
-                        # in PyrexTypes
-                        name = 'operator bool'
-                        type.args = []
-                    else:
-                        known_type = self.lookup_type(stripped_name)
-                if known_type:
+                as_operator_name = self._as_type_operator(stripped_name)
+                if as_operator_name:
                     reify = False
-                    name = 'operator ' + known_type.declaration_code('')
+                    name = 'operator ' + as_operator_name
                     type.args = []
 
         if name in ('<init>', '<del>') and type.nogil:
@@ -3018,6 +3029,11 @@ class CppClassScope(Scope):
             operator = self.operator_table.get(name, None)
             if operator:
                 name = 'operator'+operator
+            elif name.startswith('__') and name.endswith('__'):
+                stripped_name = name[2:-2]
+                as_operator_name = self._as_type_operator(stripped_name)
+                if as_operator_name:
+                    name = 'operator ' + as_operator_name
         return super(CppClassScope,self).lookup_here(name)
 
 

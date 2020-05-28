@@ -1654,7 +1654,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         cfunc_type = cfunc_method.type
         cfunc_return_type = cfunc_type.return_type
 
-        # > TODO: the Python-incompatibility is too conservative: 
+        # > TODO: the Python-incompatibility is too conservative:
         # some types have not yet resolved that they can coerce to PyObject
         # in particular, any cypclass not yet examined ?
 

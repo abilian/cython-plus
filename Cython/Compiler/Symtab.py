@@ -508,18 +508,34 @@ class Scope(object):
             warning(pos, "'%s' is a reserved name in C." % cname, -1)
 
         entries = self.entries
+
+        # The index of an inherited c method among the overloaded alternatives in a cpp class
         old_index = -1
+
+        # The index of the predeclared default constructor among the alternative constructors in a cypclass
+        cpp_no_args_constructor_index = -1
+
         if name and name in entries and not shadow:
             old_entry = entries[name]
-
             # Reject redeclared C++ functions only if they have the same type signature.
             cpp_override_allowed = False
             if type.is_cfunction and old_entry.type.is_cfunction and self.is_cpp():
                 for index, alt_entry in enumerate(old_entry.all_alternatives()):
                     if type.compatible_signature_with(alt_entry.type):
-                        if alt_entry.is_inherited:
-                            old_index = index
+
+                        # If we're not in a cypclass, keep the same behaviour as before
+                        if not (self.type and self.type.is_cyp_class):
+                            if alt_entry.is_inherited:
+                                old_index = index
+
+                        # In a cypclass, only the predeclared default constructor is allowed to be redeclared.
+                        # We don't have to deal with inherited entries because they are hidden as soon as the subclass has a method
+                        # of the same name, regardless of the exact signature (this is also C++ behavior by default)
+                        elif name == '<constructor>' and (not type.args or len(type.args) == type.optional_arg_count):
+                            # Cython pre-declares the no-args constructor - allow later user definitions.
+                            cpp_no_args_constructor_index = index
                             cpp_override_allowed = True
+
                         break
                 else:
                     cpp_override_allowed = True
@@ -528,7 +544,7 @@ class Scope(object):
                 # C++ function/method overrides with different signatures are ok.
                 pass
             elif self.is_cpp_class_scope and entries[name].is_inherited:
-                # Likewise ignore inherited classes.
+                # Likewise ignore inherited methods with identical signatures
                 pass
             elif visibility == 'extern':
                 # Silenced outside of "cdef extern" blocks, until we have a safe way to
@@ -542,16 +558,32 @@ class Scope(object):
         entry.create_wrapper = create_wrapper
         if name:
             entry.qualified_name = self.qualify_name(name)
+
             if not shadow:
                 if name in entries and self.is_cpp_class_scope and type.is_cfunction:
-                    if old_index > -1:
-                        if old_index > 0:
-                            entries[name].overloaded_alternatives[old_index-1] = entry
+                    
+                    # If we're not in a cypclass, keep the same behaviour as before
+                    if not (self.type and self.type.is_cyp_class):
+                        if old_index > -1:
+                            if old_index > 0:
+                                entries[name].overloaded_alternatives[old_index-1] = entry
+                            else:
+                                entry.overloaded_alternatives = entries[name].overloaded_alternatives
+                                entries[name] = entry
                         else:
+                            entries[name].overloaded_alternatives.append(entry)
+                    
+                    # In a cypclass, only the predeclared default constructor might need to be replaced
+                    else:
+                        if cpp_no_args_constructor_index == 0:
                             entry.overloaded_alternatives = entries[name].overloaded_alternatives
                             entries[name] = entry
-                    else:
-                        entries[name].overloaded_alternatives.append(entry)
+                        elif cpp_no_args_constructor_index > 0:
+                            entries[name].overloaded_alternatives[cpp_no_args_constructor_index-1] = entry
+
+                        else:
+                            entries[name].overloaded_alternatives.append(entry)
+
                 else:
                     entries[name] = entry
 
@@ -718,7 +750,7 @@ class Scope(object):
                     wrapper_name = "<constructor>"
                     wrapper_entry = scope.declare(wrapper_name, wrapper_cname, wrapper_type, pos, visibility)
                     wrapper_type.entry = wrapper_entry
-                    wrapper_entry.is_inherited = 1
+                    # wrapper_entry.is_inherited = 1
                     wrapper_entry.is_cfunction = 1
                     wrapper_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), wrapper_cname)
 
@@ -728,7 +760,7 @@ class Scope(object):
                 alloc_name = "<alloc>"
                 alloc_entry = scope.declare(alloc_name, alloc_cname, alloc_type, pos, visibility)
                 alloc_type.entry = alloc_entry
-                alloc_entry.is_inherited = 1
+                # alloc_entry.is_inherited = 1
                 alloc_entry.is_cfunction = 1
                 # is_builtin_cmethod is currently only used in cclass, so it should be safe
                 # to use it here to distinguish between implicit default __alloc__ and user-defined one
@@ -2745,7 +2777,7 @@ class CppClassScope(Scope):
 
     def declare_cfunction(self, name, type, pos,
                           cname=None, visibility='extern', api=0, in_pxd=0,
-                          defining=0, modifiers=(), utility_code=None, overridable=False):
+                          defining=0, modifiers=(), utility_code=None, overridable=False, inheriting=0):
         reify = self.type.is_cyp_class and self.type.activable
         class_name = self.name.split('::')[-1]
         if name in (class_name, '__init__') and cname is None:
@@ -2765,6 +2797,14 @@ class CppClassScope(Scope):
             type.args = [maybe_ref(arg) for arg in type.args]
 
             if self.type.is_cyp_class and not self.lookup_here("__new__"):
+
+                # In cypclasses, inherited methods are all hidden as soon as a
+                # method with the same name is declared in the subclass
+                if not inheriting:
+                    prev_constructor = self.lookup_here("<constructor>")
+                    if prev_constructor and prev_constructor.is_inherited:
+                        del self.entries["<constructor>"]
+                
                 self.declare_constructor_wrapper(type.args, pos, defining,
                                                  type.has_varargs, type.optional_arg_count,
                                                  getattr(type, 'op_arg_struct', None))
@@ -2840,8 +2880,14 @@ class CppClassScope(Scope):
                 if base_entry and not base_entry.type.nogil:
                     error(pos, "Constructor cannot be called without GIL unless all base constructors can also be called without GIL")
                     error(base_entry.pos, "Base constructor defined here.")
-        # The previous entries management is now done directly in Scope.declare
-        #prev_entry = self.lookup_here(name)
+
+        # In cypclasses, inherited methods are all hidden as soon as a
+        # method with the same name is declared in the subclass
+        if self.type.is_cyp_class and not inheriting:
+            prev_entry = self.lookup_here(name)
+            if prev_entry and prev_entry.is_inherited:
+                del self.entries[name]
+
         entry = self.declare_var(name, type, pos,
                                  defining=defining,
                                  cname=cname, visibility=visibility)
@@ -2921,7 +2967,8 @@ class CppClassScope(Scope):
                                            base_entry.pos, base_entry.cname,
                                            base_entry.visibility, api=0,
                                            modifiers=base_entry.func_modifiers,
-                                           utility_code=base_entry.utility_code)
+                                           utility_code=base_entry.utility_code,
+                                           inheriting=1)
             entry.is_inherited = 1
         for base_entry in base_scope.type_entries + base_scope.inherited_type_entries:
             if base_entry.name not in base_templates:

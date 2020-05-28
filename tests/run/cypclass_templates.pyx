@@ -55,15 +55,15 @@ def test_base_new_keyword():
     print o.first()
     print o.second()
 
-def test_derived_twoargs_construction():
-    """
-    >>> test_derived_twoargs_construction()
-    42
-    4
-    """
-    cdef TemplatedDerived[int] o = TemplatedDerived[int](42, 4)
-    print o.first()
-    print o.second()
+# def test_derived_twoargs_construction():
+#     """
+#     >>> test_derived_twoargs_construction()
+#     42
+#     4
+#     """
+#     cdef TemplatedDerived[int] o = TemplatedDerived[int](42, 4)
+#     print o.first()
+#     print o.second()
 
 def test_derived_threeargs_construction():
     """

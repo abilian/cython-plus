@@ -1658,12 +1658,19 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         # some types have not yet resolved that they can coerce to PyObject
         # in particular, any cypclass not yet examined ?
 
+        if cfunc_return_type.is_cyp_class:
+            if cfunc_return_type.templates:
+                return # only skip templated cypclasses for now
+        
         # we pass the global scope as argument, should not affect the result (?)
-        if not cfunc_return_type.can_coerce_to_pyobject(env.global_scope()):
+        elif not cfunc_return_type.can_coerce_to_pyobject(env.global_scope()):
             return # skip c methods with Python-incompatible return types
 
         for argtype in cfunc_type.args:
-            if not argtype.type.can_coerce_to_pyobject(env.global_scope()):
+            if argtype.type.is_cyp_class:
+                if argtype.type.templates:
+                    return # only skip templated cypclasses for now
+            elif not argtype.type.can_coerce_to_pyobject(env.global_scope()):
                 return # skip c methods with Python-incompatible argument types
 
         from .CypclassWrapper import underlying_name

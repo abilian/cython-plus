@@ -4228,6 +4228,8 @@ class CypClassType(CppClassType):
     def from_py_call_code(self, source_code, result_code, error_pos, code,
                           from_py_function=None, error_condition=None):
         extra_args = [self.wrapper_type.typeptr_cname if self.wrapper_type else None]
+        if not error_condition:
+            error_condition = "!%s" % result_code
         return self._assign_from_py_code(
             source_code, result_code, error_pos, code, from_py_function, error_condition, extra_args=extra_args)
 

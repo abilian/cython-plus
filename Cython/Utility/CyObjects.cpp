@@ -190,6 +190,10 @@
      *  - borrow an Python reference
      *  - return a new atomic reference
      * 
+     * In case of conversion failure:
+     *  - raise an exception
+     *  - return NULL
+     * 
      * template:
      *  - W: the type of the extension type wrapper
      *  - U: the type of the underlying cypclass
@@ -198,13 +202,20 @@
     template <typename W, typename U>
     static inline U* __Pyx_PyObject_AsCyObject(PyObject * ob, PyTypeObject * type) {
         // the PyObject is not of the expected type
-        if (ob->ob_type != type)
+        if (ob->ob_type != type) {
+            PyErr_SetString(PyExc_TypeError, "Conversion Error: Could not convert to CyObject");
             return NULL;
+        }
+
         W * wrapper = (W *)ob;
         U * underlying = dynamic_cast<U *>(wrapper->nogil_cyobject);
+
         // no underlying cyobject: shouldn't happen, playing it safe for now
-        if (underlying == NULL)
+        if (underlying == NULL) {
+            PyErr_SetString(PyExc_TypeError, "Conversion Error: CyObject wrapper has no underlying CyObject");
             return NULL;
+        }
+
         // return a new atomic reference
         underlying->CyObject_INCREF();
         return underlying;

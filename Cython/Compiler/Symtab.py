@@ -509,11 +509,9 @@ class Scope(object):
 
         entries = self.entries
 
-        # The index of an inherited c method among the overloaded alternatives in a cpp class
-        old_index = -1
-
-        # The index of the predeclared default constructor among the alternative constructors in a cypclass
-        cpp_no_args_constructor_index = -1
+        # The index of an overridable overloaded alternative that this declaration will hide.
+        # Stays -1 if there isn't one.
+        previous_alternative_index = -1
 
         if name and name in entries and not shadow:
             old_entry = entries[name]
@@ -523,17 +521,18 @@ class Scope(object):
                 for index, alt_entry in enumerate(old_entry.all_alternatives()):
                     if type.compatible_signature_with(alt_entry.type):
 
-                        # If we're not in a cypclass, keep the same behaviour as before
+                        # If we're not in a cypclass, any inherited method is visible
+                        # until overloaded by a method with the same siganture
                         if not (self.type and self.type.is_cyp_class):
                             if alt_entry.is_inherited:
-                                old_index = index
+                                previous_alternative_index = index
 
                         # In a cypclass, only the predeclared default constructor is allowed to be redeclared.
                         # We don't have to deal with inherited entries because they are hidden as soon as the subclass has a method
                         # of the same name, regardless of the exact signature (this is also C++ behavior by default)
                         elif name == '<constructor>' and (not type.args or len(type.args) == type.optional_arg_count):
                             # Cython pre-declares the no-args constructor - allow later user definitions.
-                            cpp_no_args_constructor_index = index
+                            previous_alternative_index = index
                             cpp_override_allowed = True
 
                         break
@@ -561,28 +560,19 @@ class Scope(object):
 
             if not shadow:
                 if name in entries and self.is_cpp_class_scope and type.is_cfunction:
-                    
-                    # If we're not in a cypclass, keep the same behaviour as before
-                    if not (self.type and self.type.is_cyp_class):
-                        if old_index > -1:
-                            if old_index > 0:
-                                entries[name].overloaded_alternatives[old_index-1] = entry
-                            else:
-                                entry.overloaded_alternatives = entries[name].overloaded_alternatives
-                                entries[name] = entry
-                        else:
-                            entries[name].overloaded_alternatives.append(entry)
-                    
-                    # In a cypclass, only the predeclared default constructor might need to be replaced
-                    else:
-                        if cpp_no_args_constructor_index == 0:
-                            entry.overloaded_alternatives = entries[name].overloaded_alternatives
-                            entries[name] = entry
-                        elif cpp_no_args_constructor_index > 0:
-                            entries[name].overloaded_alternatives[cpp_no_args_constructor_index-1] = entry
 
-                        else:
-                            entries[name].overloaded_alternatives.append(entry)
+                    if previous_alternative_index == -1:
+                        # if no previous alternative is hidden by this one, just add it to the list
+                        entries[name].overloaded_alternatives.append(entry)
+
+                    elif previous_alternative_index > 0:
+                        # if there is a now hidden previous alternative, replace it
+                        entries[name].overloaded_alternatives[previous_alternative_index-1] = entry
+
+                    else:
+                        # if the first previous alternative is now hidden, replace it
+                        entry.overloaded_alternatives = entries[name].overloaded_alternatives
+                        entries[name] = entry
 
                 else:
                     entries[name] = entry

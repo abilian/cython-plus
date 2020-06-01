@@ -367,6 +367,10 @@ void RecursiveUpgradeableRWLock::unlock() {
     else if (has_write_lock) {
       --my_counts.write_count;
     }
+    else {
+        fprintf(stderr, "ERROR: trying to unlock already unlocked CyObject !\n");
+        return;
+    }
     if (!my_counts.write_count && !my_counts.read_count) {
         pthread_rwlock_unlock(&this->rw_lock);
         my_counts.thread_id = 0;

@@ -1683,6 +1683,16 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln(
             "static void %s(PyObject *o) {" % slot_func_cname)
 
+        # for cyp wrappers, just decrement the atomic counter of the underlying type
+        is_cyp_wrapper = scope.parent_type.is_cyp_wrapper
+        if is_cyp_wrapper:
+            self.generate_self_cast(scope, code)
+            code.putln("Cy_DECREF(p->%s);" % CypclassWrapper.underlying_name)
+            code.putln("}")
+            if cdealloc_func_entry is None:
+                code.putln("#endif")
+            return
+
         is_final_type = scope.parent_type.is_final_type
         needs_gc = scope.needs_gc()
         needs_trashcan = scope.needs_trashcan()

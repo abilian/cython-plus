@@ -5566,6 +5566,8 @@ class CypclassWrapperDefNode(CClassDefNode):
     def analyse_declarations(self, env):
         # > analyse declarations before inserting methods
         super(CypclassWrapperDefNode, self).analyse_declarations(env)
+        # > mark the wrapper type as such
+        self.entry.type.is_cyp_wrapper = 1
         # > associate the wrapper type to the wrapped type
         self.wrapped_cypclass.entry.type.wrapper_type = self.entry.type
         # > insert and analyse each method wrapper

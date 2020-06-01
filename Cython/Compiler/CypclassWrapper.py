@@ -167,7 +167,7 @@ class CypclassWrapperInjection(VisitorTransform):
         cclass_body = Nodes.StatListNode(pos=node.pos, stats=stats)
         cclass_doc = EncodedString("Python Object wrapper for underlying cypclass %s" % node.name)
 
-        wrapper = Nodes.CClassDefNode(
+        wrapper = Nodes.CypclassWrapperDefNode(
             node.pos,
             visibility = 'private',
             typedef_flag = 0,
@@ -182,10 +182,9 @@ class CypclassWrapperInjection(VisitorTransform):
             in_pxd = node.in_pxd,
             doc = cclass_doc,
             body = cclass_body,
-            is_cyp_wrapper = 1
+            wrapped_cypclass = node
         )
 
-        node.cyp_wrapper = wrapper
         return wrapper
     
     def synthesize_underlying_cyobject_attribute(self, node):
@@ -218,26 +217,6 @@ class CypclassWrapperInjection(VisitorTransform):
         )
 
         return underlying_cyobject
-
-#
-#   Post declaration analysis visitor for wrapped cypclasses
-#
-#   - Associate the type of the wrapper cclass to the wrapped type
-#       => must run after AnalyseDeclarationsTransform
-#
-class CypclassPostDeclarationsVisitor(CythonTransform):
-    """
-        Associate the type of each wrapper cclass to the wrapped type.
-        - Must run after the declarations analysis phase.
-    """
-    # associate the type of the wrapper cclass to the type of the wrapped cypclass
-    def visit_CppClassNode(self, node):
-        if node.cypclass and node.cyp_wrapper:
-            node.entry.type.wrapper_type = node.cyp_wrapper.entry.type
-        self.visitchildren(node)
-        return node
-
-
 
 
 #

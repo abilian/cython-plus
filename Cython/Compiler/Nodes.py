@@ -1507,13 +1507,10 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
     #  cypclass      boolean
     #  lock_mode     'nolock', 'checklock', 'autolock', or None
     #  activable     boolean
-    #  cyp_wrapper   CClassDefNode or None
-
 
     decorators = None
     scope = None
     template_types = None
-    cyp_wrapper = None
 
 
     cpp_message = "Cypclass"
@@ -1623,141 +1620,6 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         # analyse the subclasses that were waiting for this class (their base) to be analysed
         for thunk in self.entry.type.deferred_declarations:
             thunk()
-
-        self.insert_cypclass_method_wrappers(env)
-
-    def insert_cypclass_method_wrappers(self, env):
-        if self.cyp_wrapper:
-            for attr in self.attributes:
-                if isinstance(attr, CFuncDefNode):
-                    py_method_wrapper = self.synthesize_cypclass_method_wrapper(attr, env)
-                    if py_method_wrapper:
-                        # the wrapper cclasses are inserted after the wrapped node
-                        # so their declaration analysis will still occur
-                        self.cyp_wrapper.body.stats.append(py_method_wrapper)
-
-    def synthesize_cypclass_method_wrapper(self, cfunc_method, env):
-        if cfunc_method.is_static_method:
-            return # for now skip static methods
-
-        alternatives = cfunc_method.entry.all_alternatives()
-        if len(alternatives) > 1:
-            return # for now skip overloaded methods
-        
-        cfunc_declarator = cfunc_method.cfunc_declarator
-
-        # > c++ methods have an implict 'this', so the 'self' argument is skipped in the declarator
-        skipped_self = cfunc_declarator.skipped_self
-        if not skipped_self:
-            return # if this ever happens (?), skip non-static methods without a self argument
-
-        cfunc_type = cfunc_method.type
-        cfunc_return_type = cfunc_type.return_type
-
-        # > TODO: the Python-incompatibility is too conservative:
-        # some types have not yet resolved that they can coerce to PyObject
-        # in particular, any cypclass not yet examined ?
-
-        if cfunc_return_type.is_cyp_class:
-            if cfunc_return_type.templates:
-                return # only skip templated cypclasses for now
-        
-        # we pass the global scope as argument, should not affect the result (?)
-        elif not cfunc_return_type.can_coerce_to_pyobject(env.global_scope()):
-            return # skip c methods with Python-incompatible return types
-
-        for argtype in cfunc_type.args:
-            if argtype.type.is_cyp_class:
-                if argtype.type.templates:
-                    return # only skip templated cypclasses for now
-            elif not argtype.type.can_coerce_to_pyobject(env.global_scope()):
-                return # skip c methods with Python-incompatible argument types
-
-        from .CypclassWrapper import underlying_name
-        from . import ExprNodes
-
-        # > name of the wrapping method: same name as in the original code
-        cfunc_name = cfunc_declarator.base.name
-        py_name = cfunc_name
-
-        # > self argument of the wrapper method: same name, but type of the wrapper cclass
-        self_name, self_type, self_pos, self_arg = skipped_self
-        py_self_arg = CArgDeclNode(
-            self_pos,
-            base_type = CSimpleBaseTypeNode(
-                self_pos,
-                name = self.cyp_wrapper.class_name,
-                module_path = [],
-                signed = 1,
-                is_basic_c_type = 0,
-                longness = 0,
-                is_self_arg = 0, # only true for C methods
-                templates = None
-            ),
-            declarator = CNameDeclaratorNode(self_pos, name=self_name, cname=None),
-            not_none = 0,
-            or_none = 0,
-            default = None,
-            annotation = None,
-            kw_only = 0
-        )
-
-        # > all arguments of the wrapper method declaration
-        py_args = [py_self_arg]
-        for arg in cfunc_declarator.args:
-            py_args.append(arg.clone_node())
-
-        # > same docstring
-        py_doc = cfunc_method.doc
-
-        # > names of the arguments passed when calling the underlying method; self not included
-        arg_objs = [ExprNodes.NameNode(arg.pos, name=arg.name) for arg in cfunc_declarator.args]
-
-        # > reference to the self argument of the wrapper method
-        self_obj = ExprNodes.NameNode(self_pos, name=self_name)
-
-        # > access the method of the underlying cyobject from the self argument of the wrapper method
-        underlying_obj = ExprNodes.AttributeNode(cfunc_method.pos, obj=self_obj, attribute=underlying_name)
-        cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=underlying_obj, attribute=cfunc_name)
-
-        # > call to the underlying method
-        c_call = ExprNodes.SimpleCallNode(
-            cfunc_method.pos,
-            function=cfunc,
-            args=arg_objs
-        )
-
-        # > return the result of the call if the underlying return type is not void
-        if cfunc_return_type.is_void:
-            py_stat = ExprStatNode(cfunc_method.pos, expr=c_call)
-        else:
-            py_stat = ReturnStatNode(cfunc_method.pos, return_type=PyrexTypes.py_object_type, value=c_call)
-        py_body = StatListNode(cfunc_method.pos, stats=[py_stat])
-
-        # > lock around the call in checklock mode
-        if self.lock_mode == 'checklock':
-            need_wlock = not cfunc_type.is_const_method
-            lock_node = LockCypclassNode(
-                cfunc_method.pos,
-                state = 'wlocked' if need_wlock else 'rlocked',
-                obj = underlying_obj,
-                body = py_body
-            )
-            py_body = lock_node
-
-        # > the wrapper method
-        return DefNode(
-            cfunc_method.pos,
-            name = py_name,
-            args = py_args,
-            star_arg = None,
-            starstar_arg = None,
-            doc = py_doc,
-            body = py_body,
-            decorators = None,
-            is_async_def = 0,
-            return_type_annotation = None
-        )
 
     def analyse_expressions(self, env):
         self.body = self.body.analyse_expressions(self.entry.type.scope)
@@ -5694,6 +5556,140 @@ class CClassDefNode(ClassDefNode):
             self.type_init_args.annotate(code)
         if self.body:
             self.body.annotate(code)
+
+
+class CypclassWrapperDefNode(CClassDefNode):
+    # wrapped_cypclass      CppClassNode    The wrapped cypclass
+
+    is_cyp_wrapper = 1
+
+    def analyse_declarations(self, env):
+        # > analyse declarations before inserting methods
+        super(CypclassWrapperDefNode, self).analyse_declarations(env)
+        # > associate the wrapper type to the wrapped type
+        self.wrapped_cypclass.entry.type.wrapper_type = self.entry.type
+        # > insert and analyse each method wrapper
+        self.insert_cypclass_method_wrappers(env)
+    
+    def insert_cypclass_method_wrappers(self, env):
+        for attr in self.wrapped_cypclass.attributes:
+            if isinstance(attr, CFuncDefNode):
+                py_method_wrapper = self.synthesize_cypclass_method_wrapper(attr, env)
+                if py_method_wrapper:
+                    self.body.stats.append(py_method_wrapper)
+                    py_method_wrapper.analyse_declarations(self.scope)
+
+    def synthesize_cypclass_method_wrapper(self, cfunc_method, env):
+        if cfunc_method.is_static_method:
+            return # for now skip static methods
+
+        alternatives = cfunc_method.entry.all_alternatives()
+        if len(alternatives) > 1:
+            return # for now skip overloaded methods
+        
+        cfunc_declarator = cfunc_method.cfunc_declarator
+
+        # > c++ methods have an implict 'this', so the 'self' argument is skipped in the declarator
+        skipped_self = cfunc_declarator.skipped_self
+        if not skipped_self:
+            return # if this ever happens (?), skip non-static methods without a self argument
+
+        cfunc_type = cfunc_method.type
+        cfunc_return_type = cfunc_type.return_type
+        
+        # we pass the global scope as argument, should not affect the result (?)
+        if not cfunc_return_type.can_coerce_to_pyobject(env.global_scope()):
+            return # skip c methods with Python-incompatible return types
+
+        for argtype in cfunc_type.args:
+            if not argtype.type.can_coerce_to_pyobject(env.global_scope()):
+                return # skip c methods with Python-incompatible argument types
+
+        from .CypclassWrapper import underlying_name
+        from . import ExprNodes
+
+        # > name of the wrapping method: same name as in the original code
+        cfunc_name = cfunc_declarator.base.name
+        py_name = cfunc_name
+
+        # > self argument of the wrapper method: same name, but type of the wrapper cclass
+        self_name, self_type, self_pos, self_arg = skipped_self
+        py_self_arg = CArgDeclNode(
+            self_pos,
+            base_type = CSimpleBaseTypeNode(
+                self_pos,
+                name = self.class_name,
+                module_path = [],
+                signed = 1,
+                is_basic_c_type = 0,
+                longness = 0,
+                is_self_arg = 0, # only true for C methods
+                templates = None
+            ),
+            declarator = CNameDeclaratorNode(self_pos, name=self_name, cname=None),
+            not_none = 0,
+            or_none = 0,
+            default = None,
+            annotation = None,
+            kw_only = 0
+        )
+
+        # > all arguments of the wrapper method declaration
+        py_args = [py_self_arg]
+        for arg in cfunc_declarator.args:
+            py_args.append(arg.clone_node())
+
+        # > same docstring
+        py_doc = cfunc_method.doc
+
+        # > names of the arguments passed when calling the underlying method; self not included
+        arg_objs = [ExprNodes.NameNode(arg.pos, name=arg.name) for arg in cfunc_declarator.args]
+
+        # > reference to the self argument of the wrapper method
+        self_obj = ExprNodes.NameNode(self_pos, name=self_name)
+
+        # > access the method of the underlying cyobject from the self argument of the wrapper method
+        underlying_obj = ExprNodes.AttributeNode(cfunc_method.pos, obj=self_obj, attribute=underlying_name)
+        cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=underlying_obj, attribute=cfunc_name)
+
+        # > call to the underlying method
+        c_call = ExprNodes.SimpleCallNode(
+            cfunc_method.pos,
+            function=cfunc,
+            args=arg_objs
+        )
+
+        # > return the result of the call if the underlying return type is not void
+        if cfunc_return_type.is_void:
+            py_stat = ExprStatNode(cfunc_method.pos, expr=c_call)
+        else:
+            py_stat = ReturnStatNode(cfunc_method.pos, return_type=PyrexTypes.py_object_type, value=c_call)
+        py_body = StatListNode(cfunc_method.pos, stats=[py_stat])
+
+        # > lock around the call in checklock mode
+        if self.wrapped_cypclass.lock_mode == 'checklock':
+            need_wlock = not cfunc_type.is_const_method
+            lock_node = LockCypclassNode(
+                cfunc_method.pos,
+                state = 'wlocked' if need_wlock else 'rlocked',
+                obj = underlying_obj,
+                body = py_body
+            )
+            py_body = lock_node
+
+        # > the wrapper method
+        return DefNode(
+            cfunc_method.pos,
+            name = py_name,
+            args = py_args,
+            star_arg = None,
+            starstar_arg = None,
+            doc = py_doc,
+            body = py_body,
+            decorators = None,
+            is_async_def = 0,
+            return_type_annotation = None
+        )
 
 
 class PropertyNode(StatNode):

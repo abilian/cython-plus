@@ -2186,8 +2186,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             dict_slot = None
 
         _, (py_attrs, _, memoryview_slices) = scope.get_refcounted_entries()
+
+        # cyp_class attributes should not be treated as normal cpp_class attributes
         cpp_class_attrs = [entry for entry in scope.var_entries
-                           if entry.type.is_cpp_class]
+                           if entry.type.is_cpp_class and not entry.type.is_cyp_class]
 
         if py_attrs or cpp_class_attrs or memoryview_slices or weakref_slot or dict_slot:
             self.generate_self_cast(scope, code)

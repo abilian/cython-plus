@@ -102,6 +102,7 @@ class CypclassWrapperInjection(VisitorTransform):
     def __call__(self, root):
         self.cypclass_wrappers_stack = []
         self.nesting_stack = []
+        self.module_scope = root.scope
         return super(CypclassWrapperInjection, self).__call__(root)
 
     def visit_Node(self, node):
@@ -154,17 +155,45 @@ class CypclassWrapperInjection(VisitorTransform):
         if not node_has_suite:
             return None
         
+        if len(node.base_classes) > 1:
+            return None
+        
         # TODO: take nesting into account for the name
         cclass_name = EncodedString("%s_cyp_wrapper" % node.name)
 
         from .ExprNodes import TupleNode
-        cclass_bases = TupleNode(node.pos, args=[])
+        bases_args = []
+        if node.base_classes:
+            first_base = node.base_classes[0]
+            if isinstance(first_base, Nodes.CSimpleBaseTypeNode) and first_base.templates is None:
+                first_base_name = first_base.name
+                builtin_entry = self.module_scope.lookup(first_base_name)
+                if builtin_entry is not None:
+                    return
+                wrapped_first_base = Nodes.CSimpleBaseTypeNode(
+                    first_base.pos,
+                    name = "%s_cyp_wrapper" % first_base_name,
+                    module_path = [],
+                    is_basic_c_type = first_base.is_basic_c_type,
+                    signed = first_base.signed,
+                    complex = first_base.complex,
+                    longness = first_base.longness,
+                    is_self_arg = first_base.is_self_arg,
+                    templates = None
+                )
+                bases_args.append(wrapped_first_base)
+
+        cclass_bases = TupleNode(node.pos, args=bases_args)
 
         # the underlying cyobject must come first thing after PyObject_HEAD in the memory layout
         # long term, only the base class will declare the underlying attribute
-        underlying_cyobject = self.synthesize_underlying_cyobject_attribute(node)
-        stats = [underlying_cyobject]
+
+        stats = []
+        if not bases_args:
+            underlying_cyobject = self.synthesize_underlying_cyobject_attribute(node)
+            stats.append(underlying_cyobject)
         cclass_body = Nodes.StatListNode(pos=node.pos, stats=stats)
+
         cclass_doc = EncodedString("Python Object wrapper for underlying cypclass %s" % node.name)
 
         wrapper = Nodes.CypclassWrapperDefNode(
@@ -182,11 +211,11 @@ class CypclassWrapperInjection(VisitorTransform):
             in_pxd = node.in_pxd,
             doc = cclass_doc,
             body = cclass_body,
-            wrapped_cypclass = node
+            wrapped_cypclass = node,
         )
 
         return wrapper
-    
+
     def synthesize_underlying_cyobject_attribute(self, node):
         nested_names = [node.name for node in self.nesting_stack]
 
@@ -717,9 +746,10 @@ def generate_cyp_class_wrapper_definition(type, wrapper_entry, constructor_entry
     # initialise PyObject fields
     if is_new_return_type and type.wrapper_type:
         objstruct_cname = type.wrapper_type.objstruct_cname
+        cclass_wrapper_base = type.wrapped_base_type.wrapper_type
         code.putln("if(self) {")
         code.putln("%s * wrapper = new %s();" % (objstruct_cname, objstruct_cname))
-        code.putln("wrapper->nogil_cyobject = self;")
+        code.putln("((%s *)wrapper)->nogil_cyobject = self;" % cclass_wrapper_base.objstruct_cname)
         code.putln("PyObject * wrapper_as_py = (PyObject *) wrapper;")
         code.putln("wrapper_as_py->ob_refcnt = 0;")
         code.putln("wrapper_as_py->ob_type = %s;" % type.wrapper_type.typeptr_cname)

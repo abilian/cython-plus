@@ -5559,7 +5559,7 @@ class CClassDefNode(ClassDefNode):
 
 
 class CypclassWrapperDefNode(CClassDefNode):
-    # wrapped_cypclass      CppClassNode    The wrapped cypclass
+    # wrapped_cypclass      CppClassNode            The wrapped cypclass
 
     is_cyp_wrapper = 1
 
@@ -5652,7 +5652,15 @@ class CypclassWrapperDefNode(CClassDefNode):
 
         # > access the method of the underlying cyobject from the self argument of the wrapper method
         underlying_obj = ExprNodes.AttributeNode(cfunc_method.pos, obj=self_obj, attribute=underlying_name)
-        cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=underlying_obj, attribute=cfunc_name)
+        empty_declarator = CNameDeclaratorNode(cfunc_method.pos, name="", cname=None)
+        cast_underlying_obj = ExprNodes.TypecastNode(
+            cfunc_method.pos,
+            type = self.wrapped_cypclass.entry.type,
+            operand = underlying_obj,
+            typecheck = False
+        )
+
+        cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=cast_underlying_obj, attribute=cfunc_name)
 
         # > call to the underlying method
         c_call = ExprNodes.SimpleCallNode(

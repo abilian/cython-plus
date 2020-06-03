@@ -4176,16 +4176,31 @@ class CypClassType(CppClassType):
     #  lock_mode          string (tri-state: "nolock"/"checklock"/"autolock")
     #  _mro               [CppClassType] or None       the Method Resolution Order of this cypclass according to Python
     #  wrapper_type       PyExtensionType or None      the type of the cclass wrapper
+    #  wrapped_base_type     CypClassType or None         the type of the oldest wrapped cypclass base
 
     is_cyp_class = 1
     to_py_function = None
 
     def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0, lock_mode=None, activable=False):
         CppClassType.__init__(self, name, scope, cname, base_classes, templates, template_type, nogil)
+        if base_classes:
+            self.find_wrapped_base_type(base_classes)
         self.lock_mode = lock_mode if lock_mode else "autolock"
         self.activable = activable
         self._mro = None
-        self.wrapper_type = None # set during
+        self.wrapper_type = None
+        self.wrapped_base_type = None
+
+    def find_wrapped_base_type(self, base_classes):
+        first_wrapped_cypclass_base = None
+        for base_type in base_classes:
+            if base_type.is_cyp_class and base_type.wrapper_type:
+                first_wrapped_cypclass_base = base_type
+                break
+        if first_wrapped_cypclass_base:
+            self.wrapped_base_type = first_wrapped_cypclass_base.wrapped_base_type
+        else:
+            self.wrapped_base_type = self
 
     # Return the MRO for this cypclass
     # Compute all the mro needed when a previous computation is not available
@@ -4220,7 +4235,7 @@ class CypClassType(CppClassType):
     def create_from_py_utility_code(self, env):
         if not self.wrapper_type:
             return False
-        wrapper_objstruct = self.wrapper_type.objstruct_cname
+        wrapper_objstruct = self.wrapped_base_type.wrapper_type.objstruct_cname
         underlying_type_name = self.cname
         self.from_py_function = "__Pyx_PyObject_AsCyObject<%s, %s>" % (wrapper_objstruct, underlying_type_name)
         return True

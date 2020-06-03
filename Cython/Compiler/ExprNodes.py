@@ -11458,12 +11458,10 @@ class BinopNode(ExprNode):
                                          self.operand2.type, env)
             assert self.type.is_pythran_expr
             self.is_temp = 1
+        elif self.is_cpp_py_operation():
+            self.analyse_cpp_py_operation(env)
         elif self.is_py_operation():
-            self.coerce_operands_to_pyobjects(env)
-            self.type = self.result_type(self.operand1.type,
-                                         self.operand2.type, env)
-            assert self.type.is_pyobject
-            self.is_temp = 1
+            self.analyse_py_operation(env)
         elif self.is_cpp_operation():
             self.analyse_cpp_operation(env)
         else:
@@ -11484,9 +11482,29 @@ class BinopNode(ExprNode):
                (is_pythran_supported_operation_type(type1) and is_pythran_supported_operation_type(type2)) and \
                (is_pythran_expr(type1) or is_pythran_expr(type2))
 
+    def is_cpp_py_operation(self):
+        type1 = self.operand1.type
+        type2 = self.operand2.type
+        return type1.is_cpp_class and type2.is_pyobject
+
     def is_cpp_operation(self):
         return (self.operand1.type.is_cpp_class
             or self.operand2.type.is_cpp_class)
+        
+    def analyse_cpp_py_operation(self, env):
+        operator = self.operator if not self.inplace else self.operator+"="
+        entry = env.lookup_operator(operator, [self.operand1, self.operand2])
+        if entry:
+            self.analyse_cpp_operation(env)
+        else:
+            self.analyse_py_operation(env)
+        
+    def analyse_py_operation(self, env):
+        self.coerce_operands_to_pyobjects(env)
+        self.type = self.result_type(self.operand1.type,
+                                        self.operand2.type, env)
+        assert self.type.is_pyobject
+        self.is_temp = 1
 
     def analyse_cpp_operation(self, env):
         operator = self.operator if not self.inplace else self.operator+"="

@@ -1684,10 +1684,16 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             "static void %s(PyObject *o) {" % slot_func_cname)
 
         # for cyp wrappers, just decrement the atomic counter of the underlying type
-        is_cyp_wrapper = scope.parent_type.is_cyp_wrapper
-        if is_cyp_wrapper:
+        parent_type = scope.parent_type
+        if parent_type.is_cyp_wrapper:
+            underlying_type_decl = parent_type.wrapped_decl
+            underlying_attribute_name = CypclassWrapper.underlying_name
             self.generate_self_cast(scope, code)
-            code.putln("Cy_DECREF(p->%s);" % CypclassWrapper.underlying_name)
+            code.putln(
+                "%s * p_nogil_cyobject = (%s *) (p->%s);"
+                % (underlying_type_decl, underlying_type_decl, underlying_attribute_name)
+            )
+            code.putln("Cy_DECREF(p_nogil_cyobject);")
             code.putln("}")
             if cdealloc_func_entry is None:
                 code.putln("#endif")

@@ -5570,6 +5570,8 @@ class CypclassWrapperDefNode(CClassDefNode):
         self.entry.type.is_cyp_wrapper = 1
         # > associate the wrapper type to the wrapped type
         self.wrapped_cypclass.entry.type.wrapper_type = self.entry.type
+        # > remember the cname of the wrapped type
+        self.entry.type.wrapped_decl = self.wrapped_cypclass.entry.type.empty_declaration_code()
         # > insert and analyse each method wrapper
         self.insert_cypclass_method_wrappers(env)
     
@@ -5650,16 +5652,20 @@ class CypclassWrapperDefNode(CClassDefNode):
         # > reference to the self argument of the wrapper method
         self_obj = ExprNodes.NameNode(self_pos, name=self_name)
 
-        # > access the method of the underlying cyobject from the self argument of the wrapper method
+        # > access the underlying cyobject from the self argument of the wrapper method
         underlying_obj = ExprNodes.AttributeNode(cfunc_method.pos, obj=self_obj, attribute=underlying_name)
         empty_declarator = CNameDeclaratorNode(cfunc_method.pos, name="", cname=None)
-        cast_underlying_obj = ExprNodes.TypecastNode(
+        cast_operation = ExprNodes.TypecastNode(
             cfunc_method.pos,
             type = self.wrapped_cypclass.entry.type,
             operand = underlying_obj,
             typecheck = False
         )
 
+        cast_underlying_obj = ExprNodes.NameNode(self_pos, name=EncodedString("cast_cyobject"))
+        cast_assignment = SingleAssignmentNode(self_pos, lhs=cast_underlying_obj, rhs=cast_operation)
+
+        # > access the method of the underlying object
         cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=cast_underlying_obj, attribute=cfunc_name)
 
         # > call to the underlying method
@@ -5674,7 +5680,7 @@ class CypclassWrapperDefNode(CClassDefNode):
             py_stat = ExprStatNode(cfunc_method.pos, expr=c_call)
         else:
             py_stat = ReturnStatNode(cfunc_method.pos, return_type=PyrexTypes.py_object_type, value=c_call)
-        py_body = StatListNode(cfunc_method.pos, stats=[py_stat])
+        py_body = StatListNode(cfunc_method.pos, stats=[cast_assignment, py_stat])
 
         # > lock around the call in checklock mode
         if self.wrapped_cypclass.lock_mode == 'checklock':
@@ -5682,7 +5688,7 @@ class CypclassWrapperDefNode(CClassDefNode):
             lock_node = LockCypclassNode(
                 cfunc_method.pos,
                 state = 'wlocked' if need_wlock else 'rlocked',
-                obj = underlying_obj,
+                obj = cast_underlying_obj,
                 body = py_body
             )
             py_body = lock_node

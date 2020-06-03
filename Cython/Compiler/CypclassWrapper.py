@@ -154,10 +154,7 @@ class CypclassWrapperInjection(VisitorTransform):
 
         if not node_has_suite:
             return None
-        
-        if len(node.base_classes) > 1:
-            return None
-        
+
         # TODO: take nesting into account for the name
         cclass_name = EncodedString("%s_cyp_wrapper" % node.name)
 
@@ -217,13 +214,12 @@ class CypclassWrapperInjection(VisitorTransform):
         return wrapper
 
     def synthesize_underlying_cyobject_attribute(self, node):
-        nested_names = [node.name for node in self.nesting_stack]
 
-        underlying_base_type = Nodes.CSimpleBaseTypeNode(
+        void_type_node = Nodes.CSimpleBaseTypeNode(
             node.pos,
-            name = node.name,
-            module_path = nested_names,
-            is_basic_c_type = 0,
+            name = "void",
+            module_path = [],
+            is_basic_c_type = 1,
             signed = 1,
             complex = 0,
             longness = 0,
@@ -232,11 +228,12 @@ class CypclassWrapperInjection(VisitorTransform):
         )
 
         underlying_name_declarator = Nodes.CNameDeclaratorNode(node.pos, name=underlying_name, cname=None)
+        underlying_name_declarator = Nodes.CPtrDeclaratorNode(node.pos, base=underlying_name_declarator)
 
         underlying_cyobject = Nodes.CVarDefNode(
             pos = node.pos,
             visibility = 'private',
-            base_type = underlying_base_type,
+            base_type = void_type_node,
             declarators = [underlying_name_declarator],
             in_pxd = node.in_pxd,
             doc = None,

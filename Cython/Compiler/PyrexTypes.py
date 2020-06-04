@@ -4177,32 +4177,39 @@ def compute_mro_generic(cls):
 class CypClassType(CppClassType):
     #  lock_mode          string (tri-state: "nolock"/"checklock"/"autolock")
     #  _mro               [CppClassType] or None       the Method Resolution Order of this cypclass according to Python
+    #  support_wrapper    boolean                      whether this cypclass will be wrapped
     #  wrapper_type       PyExtensionType or None      the type of the cclass wrapper
-    #  wrapped_base_type     CypClassType or None         the type of the oldest wrapped cypclass base
+    #  first_wrapped_base CypClassType or None         the first cypclass base that has a wrapper if there is one
+    #  wrapped_base_type  CypClassType or None         the type of the oldest wrapped cypclass base
 
     is_cyp_class = 1
     to_py_function = None
 
     def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0, lock_mode=None, activable=False):
         CppClassType.__init__(self, name, scope, cname, base_classes, templates, template_type, nogil)
-        if base_classes:
-            self.find_wrapped_base_type(base_classes)
         self.lock_mode = lock_mode if lock_mode else "autolock"
         self.activable = activable
         self._mro = None
+        self.support_wrapper = False
         self.wrapper_type = None
         self.wrapped_base_type = None
 
-    def find_wrapped_base_type(self, base_classes):
-        first_wrapped_cypclass_base = None
-        for base_type in base_classes:
-            if base_type.is_cyp_class and base_type.wrapper_type:
-                first_wrapped_cypclass_base = base_type
+    # find the first base that has a wrapper, if there is one
+    # find the oldest superclass such that all intervening classes have a wrapper
+    def find_wrapped_base_type(self):
+        # default: the oldest superclass is self and there are no bases
+        self.wrapped_base_type = self
+        self.first_wrapped_base = None
+        # if there are no bases, no need to look further
+        if not self.base_classes:
+            return
+        # otherwise, find the first wrapped base (if there is one) and take the same oldest superclass
+        for base_type in self.base_classes:
+            if base_type.is_cyp_class and base_type.support_wrapper:
+                # this base type is the first wrapped base
+                self.first_wrapped_base = base_type
+                self.wrapped_base_type = base_type.wrapped_base_type
                 break
-        if first_wrapped_cypclass_base:
-            self.wrapped_base_type = first_wrapped_cypclass_base.wrapped_base_type
-        else:
-            self.wrapped_base_type = self
 
     # Return the MRO for this cypclass
     # Compute all the mro needed when a previous computation is not available

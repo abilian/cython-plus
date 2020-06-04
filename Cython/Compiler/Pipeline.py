@@ -182,7 +182,6 @@ def create_pipeline(context, mode, exclude_classes=()):
     # compilation stage.
     stages = [
         NormalizeTree(context),
-        CypclassWrapperInjection(),
         PostParse(context),
         _specific_post_parse,
         TrackNumpyAttributes(),
@@ -199,6 +198,7 @@ def create_pipeline(context, mode, exclude_classes=()):
         ForwardDeclareTypes(context),
         InjectGilHandling(),
         AnalyseDeclarationsTransform(context),
+        CypclassWrapperInjection(context),
         AutoTestDictTransform(context),
         EmbedSignature(context),
         EarlyReplaceBuiltinCalls(context),  ## Necessary?

@@ -762,8 +762,6 @@ class Scope(object):
                     entry.already_declared_here()
                 else:
                     entry.type.base_classes = base_classes
-                    if cypclass:
-                        entry.type.find_wrapped_base_type(base_classes)
             if templates or entry.type.templates:
                 if templates != entry.type.templates:
                     error(pos, "Template parameters do not match previous declaration")

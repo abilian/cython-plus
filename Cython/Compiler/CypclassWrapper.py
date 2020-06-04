@@ -93,21 +93,36 @@ underlying_name = EncodedString("nogil_cyobject")
 #   - Insert additional cclass wrapper nodes by returning lists of nodes
 #       => must run after NormalizeTree (otherwise single statements might not be held in a list)
 #
-class CypclassWrapperInjection(VisitorTransform):
+class CypclassWrapperInjection(CythonTransform):
     """
         Synthesize and insert a wrapper c class at the module level for each cypclass that supports it.
         - Even nested cypclasses have their wrapper at the module level.
         - Must run after NormalizeTree.
+        - The root node passed when calling this visitor should not be lower than a ModuleNode.
     """
     def __call__(self, root):
-        self.cypclass_wrappers_stack = []
-        self.nesting_stack = []
-        self.module_scope = root.scope
+        from .ParseTreeTransforms import AnalyseDeclarationsTransform
+        self.analyser = AnalyseDeclarationsTransform(self.context)
         return super(CypclassWrapperInjection, self).__call__(root)
 
-    def visit_Node(self, node):
+    def visit_ModuleNode(self, node):
+        self.cypclass_wrappers = []
+        self.nesting_stack = []
+        self.module_scope = node.scope
         self.visitchildren(node)
+        self.inject_cypclass_wrappers(node)
         return node
+
+    def inject_cypclass_wrappers(self, module_node):
+        fake_module_node = module_node.clone_node()
+        fake_module_node.body = Nodes.StatListNode(
+            module_node.body.pos,
+            stats = self.cypclass_wrappers
+        )
+
+        self.analyser(fake_module_node)
+
+        module_node.body.stats.extend(fake_module_node.body.stats)
 
     # TODO: can cypclasses be nested in something other than this ?
     # can cypclasses even be nested in non-cypclass cpp classes, or structs ?
@@ -115,34 +130,18 @@ class CypclassWrapperInjection(VisitorTransform):
         self.nesting_stack.append(node)
         self.visitchildren(node)
         self.nesting_stack.pop()
-        top_level = not self.nesting_stack
-        if top_level:
-            return_nodes = [node]
-            for wrapper in self.cypclass_wrappers_stack:
-                return_nodes.append(wrapper)
-            self.cypclass_wrappers_stack.clear()
-            return return_nodes
         return node
 
     def visit_CppClassNode(self, node):
         if node.cypclass:
             wrapper = self.synthesize_wrapper_cclass(node)
             if wrapper is not None:
-                self.cypclass_wrappers_stack.append(wrapper)
-        # visit children and return all wrappers when at the top level
+                # forward-declare the wrapper
+                wrapper.declare(self.module_scope)
+                self.cypclass_wrappers.append(wrapper)
+        # visit children and keep track of nesting
         return self.visit_CStructOrUnionDefNode(node)
 
-    def find_module_scope(self, scope):
-        module_scope = scope
-        while module_scope and not module_scope.is_module_scope:
-            module_scope = module_scope.outer_scope
-        return module_scope
-    
-    def iter_wrapper_methods(self, wrapper_cclass):
-        for node in wrapper_cclass.body.stats:
-            if isinstance(node, Nodes.DefNode):
-                yield node
-    
     def synthesize_wrapper_cclass(self, node):
         if node.templates:
             # Python wrapper for templated cypclasses not supported yet
@@ -152,38 +151,35 @@ class CypclassWrapperInjection(VisitorTransform):
         # whether the is declared with ':' and a suite, or just a forward declaration
         node_has_suite = node.attributes is not None
 
+        # TODO: forward declare wrapper classes too ?
         if not node_has_suite:
             return None
 
         # TODO: take nesting into account for the name
+        # TODO: check that there is no collision with another name
         cclass_name = EncodedString("%s_cyp_wrapper" % node.name)
 
         from .ExprNodes import TupleNode
         bases_args = []
-        if node.base_classes:
-            first_base = node.base_classes[0]
-            if isinstance(first_base, Nodes.CSimpleBaseTypeNode) and first_base.templates is None:
-                first_base_name = first_base.name
-                builtin_entry = self.module_scope.lookup(first_base_name)
-                if builtin_entry is not None:
-                    return
-                wrapped_first_base = Nodes.CSimpleBaseTypeNode(
-                    first_base.pos,
-                    name = "%s_cyp_wrapper" % first_base_name,
-                    module_path = [],
-                    is_basic_c_type = first_base.is_basic_c_type,
-                    signed = first_base.signed,
-                    complex = first_base.complex,
-                    longness = first_base.longness,
-                    is_self_arg = first_base.is_self_arg,
-                    templates = None
-                )
-                bases_args.append(wrapped_first_base)
+        node_type = node.entry.type
+        node_type.find_wrapped_base_type()
+        first_wrapped_base = node_type.first_wrapped_base
+        if first_wrapped_base:
+            first_base_wrapper_name = first_wrapped_base.wrapper_type.name
+            wrapped_first_base = Nodes.CSimpleBaseTypeNode(
+                node.pos,
+                name = first_base_wrapper_name,
+                module_path = [],
+                is_basic_c_type = 0,
+                signed = 1,
+                complex = 0,
+                longness = 0,
+                is_self_arg = 0,
+                templates = None
+            )
+            bases_args.append(wrapped_first_base)
 
         cclass_bases = TupleNode(node.pos, args=bases_args)
-
-        # the underlying cyobject must come first thing after PyObject_HEAD in the memory layout
-        # long term, only the base class will declare the underlying attribute
 
         stats = []
         if not bases_args:
@@ -210,6 +206,9 @@ class CypclassWrapperInjection(VisitorTransform):
             body = cclass_body,
             wrapped_cypclass = node,
         )
+
+        # indicate that the cypclass will have a wrapper
+        node.entry.type.support_wrapper = True
 
         return wrapper
 

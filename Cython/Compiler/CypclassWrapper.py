@@ -107,6 +107,7 @@ class CypclassWrapperInjection(CythonTransform):
 
     def visit_ModuleNode(self, node):
         self.cypclass_wrappers = []
+        self.cypclass_entries_to_wrapper_names = {}
         self.nesting_stack = []
         self.module_scope = node.scope
         self.visitchildren(node)
@@ -151,10 +152,24 @@ class CypclassWrapperInjection(CythonTransform):
         # whether the is declared with ':' and a suite, or just a forward declaration
         node_has_suite = node.attributes is not None
 
-        # TODO: take nesting into account for the name
-        # TODO: check that there is no collision with another name
-        cclass_name = EncodedString("%s_cyp_wrapper" % node.name)
+        # if a wrapper for this cypclass entry has already been declared, use the same name
+        # (only happens when there are forward declarations for the cypclass itself)
+        if node.entry in self.cypclass_entries_to_wrapper_names:
+            cclass_name = self.cypclass_entries_to_wrapper_names[node.entry]
 
+        # otherwise derive a unique name that avoid collisions with user-defined names
+        else:
+            qualifying_names = [node.name for node in self.nesting_stack]
+            qualifying_names.append(node.name)
+            qualified_name = "_".join(qualifying_names)
+            suffix_name = "__cyp_wrapper"
+            cclass_name = "%s%s" % (qualified_name, suffix_name)
+            while cclass_name in self.module_scope.entries:
+                suffix_name = "%s__cyp_wrapper" % "_"
+                cclass_name = "%s%s" % (qualified_name, suffix_name)
+            cclass_name = EncodedString(cclass_name)
+
+        # determine if the wrapper has a base class
         from .ExprNodes import TupleNode
         bases_args = []
         node_type = node.entry.type
@@ -209,6 +224,10 @@ class CypclassWrapperInjection(CythonTransform):
 
         # indicate that the cypclass will have a wrapper
         node.entry.type.support_wrapper = True
+
+        # associate the wrapper name to the cypclass entry to distinguish
+        # future declarations from collisions with user defined names
+        self.cypclass_entries_to_wrapper_names[node.entry] = cclass_name
 
         return wrapper
 

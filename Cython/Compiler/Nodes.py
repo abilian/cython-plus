@@ -5584,6 +5584,8 @@ class CypclassWrapperDefNode(CClassDefNode):
         self.insert_cypclass_method_wrappers(env)
     
     def insert_cypclass_method_wrappers(self, env):
+        if self.wrapped_cypclass.attributes is None:
+            return
         for attr in self.wrapped_cypclass.attributes:
             if isinstance(attr, CFuncDefNode):
                 py_method_wrapper = self.synthesize_cypclass_method_wrapper(attr, env)

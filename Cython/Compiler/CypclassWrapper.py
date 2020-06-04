@@ -151,10 +151,6 @@ class CypclassWrapperInjection(CythonTransform):
         # whether the is declared with ':' and a suite, or just a forward declaration
         node_has_suite = node.attributes is not None
 
-        # TODO: forward declare wrapper classes too ?
-        if not node_has_suite:
-            return None
-
         # TODO: take nesting into account for the name
         # TODO: check that there is no collision with another name
         cclass_name = EncodedString("%s_cyp_wrapper" % node.name)
@@ -181,13 +177,17 @@ class CypclassWrapperInjection(CythonTransform):
 
         cclass_bases = TupleNode(node.pos, args=bases_args)
 
-        stats = []
-        if not bases_args:
-            underlying_cyobject = self.synthesize_underlying_cyobject_attribute(node)
-            stats.append(underlying_cyobject)
-        cclass_body = Nodes.StatListNode(pos=node.pos, stats=stats)
+        if node_has_suite:
+            stats = []
+            if not bases_args:
+                underlying_cyobject = self.synthesize_underlying_cyobject_attribute(node)
+                stats.append(underlying_cyobject)
+            cclass_body = Nodes.StatListNode(pos=node.pos, stats=stats)
 
-        cclass_doc = EncodedString("Python Object wrapper for underlying cypclass %s" % node.name)
+            cclass_doc = EncodedString("Python Object wrapper for underlying cypclass %s" % node.name)
+
+        else:
+            cclass_body = cclass_doc = None
 
         wrapper = Nodes.CypclassWrapperDefNode(
             node.pos,

@@ -5266,9 +5266,16 @@ class CClassDefNode(ClassDefNode):
             home_scope.lookup(self.class_name).as_variable = self.entry
         if home_scope is not env and self.visibility == 'extern':
             env.add_imported_entry(self.class_name, self.entry, self.pos)
+
         self.scope = scope = self.entry.type.scope
         if scope is not None:
             scope.directives = env.directives
+
+        if scope is not None and self.is_cyp_wrapper:
+                # > correct a cypclass wrapper scope's name
+                # scope.name = self.wrapped_cypclass.name
+                scope.qualified_name = scope.qualifying_scope().qualify_name(self.wrapped_nested_name)
+                scope.class_name = self.wrapped_nested_name
 
         if self.doc and Options.docstrings:
             scope.doc = embed_position(self.pos, self.doc)
@@ -5560,6 +5567,7 @@ class CClassDefNode(ClassDefNode):
 
 class CypclassWrapperDefNode(CClassDefNode):
     # wrapped_cypclass      CppClassNode            The wrapped cypclass
+    # wrapped_nested_name   string                  The nesting-qualified name of the underlying cypclass
 
     is_cyp_wrapper = 1
 
@@ -5570,16 +5578,12 @@ class CypclassWrapperDefNode(CClassDefNode):
         self.entry.type.is_cyp_wrapper = 1
         # > associate the wrapper type to the wrapped type
         self.wrapped_cypclass.entry.type.wrapper_type = self.entry.type
+        # > remember the cname of the wrapped type
+        self.entry.type.wrapped_decl = self.wrapped_cypclass.entry.type.empty_declaration_code()
 
     def analyse_declarations(self, env):
         # > analyse declarations before inserting methods
         super(CypclassWrapperDefNode, self).analyse_declarations(env)
-        # > mark the wrapper type as such
-        self.entry.type.is_cyp_wrapper = 1
-        # > associate the wrapper type to the wrapped type
-        self.wrapped_cypclass.entry.type.wrapper_type = self.entry.type
-        # > remember the cname of the wrapped type
-        self.entry.type.wrapped_decl = self.wrapped_cypclass.entry.type.empty_declaration_code()
         # > insert and analyse each method wrapper
         self.insert_cypclass_method_wrappers(env)
     

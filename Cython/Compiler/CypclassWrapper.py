@@ -152,21 +152,25 @@ class CypclassWrapperInjection(CythonTransform):
         # whether the is declared with ':' and a suite, or just a forward declaration
         node_has_suite = node.attributes is not None
 
+        nested_names = [node.name for node in self.nesting_stack]
+        nested_names.append(node.name)
+
+        qualified_name = ".".join(nested_names)
+        qualified_name = EncodedString(qualified_name)
+
         # if a wrapper for this cypclass entry has already been declared, use the same name
         # (only happens when there are forward declarations for the cypclass itself)
         if node.entry in self.cypclass_entries_to_wrapper_names:
             cclass_name = self.cypclass_entries_to_wrapper_names[node.entry]
 
-        # otherwise derive a unique name that avoid collisions with user-defined names
+        # otherwise derive a unique name that avoids collisions with user-defined names
         else:
-            qualifying_names = [node.name for node in self.nesting_stack]
-            qualifying_names.append(node.name)
-            qualified_name = "_".join(qualifying_names)
+            cclass_nested_name = "_".join(nested_names)
             suffix_name = "__cyp_wrapper"
-            cclass_name = "%s%s" % (qualified_name, suffix_name)
+            cclass_name = "%s%s" % (cclass_nested_name, suffix_name)
             while cclass_name in self.module_scope.entries:
                 suffix_name = "%s__cyp_wrapper" % "_"
-                cclass_name = "%s%s" % (qualified_name, suffix_name)
+                cclass_name = "%s%s" % (cclass_nested_name, suffix_name)
             cclass_name = EncodedString(cclass_name)
 
         # determine if the wrapper has a base class
@@ -199,7 +203,7 @@ class CypclassWrapperInjection(CythonTransform):
                 stats.append(underlying_cyobject)
             cclass_body = Nodes.StatListNode(pos=node.pos, stats=stats)
 
-            cclass_doc = EncodedString("Python Object wrapper for underlying cypclass %s" % node.name)
+            cclass_doc = EncodedString("Python Object wrapper for underlying cypclass %s" % qualified_name)
 
         else:
             cclass_body = cclass_doc = None
@@ -220,6 +224,7 @@ class CypclassWrapperInjection(CythonTransform):
             doc = cclass_doc,
             body = cclass_body,
             wrapped_cypclass = node,
+            wrapped_nested_name = qualified_name
         )
 
         # indicate that the cypclass will have a wrapper

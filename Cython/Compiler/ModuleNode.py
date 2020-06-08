@@ -2014,6 +2014,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         cpp_class_attrs = [entry for entry in scope.var_entries
                            if entry.type.is_cpp_class and not entry.type.is_cyp_class]
 
+        cyp_class_attrs = [entry for entry in scope.var_entries
+                           if entry.type.is_cyp_class]
+
         cinit_func_entry = scope.lookup_here("__cinit__")
         if cinit_func_entry and not cinit_func_entry.is_special:
             cinit_func_entry = None
@@ -2046,7 +2049,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
         need_self_cast = (type.vtabslot_cname or
                           (py_buffers or memoryview_slices or py_attrs) or
-                          cpp_class_attrs)
+                          cpp_class_attrs or cyp_class_attrs)
         if need_self_cast:
             code.putln("%s;" % scope.parent_type.declaration_code("p"))
         if base_type:
@@ -2120,6 +2123,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("new((void*)&(p->%s)) %s();" % (
                 entry.cname, entry.type.empty_declaration_code()))
 
+        for entry in cyp_class_attrs:
+            code.putln("p->%s = NULL;" % entry.cname)
+
         for entry in py_attrs:
             if entry.name == "__dict__":
                 needs_error_cleanup = True
@@ -2191,7 +2197,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         cpp_class_attrs = [entry for entry in scope.var_entries
                            if entry.type.is_cpp_class and not entry.type.is_cyp_class]
 
-        if py_attrs or cpp_class_attrs or memoryview_slices or weakref_slot or dict_slot:
+        cyp_class_attrs = [entry for entry in scope.var_entries
+                           if entry.type.is_cyp_class]
+
+        if py_attrs or cpp_class_attrs or cyp_class_attrs or memoryview_slices or weakref_slot or dict_slot:
             self.generate_self_cast(scope, code)
 
         if not is_final_type:
@@ -2237,6 +2246,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
         for entry in cpp_class_attrs:
             code.putln("__Pyx_call_destructor(p->%s);" % entry.cname)
+
+        for entry in cyp_class_attrs:
+            code.putln("Cy_XDECREF(p->%s);" % entry.cname)
 
         for entry in (py_attrs + memoryview_slices):
             code.put_xdecref_clear("p->%s" % entry.cname, entry.type, nanny=False,

@@ -5668,10 +5668,12 @@ class CypclassWrapperDefNode(CClassDefNode):
 
         # > access the underlying cyobject from the self argument of the wrapper method
         underlying_obj = ExprNodes.AttributeNode(cfunc_method.pos, obj=self_obj, attribute=underlying_name)
-        empty_declarator = CNameDeclaratorNode(cfunc_method.pos, name="", cname=None)
+
+        # > cast the underlying object back to this type
+        underlying_type = self.wrapped_cypclass.entry.type
         cast_operation = ExprNodes.TypecastNode(
             cfunc_method.pos,
-            type = self.wrapped_cypclass.entry.type,
+            type = underlying_type,
             operand = underlying_obj,
             typecheck = False
         )

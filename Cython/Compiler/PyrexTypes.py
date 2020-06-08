@@ -4231,6 +4231,20 @@ class CypClassType(CppClassType):
         self._mro = mro_C3_merge(inputs)
         return self._mro
 
+    # iterate over the chain of first wrapped bases until the oldest wrapped base is reached
+    def first_base_iter(self):
+        type_item = self
+        while type_item is not self.wrapped_base_type:
+            type_item = type_item.first_wrapped_base
+            yield type_item
+
+    # iterate down the chain of first wrapped bases until this type is reached
+    def first_base_rev_iter(self):
+        if self is not self.wrapped_base_type:
+            for t in self.first_wrapped_base.first_base_rev_iter():
+                yield t
+            yield self
+
     # allow conversion to Python only when there is a wrapper type
     def can_coerce_to_pyobject(self, env):
         return self.wrapper_type is not None

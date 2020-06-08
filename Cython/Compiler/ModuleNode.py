@@ -1514,7 +1514,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             # internal classes (should) never need None inits, normal zeroing will do
             py_attrs = []
 
-        # cyp_class attributes should not be treated as normal cpp_class attributes
+        # unlike normal cpp_class attributes, cyp_class attributes are always held as pointers
         cpp_class_attrs = [entry for entry in scope.var_entries
                            if entry.type.is_cpp_class and not entry.type.is_cyp_class]
 
@@ -1713,7 +1713,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
         _, (py_attrs, _, memoryview_slices) = scope.get_refcounted_entries()
 
-        # cyp_class attributes should not be treated as normal cpp_class attributes
+        # unlike normal cpp_class attributes, cyp_class attributes are always held as pointers
         cpp_class_attrs = [entry for entry in scope.var_entries
                            if entry.type.is_cpp_class and not entry.type.is_cyp_class]
 

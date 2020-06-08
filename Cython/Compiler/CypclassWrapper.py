@@ -237,12 +237,20 @@ class CypclassWrapperInjection(CythonTransform):
         return wrapper
 
     def synthesize_underlying_cyobject_attribute(self, node):
+        base_type = node.entry.type.wrapped_base_type
 
-        void_type_node = Nodes.CSimpleBaseTypeNode(
+        nesting_path = []
+        outer_scope = base_type.scope.outer_scope
+        while outer_scope and not outer_scope.is_module_scope:
+            nesting_path.append(outer_scope.name)
+            outer_scope = outer_scope.outer_scope
+        nesting_path.reverse()
+
+        base_type_node = Nodes.CSimpleBaseTypeNode(
             node.pos,
-            name = "void",
-            module_path = [],
-            is_basic_c_type = 1,
+            name = base_type.name,
+            module_path = nesting_path,
+            is_basic_c_type = 0,
             signed = 1,
             complex = 0,
             longness = 0,
@@ -251,12 +259,11 @@ class CypclassWrapperInjection(CythonTransform):
         )
 
         underlying_name_declarator = Nodes.CNameDeclaratorNode(node.pos, name=underlying_name, cname=None)
-        underlying_name_declarator = Nodes.CPtrDeclaratorNode(node.pos, base=underlying_name_declarator)
 
         underlying_cyobject = Nodes.CVarDefNode(
             pos = node.pos,
             visibility = 'private',
-            base_type = void_type_node,
+            base_type = base_type_node,
             declarators = [underlying_name_declarator],
             in_pxd = node.in_pxd,
             doc = None,

@@ -374,7 +374,9 @@ class NameDeletion(NameAssignment):
     def infer_type(self):
         inferred_type = self.rhs.infer_type(self.entry.scope)
         if (not inferred_type.is_pyobject
-                and inferred_type.can_coerce_to_pyobject(self.entry.scope)):
+                and inferred_type.can_coerce_to_pyobject(self.entry.scope)
+                and not inferred_type.is_cyp_class):
+            # do not coerce cypclass to pyobject just for a del statement
             return PyrexTypes.py_object_type
         self.inferred_type = inferred_type
         return inferred_type

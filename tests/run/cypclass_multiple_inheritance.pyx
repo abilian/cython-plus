@@ -32,13 +32,36 @@ cdef cypclass Diamond(InplaceAddition, InplaceSubstraction):
         InplaceAddition.__init__(self, a)
         InplaceSubstraction.__init__(self, b)
 
-def test_non_virtual_inheritance():
+# def test_non_virtual_inheritance():
+#     """
+#     >>> test_non_virtual_inheritance()
+#     1
+#     2
+#     3
+#     0
+#     """
+#     cdef Diamond diamond = Diamond(1, 2)
+# 
+#     diamond.print_IA_base()
+#     diamond.print_IS_base()
+# 
+#     cdef InplaceAddition iadd_obj = InplaceAddition(2)
+#     cdef InplaceSubstraction isub_obj = InplaceSubstraction(2)
+# 
+#     diamond += iadd_obj
+#     diamond -= isub_obj
+# 
+#     diamond.print_IA_base()
+#     diamond.print_IS_base()
+
+
+def test_virtual_inheritance():
     """
-    >>> test_non_virtual_inheritance()
-    1
+    >>> test_virtual_inheritance()
     2
-    3
-    0
+    2
+    2
+    2
     """
     cdef Diamond diamond = Diamond(1, 2)
 

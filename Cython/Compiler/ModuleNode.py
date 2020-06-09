@@ -1005,10 +1005,14 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.put("struct %s" % type.cname)
             if type.base_classes:
                 base_class_list = [base_class.empty_declaration_code() for base_class in type.base_classes]
-                if type.is_cyp_class and (type.base_classes[-1] is cy_object_type or type.base_classes[-1].name == "ActhonActivableClass"):
-                    base_class_list[-1] = "virtual " + base_class_list[-1]
-                base_class_decl = ", public ".join(base_class_list)
-                code.put(" : public %s" % base_class_decl)
+                # if type.is_cyp_class and (type.base_classes[-1] is cy_object_type or type.base_classes[-1].name == "ActhonActivableClass"):
+                #     base_class_list[-1] = "virtual " + base_class_list[-1]
+                if type.is_cyp_class:
+                    base_class_decl = ",virtual public ".join(base_class_list)
+                    code.put(" : virtual public %s" % base_class_decl)
+                else:
+                    base_class_decl = ", public ".join(base_class_list)
+                    code.put(" : public %s" % base_class_decl)
             code.putln(" {")
             self.generate_type_header_code(scope.type_entries, code)
             py_attrs = [e for e in scope.entries.values()

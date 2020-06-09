@@ -1144,7 +1144,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.putln("// Auto generating default constructor to have Python-like behaviour")
                 code.putln("%s(){}" % type.cname)
                 alloc_entry = scope.lookup_here("<alloc>")
-                if alloc_entry.is_builtin_cmethod:
+                if alloc_entry.is_default:
                     code.putln("// Generating default __alloc__ function (used for __new__ calls)")
                     code.putln("static %s { return new %s(); }" %
                                (alloc_entry.type.declaration_code(alloc_entry.cname),

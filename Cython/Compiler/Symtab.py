@@ -162,6 +162,9 @@ class Entry(object):
     # is_rlocked       boolean    Is locked with a read lock (used for cypclass)
     # needs_rlock      boolean    The entry needs a read lock (used in autolock mode)
     # needs_wlock      boolean    The entry needs a write lock (used in autolock mode)
+    #
+    # is_default       boolean    This entry is a compiler-generated default and
+    #                             is not user-defined (e.g default contructor)
 
     # TODO: utility_code and utility_code_definition serves the same purpose...
 
@@ -237,6 +240,7 @@ class Entry(object):
     is_rlocked = False
     needs_rlock = False
     needs_wlock = False
+    is_default = False
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name
@@ -527,11 +531,11 @@ class Scope(object):
                             if alt_entry.is_inherited:
                                 previous_alternative_index = index
 
-                        # In a cypclass, only the predeclared default constructor is allowed to be redeclared.
+                        # In a cypclass, only the predeclared default constructor and __alloc__ are allowed to be redeclared.
                         # We don't have to deal with inherited entries because they are hidden as soon as the subclass has a method
-                        # of the same name, regardless of the exact signature (this is also C++ behavior by default)
-                        elif name == '<constructor>' and (not type.args or len(type.args) == type.optional_arg_count):
-                            # Cython pre-declares the no-args constructor - allow later user definitions.
+                        # of the same name, regardless of the exact signature (this is also C++ behavior by default).
+                        # The default entry is overriden when there is a subsequent entry with a compatible signature.
+                        elif alt_entry.is_default:
                             previous_alternative_index = index
                             cpp_override_allowed = True
 
@@ -740,7 +744,7 @@ class Scope(object):
                     wrapper_name = "<constructor>"
                     wrapper_entry = scope.declare(wrapper_name, wrapper_cname, wrapper_type, pos, visibility)
                     wrapper_type.entry = wrapper_entry
-                    # wrapper_entry.is_inherited = 1
+                    wrapper_entry.is_default = 1
                     wrapper_entry.is_cfunction = 1
                     wrapper_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), wrapper_cname)
 
@@ -752,9 +756,8 @@ class Scope(object):
                 alloc_type.entry = alloc_entry
                 # alloc_entry.is_inherited = 1
                 alloc_entry.is_cfunction = 1
-                # is_builtin_cmethod is currently only used in cclass, so it should be safe
-                # to use it here to distinguish between implicit default __alloc__ and user-defined one
-                alloc_entry.is_builtin_cmethod = 1
+                # is_default is used to distinguish between implicit default __alloc__ and user-defined one
+                alloc_entry.is_default = 1
                 alloc_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), alloc_cname)
 
                 if entry.type.activable:

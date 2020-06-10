@@ -513,35 +513,34 @@ class Scope(object):
 
         entries = self.entries
 
-        # The index of an overridable overloaded alternative that this declaration will hide.
-        # Stays -1 if there isn't one.
-        previous_alternative_index = -1
+        # The indices of an overridable overloaded alternatives that this declaration will hide.
+        previous_alternative_indices = []
 
         if name and name in entries and not shadow:
             old_entry = entries[name]
             # Reject redeclared C++ functions only if they have the same type signature.
             cpp_override_allowed = False
             if type.is_cfunction and old_entry.type.is_cfunction and self.is_cpp():
+                cpp_override_allowed = True
                 for index, alt_entry in enumerate(old_entry.all_alternatives()):
                     if type.compatible_signature_with(alt_entry.type):
 
+                        cpp_override_allowed = False
+
                         # If we're not in a cypclass, any inherited method is visible
-                        # until overloaded by a method with the same siganture
+                        # until overloaded by a method with the same signature
                         if not (self.type and self.type.is_cyp_class):
                             if alt_entry.is_inherited:
-                                previous_alternative_index = index
+                                previous_alternative_indices.append(index)
+                                cpp_override_allowed = True
 
                         # In a cypclass, only the predeclared default constructor and __alloc__ are allowed to be redeclared.
                         # We don't have to deal with inherited entries because they are hidden as soon as the subclass has a method
                         # of the same name, regardless of the exact signature (this is also C++ behavior by default).
                         # The default entry is overriden when there is a subsequent entry with a compatible signature.
                         elif alt_entry.is_default:
-                            previous_alternative_index = index
+                            previous_alternative_indices.append(index)
                             cpp_override_allowed = True
-
-                        break
-                else:
-                    cpp_override_allowed = True
 
             if cpp_override_allowed:
                 # C++ function/method overrides with different signatures are ok.
@@ -565,18 +564,25 @@ class Scope(object):
             if not shadow:
                 if name in entries and self.is_cpp_class_scope and type.is_cfunction:
 
-                    if previous_alternative_index == -1:
-                        # if no previous alternative is hidden by this one, just add it to the list
+                    # sort the indices in decreasing order
+                    previous_alternative_indices.reverse()
+
+                    # remplace the first hidden entry with the new entry
+                    if previous_alternative_indices:
+                        first_index = previous_alternative_indices.pop()
+                        if first_index == 0:
+                            entry.overloaded_alternatives = entries[name].overloaded_alternatives
+                            entries[name] = entry
+                        else:
+                            entries[name].overloaded_alternatives[first_index - 1] = entry
+
+                    # if no entries are hidden by the new entry, just add it to the alternatives
+                    else:
                         entries[name].overloaded_alternatives.append(entry)
 
-                    elif previous_alternative_index > 0:
-                        # if there is a now hidden previous alternative, replace it
-                        entries[name].overloaded_alternatives[previous_alternative_index-1] = entry
-
-                    else:
-                        # if the first previous alternative is now hidden, replace it
-                        entry.overloaded_alternatives = entries[name].overloaded_alternatives
-                        entries[name] = entry
+                    # outright remove the entries for the remaining indices (the first index was removed)
+                    for index in previous_alternative_indices:
+                        del entries[name].overloaded_alternatives[index - 1]
 
                 else:
                     entries[name] = entry

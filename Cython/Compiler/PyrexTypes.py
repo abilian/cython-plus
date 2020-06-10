@@ -4109,9 +4109,63 @@ class CppScopedEnumType(CType):
 
         env.use_utility_code(rst)
 
+# Merge procedure for the C3 linearisation used to produce the MRO
+#
+# sources:
+#   - https://www.python.org/download/releases/2.3/mro/
+#   - https://mail.python.org/pipermail/python-dev/2002-October/029176.html
+#   - https://github.com/mikeboers/C3Linearize/blob/master/c3linearize.py
+#
+def mro_C3_merge(sequences):
+
+    # make copies of the input lists to avoid side effect mutations
+    sequences = [list(s) for s in sequences]
+
+    result = []
+
+    while True:
+
+        # remove empty sequences from consideration
+        sequences = [s for s in sequences if s]
+
+        # the result is fully computed when there are no more sequences to examine
+        if not sequences:
+            return result
+
+        # find the first good head: a head of one of the sequences that is not in any tail
+        for sequence in sequences:
+            head = sequence[0]
+            if not any(head in s[1:] for s in sequences):
+                break
+        else:
+            error(None, "Inconsistent inheritance hierarchy for %s" % self.name)
+
+        # make the head that was found the next element in the linearisation
+        result.append(head)
+
+        # remove that head from consideration
+        for seq in sequences:
+            if seq[0] == head:
+                del seq[0]
+
+# Compute MRO for generic classes with minimal assumptions
+#
+# One assumption only:
+#   - if a class has bases, they are held in 'base_classes' attribute
+#
+def compute_mro_generic(cls):
+    print("GENERIC C3 !!")
+    if not hasattr(cls, "base_classes") or cls.base_classes is None:
+        return [cls]
+    inputs = [[cls]]
+    for base in cls.base_classes:
+        inputs.append(compute_mro_generic(base))
+    inputs.append(cls.base_classes)
+    return mro_C3_merge(inputs)
 
 class CypClassType(CppClassType):
     #  lock_mode          string (tri-state: "nolock"/"checklock"/"autolock")
+    #  mro                [CppClassType] or None         The Method Resolution Order of this cypclass according to Python
 
     is_cyp_class = 1
 
@@ -4119,6 +4173,27 @@ class CypClassType(CppClassType):
         CppClassType.__init__(self, name, scope, cname, base_classes, templates, template_type, nogil)
         self.lock_mode = lock_mode if lock_mode else "autolock"
         self.activable = activable
+        self.mro = None
+
+    # compute the MRO for this cypclass
+    # the mro is also computed for bases when needed
+    # based on https://mail.python.org/pipermail/python-dev/2002-October/029176.html
+    def compute_mro(self):
+        if self.mro is not None:
+            return self.mro
+        if self.base_classes is None:
+            self.mro = [self]
+            return self.mro
+        inputs = [[self]]
+        for base in self.base_classes:
+            if base.is_cyp_class:
+                base_mro = base.compute_mro()
+            else:
+                base_mro = compute_mro_generic(base)
+            inputs.append(base_mro)
+        inputs.append(self.base_classes)
+        self.mro = mro_C3_merge(inputs)
+        return self.mro
 
     def empty_declaration_code(self):
         if self._empty_declaration is None:

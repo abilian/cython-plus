@@ -383,6 +383,7 @@ def inject_acthon_interfaces(self):
     global acthon_result_type, acthon_message_type, acthon_sync_type, acthon_queue_type, acthon_activable_type
     def init_scope(scope):
         scope.is_cpp_class_scope = 1
+        scope.is_cyp_class_scope = 1
         scope.inherited_var_entries = []
         scope.inherited_type_entries = []
 

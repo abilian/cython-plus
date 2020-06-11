@@ -1540,6 +1540,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
 
         if self.scope is None and self.attributes is not None:
             scope = CppClassScope(self.name, env, templates=template_names)
+            scope.is_cyp_class_scope = self.cypclass
             self.scope = scope
         scope = self.scope
 

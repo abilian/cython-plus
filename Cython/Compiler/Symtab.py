@@ -529,7 +529,7 @@ class Scope(object):
 
                         # If we're not in a cypclass, any inherited method is visible
                         # until overloaded by a method with the same signature
-                        if not (self.type and self.type.is_cyp_class):
+                        if not self.is_cyp_class_scope:
                             if alt_entry.is_inherited:
                                 previous_alternative_indices.append(index)
                                 cpp_override_allowed = True
@@ -545,8 +545,16 @@ class Scope(object):
             if cpp_override_allowed:
                 # C++ function/method overrides with different signatures are ok.
                 pass
-            elif self.is_cpp_class_scope and entries[name].is_inherited:
-                # Likewise ignore inherited methods with identical signatures
+            elif self.is_cpp_class_scope and old_entry.is_inherited:
+                # Likewise allow redeclaration of inherited cpp attributes
+                if self.is_cyp_class_scope and not (old_entry.is_cfunction or old_entry.is_type):
+                    # Except for cypclass member variables
+                    error(pos, "Cypclass data member '%s' is inherited more than once by cypclass '%s'."
+                               % (name, self.name))
+                    old_entry.already_declared_here()
+                    cypclass_entry = self.outer_scope.lookup(self.name)
+                    if cypclass_entry:
+                        error(cypclass_entry.pos, "Cypclass '%s' is declared here." % self.name)
                 pass
             elif visibility == 'extern':
                 # Silenced outside of "cdef extern" blocks, until we have a safe way to
@@ -554,7 +562,7 @@ class Scope(object):
                 warning(pos, "'%s' redeclared " % name, 1 if self.in_cinclude else 0)
             elif visibility != 'ignore':
                 error(pos, "'%s' redeclared " % name)
-                entries[name].already_declared_here()
+                old_entry.already_declared_here()
         entry = Entry(name, cname, type, pos = pos)
         entry.in_cinclude = self.in_cinclude
         entry.create_wrapper = create_wrapper
@@ -2654,6 +2662,7 @@ class CppClassScope(Scope):
     #  Namespace of a C++ class.
 
     is_cpp_class_scope = 1
+    is_cyp_class_scope = 0
 
     default_constructor = None
     type = None
@@ -2965,7 +2974,7 @@ class CppClassScope(Scope):
                 if base_entry.name in self.entries:
                     base_entry.name    # FIXME: is there anything to do in this case?
                 entry = self.declare(base_entry.name, base_entry.cname,
-                    base_entry_type, None, 'extern')
+                    base_entry_type, base_entry.pos, 'extern')
                 entry.is_variable = 1
                 entry.is_inherited = 1
                 entry.is_cfunction = base_entry.is_cfunction

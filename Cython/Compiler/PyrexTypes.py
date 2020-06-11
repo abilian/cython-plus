@@ -4808,13 +4808,15 @@ def best_match(arg_types, functions, pos=None, env=None, args=None):
                 bad_types.append((func, error_mesg))
                 break
         else:
-            possibilities.append((score, index, func))  # so we can sort it
+            from .Symtab import Entry
+            mro_score = func.mro_index if isinstance(func, Entry) else 0
+            possibilities.append((mro_score, score, index, func))  # so we can sort it
 
     if possibilities:
         possibilities.sort()
         if len(possibilities) > 1:
-            score1 = possibilities[0][0]
-            score2 = possibilities[1][0]
+            score1 = possibilities[0][:2]
+            score2 = possibilities[1][:2]
             if score1 == score2:
                 if pos is not None:
                     error(pos, "ambiguous overloaded method")

@@ -400,7 +400,8 @@ def inject_acthon_interfaces(self):
                 "ActhonResultInterface", result_scope, "ActhonResultInterface", (PyrexTypes.cy_object_type,),
                 lock_mode="nolock", activable=False)
     result_scope.type = result_type
-    #result_type.set_scope is a little bit overkill here, because parent_type is only used when doing scope inheritance
+    #result_type.set_scope is required because parent_type is used when doing scope inheritance
+    result_type.set_scope(result_scope)
     result_entry = self.declare("ActhonResultInterface", "ActhonResultInterface", result_type, None, "extern")
     result_entry.is_type = 1
 
@@ -457,6 +458,7 @@ def inject_acthon_interfaces(self):
     acthon_message_type = message_type = PyrexTypes.CypClassType(
                 "ActhonMessageInterface", message_scope, "ActhonMessageInterface", (PyrexTypes.cy_object_type,),
                 lock_mode="nolock", activable=False)
+    message_type.set_scope(message_scope)
     message_scope.type = message_type
 
     # cypclass ActhonSyncInterface(CyObject):
@@ -470,6 +472,7 @@ def inject_acthon_interfaces(self):
     acthon_sync_type = sync_type = PyrexTypes.CypClassType(
                 "ActhonSyncInterface", sync_scope, "ActhonSyncInterface", (PyrexTypes.cy_object_type,),
                 lock_mode="nolock", activable=False)
+    sync_type.set_scope(sync_scope)
     sync_scope.type = sync_type
     sync_entry = self.declare("ActhonSyncInterface", "ActhonSyncInterface", sync_type, None, "extern")
     sync_entry.is_type = 1
@@ -538,6 +541,7 @@ def inject_acthon_interfaces(self):
     acthon_queue_type = queue_type = PyrexTypes.CypClassType(
                 "ActhonQueueInterface", queue_scope, "ActhonQueueInterface", (PyrexTypes.cy_object_type,),
                 lock_mode="nolock", activable=False)
+    queue_type.set_scope(queue_scope)
     queue_scope.type = queue_type
     queue_entry = self.declare("ActhonQueueInterface", "ActhonQueueInterface", queue_type, self, "extern")
     queue_entry.is_type = 1
@@ -574,6 +578,7 @@ def inject_acthon_interfaces(self):
     acthon_activable_type = activable_type = PyrexTypes.CypClassType(
                 "ActhonActivableClass", activable_scope, "ActhonActivableClass", (PyrexTypes.cy_object_type,),
                 lock_mode="nolock", activable=False)
+    activable_type.set_scope(activable_scope)
     activable_entry = self.declare("ActhonActivableClass", None, activable_type, "ActhonActivableClass", "extern")
     activable_entry.is_type = 1
 

@@ -2943,9 +2943,7 @@ class CppClassScope(Scope):
         for base_entry in base_scope.inherited_var_entries + base_scope.var_entries:
                 base_entry_type = base_entry.type
                 #constructor/destructor is not inherited
-                if base_entry.name == "<del>"\
-                   or base_entry.name == "<init>" and not self.parent_type.is_cyp_class\
-                   or base_entry.name in ("<constructor>", "<alloc>", "<active_self>", "__activate__") and self.parent_type.is_cyp_class:
+                if base_entry.name == "<del>" or base_entry.name == "<init>":
                     continue
                 elif base_entry.name == "<init>" and not self.lookup_here("__new__"):
                     wrapper_entry = self.declare_constructor_wrapper(base_entry_type.args, base_entry.pos,
@@ -2954,35 +2952,9 @@ class CppClassScope(Scope):
                                                                      op_arg_struct = getattr(base_entry_type, 'op_arg_struct', None),
                                                                      return_type=self.parent_type)
                     wrapper_entry.is_inherited = 1
-                #print base_entry.name, self.entries
-                elif base_entry.name == "__new__" and self.parent_type.is_cyp_class:
-                    # Rewrite first argument for __new__
-                    alloc_type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(
-                        self.parent_type, [], nogil=1))
-                    alloc_arg = PyrexTypes.CFuncTypeArg(base_entry.type.args[0].name, alloc_type,
-                                                        base_entry.type.args[0].pos, cname=base_entry.type.args[0].cname)
-                    base_entry_type = PyrexTypes.CFuncType(base_entry_type.return_type,
-                                            [alloc_arg] + base_entry_type.args[1:], nogil=1,
-                                            has_varargs=base_entry_type.has_varargs,
-                                            optional_arg_count=base_entry_type.optional_arg_count)
-                    if hasattr(base_entry.type, 'op_arg_struct'):
-                        base_entry_type.op_arg_struct = base_entry.type.op_arg_struct
-                    base_entry_type.original_alloc_type = base_entry.type.original_alloc_type
-                    if base_entry.name in self.entries:
-                        del self.entries[base_entry.name]
-                        del self.entries["<constructor>"]
-                    elif "<init>" in self.entries:
-                        del self.entries["<constructor>"]
-                    wrapper_entry = self.declare_constructor_wrapper(base_entry_type.args[1:],
-                                                                     base_entry.pos, defining=1,
-                                                                     has_varargs = base_entry_type.has_varargs,
-                                                                     optional_arg_count = base_entry_type.optional_arg_count,
-                                                                     op_arg_struct = getattr(base_entry_type, 'op_arg_struct', None),
-                                                                     return_type=base_entry_type.return_type)
-                    wrapper_entry.is_inherited = 1
-
                 if base_entry.name in self.entries:
-                    base_entry.name    # FIXME: is there anything to do in this case?
+                    pass
+                    # FIXME: is there anything to do in this case?
                 entry = self.declare(base_entry.name, base_entry.cname,
                     base_entry_type, base_entry.pos, 'extern')
                 entry.is_variable = 1
@@ -2991,14 +2963,7 @@ class CppClassScope(Scope):
                 if entry.is_cfunction:
                     entry.func_cname = base_entry.func_cname
                 self.inherited_var_entries.append(entry)
-        for base_entry in base_scope.cfunc_entries:
-            entry = self.declare_cfunction(base_entry.name, base_entry.type,
-                                           base_entry.pos, base_entry.cname,
-                                           base_entry.visibility, api=0,
-                                           modifiers=base_entry.func_modifiers,
-                                           utility_code=base_entry.utility_code,
-                                           inheriting=1)
-            entry.is_inherited = 1
+
         for base_entry in base_scope.type_entries + base_scope.inherited_type_entries:
             if base_entry.name not in base_templates:
                 entry = self.declare_type(base_entry.name, base_entry.type,
@@ -3007,6 +2972,8 @@ class CppClassScope(Scope):
                 entry.is_inherited = 1
                 self.inherited_type_entries.append(entry)
 
+    # adapted from 'declare_inherited_cpp_attributes'
+    # TODO: reduce redundancy with 'declare_inherited_cpp_attributes'
     def declare_inherited_cyp_attributes(self, base_class):
         base_scope = base_class.scope
         template_type = base_class
@@ -3016,62 +2983,53 @@ class CppClassScope(Scope):
             base_templates = [T.name for T in template_type.templates]
         else:
             base_templates = ()
-        # Declare entries for all the C++ attributes of an
-        # inherited type, with cnames modified appropriately
-        # to work with this type.
-        for base_entry in base_scope.var_entries:
-                base_entry_type = base_entry.type
-                #constructor/destructor is not inherited
-                if base_entry.name == "<del>"\
-                        or base_entry.name in ("<constructor>", "<alloc>", "<active_self>", "__activate__"):
-                    continue
-                elif base_entry.name == "<init>" and not self.lookup_here("__new__"):
-                    wrapper_entry = self.declare_constructor_wrapper(base_entry_type.args, base_entry.pos,
-                                                                     defining=1, has_varargs = base_entry_type.has_varargs,
-                                                                     optional_arg_count = base_entry_type.optional_arg_count,
-                                                                     op_arg_struct = getattr(base_entry_type, 'op_arg_struct', None),
-                                                                     return_type=self.parent_type)
-                    wrapper_entry.is_inherited = 1
-                elif base_entry.name == "__new__":
-                    # Rewrite first argument for __new__
-                    alloc_type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(self.parent_type, [], nogil=1))
-                    alloc_arg = PyrexTypes.CFuncTypeArg(base_entry.type.args[0].name, alloc_type,
-                                                        base_entry.type.args[0].pos, cname=base_entry.type.args[0].cname)
-                    base_entry_type = PyrexTypes.CFuncType(base_entry_type.return_type,
-                                            [alloc_arg] + base_entry_type.args[1:], nogil=1,
-                                            has_varargs=base_entry_type.has_varargs,
-                                            optional_arg_count=base_entry_type.optional_arg_count)
-                    if hasattr(base_entry.type, 'op_arg_struct'):
-                        base_entry_type.op_arg_struct = base_entry.type.op_arg_struct
-                    base_entry_type.original_alloc_type = base_entry.type.original_alloc_type
-                    if base_entry.name in self.entries:
-                        del self.entries[base_entry.name]
-                        del self.entries["<constructor>"]
-                    elif "<init>" in self.entries:
-                        del self.entries["<constructor>"]
-                    wrapper_entry = self.declare_constructor_wrapper(base_entry_type.args[1:],
-                                                                     base_entry.pos, defining=1,
-                                                                     has_varargs = base_entry_type.has_varargs,
-                                                                     optional_arg_count = base_entry_type.optional_arg_count,
-                                                                     op_arg_struct = getattr(base_entry_type, 'op_arg_struct', None),
-                                                                     return_type=base_entry_type.return_type)
-                    wrapper_entry.is_inherited = 1
 
-                entry = self.declare(base_entry.name, base_entry.cname, base_entry_type, base_entry.pos, 'extern')
-                entry.is_variable = 1
-                entry.is_inherited = 1
-                entry.is_cfunction = base_entry.is_cfunction
-                if entry.is_cfunction:
-                    entry.func_cname = base_entry.func_cname
-                self.inherited_var_entries.append(entry)
-        for base_entry in base_scope.cfunc_entries:
-            entry = self.declare_cfunction(base_entry.name, base_entry.type,
-                                           base_entry.pos, base_entry.cname,
-                                           base_entry.visibility, api=0,
-                                           modifiers=base_entry.func_modifiers,
-                                           utility_code=base_entry.utility_code,
-                                           inheriting=1)
+        for base_entry in base_scope.var_entries:
+            base_entry_type = base_entry.type
+            #constructor/destructor is not inherited
+            if base_entry.name == "<del>"\
+                    or base_entry.name in ("<constructor>", "<alloc>", "<active_self>", "__activate__"):
+                continue
+            elif base_entry.name == "<init>" and not self.lookup_here("__new__"):
+                wrapper_entry = self.declare_constructor_wrapper(base_entry_type.args, base_entry.pos,
+                                                                 defining=1, has_varargs = base_entry_type.has_varargs,
+                                                                 optional_arg_count = base_entry_type.optional_arg_count,
+                                                                 op_arg_struct = getattr(base_entry_type, 'op_arg_struct', None),
+                                                                 return_type=self.parent_type)
+                wrapper_entry.is_inherited = 1
+            elif base_entry.name == "__new__":
+                # Rewrite first argument for __new__
+                alloc_type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(self.parent_type, [], nogil=1))
+                alloc_arg = PyrexTypes.CFuncTypeArg(base_entry.type.args[0].name, alloc_type,
+                                                    base_entry.type.args[0].pos, cname=base_entry.type.args[0].cname)
+                base_entry_type = PyrexTypes.CFuncType(base_entry_type.return_type,
+                                        [alloc_arg] + base_entry_type.args[1:], nogil=1,
+                                        has_varargs=base_entry_type.has_varargs,
+                                        optional_arg_count=base_entry_type.optional_arg_count)
+                if hasattr(base_entry.type, 'op_arg_struct'):
+                    base_entry_type.op_arg_struct = base_entry.type.op_arg_struct
+                base_entry_type.original_alloc_type = base_entry.type.original_alloc_type
+                if base_entry.name in self.entries:
+                    del self.entries[base_entry.name]
+                    del self.entries["<constructor>"]
+                elif "<init>" in self.entries:
+                    del self.entries["<constructor>"]
+                wrapper_entry = self.declare_constructor_wrapper(base_entry_type.args[1:],
+                                                                 base_entry.pos, defining=1,
+                                                                 has_varargs = base_entry_type.has_varargs,
+                                                                 optional_arg_count = base_entry_type.optional_arg_count,
+                                                                 op_arg_struct = getattr(base_entry_type, 'op_arg_struct', None),
+                                                                 return_type=base_entry_type.return_type)
+                wrapper_entry.is_inherited = 1
+
+            entry = self.declare(base_entry.name, base_entry.cname, base_entry_type, base_entry.pos, 'extern')
+            entry.is_variable = 1
             entry.is_inherited = 1
+            entry.is_cfunction = base_entry.is_cfunction
+            if entry.is_cfunction:
+                entry.func_cname = base_entry.func_cname
+            self.inherited_var_entries.append(entry)
+
         for base_entry in base_scope.type_entries:
             if base_entry.name not in base_templates:
                 entry = self.declare_type(base_entry.name, base_entry.type,

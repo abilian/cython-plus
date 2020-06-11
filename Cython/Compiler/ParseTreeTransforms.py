@@ -2198,13 +2198,6 @@ if VALUE is not None:
         return property
 
 
-class ComputeMROTransform(CythonTransform):
-    def visit_CppClassNode(self, node):
-        if node.cypclass:
-            node.entry.type.compute_mro()
-        return node
-
-
 class CalculateQualifiedNamesTransform(EnvTransform):
     """
     Calculate and store the '__qualname__' and the global

@@ -4171,7 +4171,7 @@ def compute_mro_generic(cls):
 
 class CypClassType(CppClassType):
     #  lock_mode          string (tri-state: "nolock"/"checklock"/"autolock")
-    #  mro                [CppClassType] or None         The Method Resolution Order of this cypclass according to Python
+    #  _mro               [CppClassType] or None         The Method Resolution Order of this cypclass according to Python
 
     is_cyp_class = 1
 
@@ -4179,27 +4179,27 @@ class CypClassType(CppClassType):
         CppClassType.__init__(self, name, scope, cname, base_classes, templates, template_type, nogil)
         self.lock_mode = lock_mode if lock_mode else "autolock"
         self.activable = activable
-        self.mro = None
+        self._mro = None
 
-    # compute the MRO for this cypclass
-    # the mro is also computed for bases when needed
+    # Return the MRO for this cypclass
+    # Compute all the mro needed when a previous computation is not available
     # based on https://mail.python.org/pipermail/python-dev/2002-October/029176.html
-    def compute_mro(self):
-        if self.mro is not None:
-            return self.mro
+    def mro(self):
+        if self._mro is not None:
+            return self._mro
         if self.base_classes is None:
-            self.mro = [self]
-            return self.mro
+            self._mro = [self]
+            return self._mro
         inputs = [[self]]
         for base in self.base_classes:
             if base.is_cyp_class:
-                base_mro = base.compute_mro()
+                base_mro = base.mro()
             else:
                 base_mro = compute_mro_generic(base)
             inputs.append(base_mro)
         inputs.append(self.base_classes)
-        self.mro = mro_C3_merge(inputs)
-        return self.mro
+        self._mro = mro_C3_merge(inputs)
+        return self._mro
 
     def empty_declaration_code(self):
         if self._empty_declaration is None:

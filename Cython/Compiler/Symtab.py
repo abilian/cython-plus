@@ -165,6 +165,11 @@ class Entry(object):
     #
     # is_default       boolean    This entry is a compiler-generated default and
     #                             is not user-defined (e.g default contructor)
+    #
+    # from_type        CypClassType or CppClassType or CStructOrUnionType or None
+    #                             The type in which this entry was first declared
+    #                             when it is later inherited by a cypclass
+    #
     # mro_index        integer    The index of the type where this entry was originally
     #                             declared in the mro of the cypclass where it is now
 
@@ -256,6 +261,7 @@ class Entry(object):
         self.inner_entries = []
         self.defining_entry = self
         self.mro_index = 0
+        self.from_type = None
 
     def __repr__(self):
         return "%s(<%x>, name=%s, type=%s)" % (type(self).__name__, id(self), self.name, self.type)
@@ -537,12 +543,14 @@ class Scope(object):
                             if alt_entry.is_default:
                                 previous_alternative_indices.append(index)
                                 cpp_override_allowed = True
+                                continue
 
                         # Any inherited method is visible
                         # until overloaded by a method with the same signature
                         if alt_entry.is_inherited:
                             previous_alternative_indices.append(index)
                             cpp_override_allowed = True
+                            continue
 
             if cpp_override_allowed:
                 # C++ function/method overrides with different signatures are ok.
@@ -569,6 +577,7 @@ class Scope(object):
         entry = Entry(name, cname, type, pos = pos)
         if from_type and self.is_cyp_class_scope:
             entry.mro_index = self.parent_type.mro().index(from_type)
+            entry.from_type = from_type
         entry.in_cinclude = self.in_cinclude
         entry.create_wrapper = create_wrapper
 

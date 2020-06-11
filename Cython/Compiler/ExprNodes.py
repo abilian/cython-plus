@@ -7578,6 +7578,8 @@ class AttributeNode(ExprNode):
             if obj.type.is_builtin_type and self.entry and self.entry.is_variable:
                 # accessing a field of a builtin type, need to cast better than result_as() does
                 obj_code = obj.type.cast_code(obj.result(), to_object_struct = True)
+            if obj.type.is_cyp_class and self.entry and self.entry.from_type:
+                self.member = "%s::%s" % (self.entry.from_type.empty_declaration_code(), self.member)
             return "%s%s%s" % (obj_code, self.op, self.member)
 
     def generate_result_code(self, code):

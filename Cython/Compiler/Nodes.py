@@ -1507,6 +1507,8 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
     #  decorators    [DecoratorNode] or None
 
     decorators = None
+    scope = None
+    template_types = None
 
     def declare(self, env):
         if not env.is_cpp():
@@ -1519,6 +1521,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
             num_optional_templates = sum(not required for _, required in self.templates)
             if num_optional_templates and not all(required for _, required in self.templates[:-num_optional_templates]):
                 error(self.pos, "Required template parameters must precede optional template parameters.")
+        self.template_types = template_types
         self.entry = env.declare_cpp_class(
             self.name, None, self.pos, self.cname,
             base_classes=[], visibility=self.visibility, templates=template_types,
@@ -1526,37 +1529,55 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
 
     def analyse_declarations(self, env):
         if self.templates is None:
-            template_types = template_names = None
+            template_names = None
         else:
             template_names = [template_name for template_name, _ in self.templates]
-            template_types = [PyrexTypes.TemplatePlaceholderType(template_name, not required)
-                              for template_name, required in self.templates]
-        scope = None
-        if self.attributes is not None:
+            if self.template_types is None:
+                self.template_types = [PyrexTypes.TemplatePlaceholderType(template_name, not required)
+                                       for template_name, required in self.templates]
+
+        template_types = self.template_types
+
+        if self.scope is None and self.attributes is not None:
             scope = CppClassScope(self.name, env, templates=template_names)
+            self.scope = scope
+        scope = self.scope
+
         def base_ok(base_class):
             if base_class.is_cpp_class or base_class.is_struct:
                 return True
             else:
                 error(self.pos, "Base class '%s' not a struct or class." % base_class)
+
         base_types_list = [b.analyse(scope or env) for b in self.base_classes]
+        base_class_types = list(filter(base_ok, base_types_list))
+
+
+        # if this is not just a forward declaration, defer analysis until all base classes are analysed
+        if scope:
+            for base_type in base_class_types:
+                if not base_type.scope:
+                    base_type.deferred_declarations.append(lambda: self.analyse_declarations(env))
+                    return
+
+        # add implicit cyobject or acthon base if this cypclass has no explicit cypclass bases
         if self.cypclass:
             if self.activable:
                 activable_base = False
-                for base_type in base_types_list:
+                for base_type in base_class_types:
                     if not base_type.activable:
                         error(self.pos, "Activable class cannot inherit from not activable one.")
                     activable_base = activable_base or base_type.activable
                 if not activable_base:
                     from . import Builtin
-                    base_types_list.append(Builtin.acthon_activable_type)
+                    base_class_types.append(Builtin.acthon_activable_type)
 
             cyobject_base = False
-            for base_type in base_types_list:
+            for base_type in  base_class_types:
                 cyobject_base = cyobject_base or base_type.is_cyp_class
             if not cyobject_base:
-                base_types_list.append(cy_object_type)
-        base_class_types = filter(base_ok, base_types_list)
+                base_class_types.append(cy_object_type)
+
         self.entry = env.declare_cpp_class(
             self.name, scope, self.pos,
             self.cname, base_class_types, visibility=self.visibility, templates=template_types,
@@ -1590,7 +1611,10 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                 if self.templates is not None:
                     func.template_declaration = "template <typename %s>" % ", typename ".join(template_names)
         self.body = StatListNode(self.pos, stats=defined_funcs)
-        self.scope = scope
+
+        # analyse the subclasses that were waiting for this class (their base) to be analysed
+        for thunk in self.entry.type.deferred_declarations:
+            thunk()
 
     def analyse_expressions(self, env):
         self.body = self.body.analyse_expressions(self.entry.type.scope)

@@ -3494,12 +3494,14 @@ class CStructOrUnionType(CType):
     #  scope         StructOrUnionScope, or None if incomplete
     #  typedef_flag  boolean
     #  packed        boolean
+    #  deferred_declarations [thunk] or None     Used to declare class hierarchies in order (None when this type is an union)
 
-    # entry          Entry
+    #  entry          Entry
 
     is_struct_or_union = 1
     has_attributes = 1
     exception_check = True
+    deferred_declarations = None
 
     def __init__(self, name, kind, scope, typedef_flag, cname, packed=False):
         self.name = name
@@ -3508,6 +3510,8 @@ class CStructOrUnionType(CType):
         self.scope = scope
         self.typedef_flag = typedef_flag
         self.is_struct = kind == 'struct'
+        if self.is_struct:
+            self.deferred_declarations = []
         self.to_py_function = "%s_to_py_%s" % (
             Naming.convert_func_prefix, self.specialization_name())
         self.from_py_function = "%s_from_py_%s" % (
@@ -3683,6 +3687,7 @@ class CppClassType(CType):
     #  cname         string
     #  scope         CppClassScope
     #  templates     [string] or None
+    #  deferred_declarations [thunk]      Used to declare class hierarchies in order
 
     is_cpp_class = 1
     has_attributes = 1
@@ -3701,6 +3706,7 @@ class CppClassType(CType):
         self.cname = cname
         self.scope = scope
         self.base_classes = base_classes
+        self.deferred_declarations = []
         self.operators = []
         self.templates = templates
         self.template_type = template_type

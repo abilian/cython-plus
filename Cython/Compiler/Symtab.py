@@ -255,7 +255,7 @@ class Entry(object):
         self.type = type
         self.pos = pos
         self.init = init
-        self.overloaded_alternatives = []
+        self.overloaded_alternatives = [self]
         self.cf_assignments = []
         self.cf_references = []
         self.inner_entries = []
@@ -274,7 +274,7 @@ class Entry(object):
         self.already_declared_here()
 
     def all_alternatives(self):
-        return [self] + self.overloaded_alternatives
+        return list(self.overloaded_alternatives)
 
     def all_entries(self):
         return [self] + self.inner_entries
@@ -587,27 +587,31 @@ class Scope(object):
             if not shadow:
                 if name in entries and self.is_cpp_class_scope and type.is_cfunction:
 
+                    # give all alternative entries access to all overloaded alternatives
+                    entry.overloaded_alternatives = entries[name].overloaded_alternatives
+
                     # sort the indices in decreasing order
                     previous_alternative_indices.reverse()
 
                     # remplace the first hidden entry with the new entry
                     if previous_alternative_indices:
                         first_index = previous_alternative_indices.pop()
+                        entries[name].overloaded_alternatives[first_index] = entry
+
+                        # the overloaded entry at index 0 is always the one in the scope dict
                         if first_index == 0:
-                            entry.overloaded_alternatives = entries[name].overloaded_alternatives
                             entries[name] = entry
-                        else:
-                            entries[name].overloaded_alternatives[first_index - 1] = entry
 
                     # if no entries are hidden by the new entry, just add it to the alternatives
                     else:
                         entries[name].overloaded_alternatives.append(entry)
 
-                    # outright remove the entries for the remaining indices (the first index was removed)
+                    # outright remove the entries for the remaining indices (in decreasing order)
                     for index in previous_alternative_indices:
-                        del entries[name].overloaded_alternatives[index - 1]
+                        del entries[name].overloaded_alternatives[index]
 
                 else:
+                    # this is the first entry with this name
                     entries[name] = entry
 
         if type.is_memoryviewslice:
@@ -1013,7 +1017,8 @@ class Scope(object):
                             can_override = True
                     if can_override:
                         temp = self.add_cfunction(name, type, pos, cname, visibility, modifiers)
-                        temp.overloaded_alternatives = entry.all_alternatives()
+                        temp.overloaded_alternatives = entry.overloaded_alternatives
+                        temp.overloaded_alternatives.insert(0, temp)
                         entry = temp
                     else:
                         warning(pos, "Function signature does not match previous declaration", 1)

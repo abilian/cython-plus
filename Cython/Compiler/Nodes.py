@@ -5602,6 +5602,10 @@ class CypclassWrapperDefNode(CClassDefNode):
             return # for now skip static methods
 
         alternatives = cfunc_method.entry.all_alternatives()
+
+        # > consider only the alternatives that are actually defined in this wrapped cypclass
+        alternatives = list(filter(lambda e: e.mro_index == 0, alternatives))
+
         if len(alternatives) > 1:
             return # for now skip overloaded methods
         

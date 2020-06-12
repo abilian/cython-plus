@@ -2951,10 +2951,10 @@ class CFuncType(CType):
             return 0
         return 1
 
-    def compatible_signature_with(self, other_type, as_cmethod = 0):
-        return self.compatible_signature_with_resolved_type(other_type.resolve(), as_cmethod)
+    def compatible_signature_with(self, other_type, as_cmethod = 0, ignore_return_type=0):
+        return self.compatible_signature_with_resolved_type(other_type.resolve(), as_cmethod, ignore_return_type)
 
-    def compatible_signature_with_resolved_type(self, other_type, as_cmethod):
+    def compatible_signature_with_resolved_type(self, other_type, as_cmethod, ignore_return_type=0):
         #print "CFuncType.same_c_signature_as_resolved_type:", \
         #    self, other_type, "as_cmethod =", as_cmethod ###
         if other_type is error_type:
@@ -2977,8 +2977,9 @@ class CFuncType(CType):
                 return 0
         if self.has_varargs != other_type.has_varargs:
             return 0
-        if not self.return_type.subtype_of_resolved_type(other_type.return_type):
-            return 0
+        if not ignore_return_type:
+            if not self.return_type.subtype_of_resolved_type(other_type.return_type):
+                return 0
         if not self.same_calling_convention_as(other_type):
             return 0
         if self.nogil != other_type.nogil:

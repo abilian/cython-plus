@@ -534,7 +534,12 @@ class Scope(object):
             if type.is_cfunction and old_entry.type.is_cfunction and self.is_cpp():
                 cpp_override_allowed = True
                 for index, alt_entry in enumerate(old_entry.all_alternatives()):
-                    if type.compatible_signature_with(alt_entry.type):
+                    # in a cypclass, a method can hide a method inherited from a different class
+                    # regardless of their return types
+                    ignore_return_type = (self.is_cyp_class_scope
+                                          and alt_entry.is_inherited
+                                          and alt_entry.from_type is not from_type)
+                    if type.compatible_signature_with(alt_entry.type, ignore_return_type=ignore_return_type):
 
                         cpp_override_allowed = False
 
@@ -3033,7 +3038,6 @@ class CppClassScope(Scope):
             entry.is_cfunction = base_entry.is_cfunction
             if entry.is_cfunction:
                 entry.func_cname = base_entry.func_cname
-            self.inherited_var_entries.append(entry)
 
         for base_entry in base_scope.type_entries:
             if base_entry.name not in base_templates:
@@ -3041,7 +3045,6 @@ class CppClassScope(Scope):
                                           base_entry.pos, base_entry.cname,
                                           base_entry.visibility, defining=0)
                 entry.is_inherited = 1
-                self.inherited_type_entries.append(entry)
 
     def specialize(self, values, type_entry):
         scope = CppClassScope(self.name, self.outer_scope)

@@ -7581,8 +7581,6 @@ class AttributeNode(ExprNode):
             if obj.type.is_cpp_class and self.entry and self.entry.is_cfunction:
                 # the entry might have been resolved to an overladed alternative in the meantime
                 self.member = self.entry.cname
-            if obj.type.is_cyp_class and self.entry and self.entry.from_type:
-                self.member = "%s::%s" % (self.entry.from_type.empty_declaration_code(), self.member)
             return "%s%s%s" % (obj_code, self.op, self.member)
 
     def generate_result_code(self, code):

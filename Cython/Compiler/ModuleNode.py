@@ -1066,6 +1066,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 constructor = scope.lookup_here("<constructor>")
                 for constructor_alternative in constructor.all_alternatives():
                     code.putln("static %s;" % constructor_alternative.type.declaration_code(constructor_alternative.cname))
+                self.generate_cyp_class_mro_method_resolution(scope, code)
             elif constructor or py_attrs:
                 if constructor:
                     for constructor_alternative in constructor.all_alternatives():
@@ -1154,6 +1155,47 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         if type.is_cyp_class:
             code.globalstate.use_utility_code(
                 UtilityCode.load("CyObjects", "CyObjects.cpp", proto_block="utility_code_proto_before_types"))
+
+    def generate_cyp_class_mro_method_resolution(self, scope, code):
+        """
+            Generate overriding methods in derived cypclasses to forward calls to the correct method according
+            to the MRO, regardless of the type of the pointer to the object through which the call is made.
+            In other words: emulate Python MRO lookup rules using only C++ virtual methods.
+        """
+        inherited_methods = [
+            e for entry in scope.entries.values() for e in entry.all_alternatives()
+            if e.is_cfunction
+            and e.from_type
+            and e.mro_index > 0
+            and not e.type.is_static_method # avoid dealing with static methods for now
+            and e.name not in ("<init>", "<del>")
+            and not e.type.has_varargs # avoid dealing with varargs for now (is this ever required anyway ?)
+        ]
+        if inherited_methods:
+            code.putln("")
+            code.putln("/* make all inherited (non overriden) methods resolve correctly according to the MRO */")
+        for e in inherited_methods:
+            modifiers = code.build_function_modifiers(e.func_modifiers)
+
+            arg_decls = [arg.declaration_code() for arg in e.type.args]
+            arg_names = [arg.cname for arg in e.type.args]
+            if e.type.optional_arg_count:
+                opt_name = Naming.optional_args_cname
+                arg_decls.append(e.type.op_arg_struct.declaration_code(opt_name))
+                arg_names.append(opt_name)
+
+            header = e.type.function_header_code(e.cname, ", ".join(arg_decls))
+            if not e.name.startswith("operator "):
+                header = e.type.return_type.declaration_code(header)
+
+            return_code = "" if e.type.return_type.is_void else "return "
+            resolution = e.from_type.empty_declaration_code()
+
+            body = "%s%s::%s(%s);" % (return_code, resolution, e.cname, ", ".join(arg_names))
+
+            code.putln("virtual %s%s {%s}" % (modifiers, header, body))
+        if inherited_methods:
+            code.putln("")
 
     def generate_cyp_class_attrs_destructor_definition(self, entry, code):
         scope = entry.type.scope

@@ -4223,6 +4223,9 @@ class CypClassType(CppClassType):
     def cast_code(self, expr_code):
         return "((%s)%s)" % (self.declaration_code(''), expr_code)
 
+    def dynamic_cast_code(self, expr_code):
+        return "dynamic_cast<%s>(%s)" % (self.declaration_code(''), expr_code)
+
     def assignable_from_resolved_type(self, other_type):
         if other_type.is_ptr and other_type.base_type.is_cpp_class and other_type.base_type.is_subclass(self) or other_type.is_null_ptr:
             return 1

@@ -10905,8 +10905,13 @@ class TypecastNode(ExprNode):
                     real_part,
                     imag_part)
         else:
-            if self.overloaded and self.operand.type.is_cyp_class:
-                operand_result = '(*%s)' % operand_result
+            operand_type = self.operand.type
+            if operand_type.is_cyp_class:
+                if self.overloaded:
+                    operand_result = '(*%s)' % operand_result
+            # use dynamic cast when dowcasting from a base to a cypclass
+            if self.type.is_cyp_class and operand_type in self.type.mro():
+                return self.type.dynamic_cast_code(operand_result)
             return self.type.cast_code(operand_result)
 
     def get_constant_c_result_code(self):
@@ -10932,11 +10937,19 @@ class TypecastNode(ExprNode):
             elif self.type.is_cyp_class:
                 star = "*" if self.overloaded else ""
                 operand_result = "%s%s" % (star, self.operand.result())
-                code.putln(
-                    "%s = (%s)(%s);" % (
-                        self.result(),
-                        self.type.declaration_code(''),
-                        operand_result))
+                # use dynamic cast when dowcasting from a base to a cypclass
+                if self.operand.type in self.type.mro():
+                    code.putln(
+                        "%s = dynamic_cast<%s>(%s);" % (
+                            self.result(),
+                            self.type.declaration_code(''),
+                            operand_result))
+                else:
+                    code.putln(
+                        "%s = (%s)(%s);" % (
+                            self.result(),
+                            self.type.declaration_code(''),
+                            operand_result))
                 code.put_cyincref(self.result())
 
 

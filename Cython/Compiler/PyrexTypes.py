@@ -4211,6 +4211,12 @@ class CypClassType(CppClassType):
                 self.wrapped_base_type = base_type.wrapped_base_type
                 break
 
+    # iterate over the bases that support wrapping
+    def iter_wrapped_base_types(self):
+        for base_type in self.base_classes:
+            if base_type.is_cyp_class and base_type.support_wrapper:
+                yield base_type
+
     # Return the MRO for this cypclass
     # Compute all the mro needed when a previous computation is not available
     # based on https://mail.python.org/pipermail/python-dev/2002-October/029176.html

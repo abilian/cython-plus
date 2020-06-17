@@ -155,13 +155,17 @@ class CypclassWrapperInjection(CythonTransform):
         self.derive_names(node)
         self.collected_cypclasses.append(node)
 
-    def create_unique_name(self, nested_name, suffix):
-        wrapper_name = "%s%s" % (nested_name, suffix)
-        while wrapper_name in self.module_scope.entries:
-            # the end of the suffix must be modified to avoid collisions
-            # between cypclasses having the same prefix, e.g. 'A' and 'A_'.
-            wrapper_name = "%s_" % (wrapper_name, suffix)
-        return EncodedString(wrapper_name)
+    def create_unique_name(self, name):
+        # output: name(_u_*)?
+        # guarantees:
+        # - different inputs always result in different outputs
+        # - the output is not in the module scope dictionary
+        unique_name = name
+        if unique_name in self.module_scope.entries:
+            unique_name = "%s_u" % unique_name
+        while unique_name in self.module_scope.entries:
+            unique_name = "%s_" % unique_name
+        return EncodedString(unique_name)
 
     def derive_names(self, node):
         nested_names = [node.name for node in self.nesting_stack]
@@ -172,18 +176,21 @@ class CypclassWrapperInjection(CythonTransform):
 
         nested_name = "_".join(nested_names)
 
-        cclass_name = self.create_unique_name(nested_name, "__cyp_cclass_wrapper")
-        pyclass_name = self.create_unique_name(nested_name, "__cyp_pyclass_wrapper")
+        cclass_name = self.create_unique_name("%s_cyp_cclass_wrapper" % nested_name)
+        pyclass_name = self.create_unique_name("%s_cyp_pyclass_wrapper" % nested_name)
 
         self.type_to_names[node.entry.type] = qualified_name, cclass_name, pyclass_name
 
     def inject_cypclass_wrappers(self, module_node):
         if self.cimport_cython:
             # cimport cython to access the @cython.binding decorator
+            # use a unique name for "cimport cython as <name>" if necessary
+            as_name = self.create_unique_name("cython")
+            self.cython_as_name = as_name
             cimport_stmt = Nodes.CImportStatNode(
                 module_node.pos,
                 module_name=EncodedString("cython"),
-                as_name=None,
+                as_name=None if as_name == "cython" else as_name,
                 is_absolute=True
             )
             self.wrappers.append(cimport_stmt)
@@ -235,7 +242,7 @@ class CypclassWrapperInjection(CythonTransform):
                 function=AttributeNode(
                     node.pos,
                     attribute=EncodedString("binding"),
-                    obj=NameNode(node.pos, name=EncodedString("cython"))
+                    obj=NameNode(node.pos, name=self.cython_as_name)
                 ),
                 args=[BoolNode(node.pos, value=True)]
             )

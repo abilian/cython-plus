@@ -4183,6 +4183,7 @@ class CypClassType(CppClassType):
 
     is_cyp_class = 1
     to_py_function = None
+    from_py_function = None
 
     def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0, lock_mode=None, activable=False):
         CppClassType.__init__(self, name, scope, cname, base_classes, templates, template_type, nogil)

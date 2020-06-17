@@ -4179,8 +4179,7 @@ class CypClassType(CppClassType):
     #  _mro               [CppClassType] or None       the Method Resolution Order of this cypclass according to Python
     #  support_wrapper    boolean                      whether this cypclass will be wrapped
     #  wrapper_type       PyExtensionType or None      the type of the cclass wrapper
-    #  first_wrapped_base CypClassType or None         the first cypclass base that has a wrapper if there is one
-    #  wrapped_base_type  CypClassType or None         the type of the oldest wrapped cypclass base
+    #  _wrapped_base_type CypClassType or None         the type of the oldest wrapped cypclass base
 
     is_cyp_class = 1
     to_py_function = None
@@ -4192,26 +4191,23 @@ class CypClassType(CppClassType):
         self._mro = None
         self.support_wrapper = False
         self.wrapper_type = None
-        self.wrapped_base_type = None
+        self._wrapped_base_type = None
 
-    # find the first base that has a wrapper, if there is one
-    # find the oldest superclass such that all intervening classes have a wrapper
-    def find_wrapped_base_type(self):
-        # default: the oldest superclass is self and there are no bases
-        self.wrapped_base_type = self
-        self.first_wrapped_base = None
-        # if there are no bases, no need to look further
-        if not self.base_classes:
-            return
-        # otherwise, find the first wrapped base (if there is one) and take the same oldest superclass
+    # return the oldest left-path superclass such that all intervening classes have a wrapper
+    def wrapped_base_type(self):
+        # if the result has already been computed, return it
+        if self._wrapped_base_type is not None:
+            return self._wrapped_base_type
+        # find the first wrapped base (if there is one) and take the same oldest superclass
         for base_type in self.base_classes:
             if base_type.is_cyp_class and base_type.support_wrapper:
-                # this base type is the first wrapped base
-                self.first_wrapped_base = base_type
-                self.wrapped_base_type = base_type.wrapped_base_type
-                break
+                self._wrapped_base_type = base_type.wrapped_base_type()
+                return self._wrapped_base_type
+        # if no wrapped base was found, this type is the oldest wrapped base
+        self._wrapped_base_type = self
+        return self
 
-    # iterate over the bases that support wrapping
+    # iterate over the direct bases that support wrapping
     def iter_wrapped_base_types(self):
         for base_type in self.base_classes:
             if base_type.is_cyp_class and base_type.support_wrapper:
@@ -4237,20 +4233,6 @@ class CypClassType(CppClassType):
         self._mro = mro_C3_merge(inputs)
         return self._mro
 
-    # iterate over the chain of first wrapped bases until the oldest wrapped base is reached
-    def first_base_iter(self):
-        type_item = self
-        while type_item is not self.wrapped_base_type:
-            type_item = type_item.first_wrapped_base
-            yield type_item
-
-    # iterate down the chain of first wrapped bases until this type is reached
-    def first_base_rev_iter(self):
-        if self is not self.wrapped_base_type:
-            for t in self.first_wrapped_base.first_base_rev_iter():
-                yield t
-            yield self
-
     # allow conversion to Python only when there is a wrapper type
     def can_coerce_to_pyobject(self, env):
         return self.wrapper_type is not None
@@ -4264,7 +4246,7 @@ class CypClassType(CppClassType):
     def create_from_py_utility_code(self, env):
         if not self.wrapper_type:
             return False
-        wrapper_objstruct = self.wrapped_base_type.wrapper_type.objstruct_cname
+        wrapper_objstruct = self.wrapped_base_type().wrapper_type.objstruct_cname
         underlying_type_name = self.cname
         self.from_py_function = "__Pyx_PyObject_AsCyObject<%s, %s>" % (wrapper_objstruct, underlying_type_name)
         return True

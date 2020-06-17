@@ -220,9 +220,6 @@ class CypclassWrapperInjection(CythonTransform):
 
         qualified_name, cclass_name, pyclass_name = self.type_to_names[node_type]
 
-        # determine the oldest wrapped base type once and for all
-        node_type.find_wrapped_base_type()
-
         cclass = self.synthesize_wrapper_cclass(node, cclass_name, qualified_name)
 
         # mark this cypclass as having synthesized wrappers
@@ -263,23 +260,24 @@ class CypclassWrapperInjection(CythonTransform):
 
         bases_args = []
 
-        first_wrapped_base = node_type.first_wrapped_base
-
         wrapped_bases_iterator = node_type.iter_wrapped_base_types()
 
-        if first_wrapped_base:
+        try:
+            # consume the first wrapped base from the iterator
+            first_wrapped_base = next(wrapped_bases_iterator)
             first_base_cclass_name = first_wrapped_base.wrapper_type.name
             wrapped_first_base = NameNode(node.pos, name=first_base_cclass_name)
             bases_args.append(wrapped_first_base)
 
-            # consume the first wrapped base from the iterator
-            next(wrapped_bases_iterator)
+            # use the pyclass wrapper for the other bases
+            for other_base in wrapped_bases_iterator:
+                _, __, other_base_pyclass_name = self.type_to_names[other_base]
+                other_base_arg = NameNode(node.pos, name=other_base_pyclass_name)
+                bases_args.append(other_base_arg)
 
-        # use the pyclass wrapper for the other bases
-        for other_base in wrapped_bases_iterator:
-            _, __, other_base_pyclass_name = self.type_to_names[other_base]
-            other_base_arg = NameNode(node.pos, name=other_base_pyclass_name)
-            bases_args.append(other_base_arg)
+        except StopIteration:
+            # no bases
+            pass
 
         return TupleNode(node.pos, args=bases_args)
 
@@ -326,19 +324,12 @@ class CypclassWrapperInjection(CythonTransform):
         return wrapper
 
     def synthesize_underlying_cyobject_attribute(self, node):
-        base_type = node.entry.type.wrapped_base_type
-
-        nesting_path = []
-        outer_scope = base_type.scope.outer_scope
-        while outer_scope and not outer_scope.is_module_scope:
-            nesting_path.append(outer_scope.name)
-            outer_scope = outer_scope.outer_scope
-        nesting_path.reverse()
+        base_type = cy_object_type
 
         base_type_node = Nodes.CSimpleBaseTypeNode(
             node.pos,
             name = base_type.name,
-            module_path = nesting_path,
+            module_path = [],
             is_basic_c_type = 0,
             signed = 1,
             complex = 0,
@@ -1064,7 +1055,7 @@ def generate_cyp_class_wrapper_definition(type, wrapper_entry, constructor_entry
     # initialise PyObject fields
     if is_new_return_type and type.wrapper_type:
         objstruct_cname = type.wrapper_type.objstruct_cname
-        cclass_wrapper_base = type.wrapped_base_type.wrapper_type
+        cclass_wrapper_base = type.wrapped_base_type().wrapper_type
         code.putln("if(self) {")
         code.putln("%s * wrapper = new %s();" % (objstruct_cname, objstruct_cname))
         code.putln("((%s *)wrapper)->nogil_cyobject = self;" % cclass_wrapper_base.objstruct_cname)

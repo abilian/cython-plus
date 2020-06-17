@@ -1686,12 +1686,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         # for cyp wrappers, just decrement the atomic counter of the underlying type
         parent_type = scope.parent_type
         if parent_type.is_cyp_wrapper:
-            underlying_type_decl = parent_type.wrapped_decl
             underlying_attribute_name = CypclassWrapper.underlying_name
             self.generate_self_cast(scope, code)
             code.putln(
-                "%s * p_nogil_cyobject = (%s *) (p->%s);"
-                % (underlying_type_decl, underlying_type_decl, underlying_attribute_name)
+                "CyObject * p_nogil_cyobject = p->%s;"
+                % underlying_attribute_name
             )
             code.putln("Cy_DECREF(p_nogil_cyobject);")
             code.putln("}")

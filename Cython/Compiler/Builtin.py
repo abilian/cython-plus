@@ -378,6 +378,23 @@ builtin_structs_table = [
       ])
 ]
 
+# inject cyobject
+def inject_cy_object(self):
+    global cy_object_type
+    def init_scope(scope):
+        scope.is_cpp_class_scope = 1
+        scope.is_cyp_class_scope = 1
+        scope.inherited_var_entries = []
+        scope.inherited_type_entries = []
+
+    cy_object_scope = Scope("CyObject", self, None)
+    init_scope(cy_object_scope)
+    cy_object_type = PyrexTypes.cy_object_type
+    cy_object_scope.type = PyrexTypes.cy_object_type
+    cy_object_type.set_scope(cy_object_scope)
+    cy_object_entry = self.declare("CyObject", "CyObject", cy_object_type, None, "extern")
+    cy_object_entry.is_type = 1
+
 # inject acthon interfaces
 def inject_acthon_interfaces(self):
     global acthon_result_type, acthon_message_type, acthon_sync_type, acthon_queue_type, acthon_activable_type
@@ -677,6 +694,7 @@ def init_builtins():
     inject_cypclass_refcount_macros()
     inject_cypclass_lock_macros()
     inject_acthon_interfaces(builtin_scope)
+    inject_cy_object(builtin_scope)
 
 
 init_builtins()

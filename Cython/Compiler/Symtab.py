@@ -796,7 +796,7 @@ class Scope(object):
                     # Declare a shadow default constructor
                     wrapper_type = PyrexTypes.CFuncType(entry.type, [], nogil=1)
                     wrapper_cname = "%s__constructor__%s" % (Naming.func_prefix, name)
-                    wrapper_name = "<constructor>"
+                    wrapper_name = EncodedString("<constructor>")
                     wrapper_entry = scope.declare(wrapper_name, wrapper_cname, wrapper_type, pos, visibility)
                     wrapper_type.entry = wrapper_entry
                     wrapper_entry.is_default = 1
@@ -806,7 +806,7 @@ class Scope(object):
                 # Declare the default __alloc__ method
                 alloc_type = PyrexTypes.CFuncType(entry.type, [], nogil=1)
                 alloc_cname = "%s__alloc__%s" % (Naming.func_prefix, name)
-                alloc_name = "<alloc>"
+                alloc_name = EncodedString("<alloc>")
                 alloc_entry = scope.declare(alloc_name, alloc_cname, alloc_type, pos, visibility)
                 alloc_type.entry = alloc_entry
                 # alloc_entry.is_inherited = 1
@@ -820,27 +820,27 @@ class Scope(object):
                     # Declare activated class
                     act_scope = CppClassScope("Activated", scope)
                     act_type = PyrexTypes.CypClassType(
-                        "Activated", act_scope, "Activated", None, templates = templates, lock_mode=entry.type.lock_mode)
+                        EncodedString("Activated"), act_scope, "Activated", None, templates = templates, lock_mode=entry.type.lock_mode)
                     act_type.set_scope(act_scope)
                     act_type.namespace = entry.type
                     #scope.declare_cpp_class("Activated", act_scope, pos)
-                    act_entry = scope.declare("Activated", "Activated", act_type, pos, visibility)
+                    act_entry = scope.declare(EncodedString("Activated"), "Activated", act_type, pos, visibility)
                     act_entry.is_type = 1
                     # Declaring active_self member and activate function (its definition is generated automatically)
-                    act_attr_name = Naming.builtin_prefix + "_active_self"
-                    scope.declare_var("<active_self>", act_type, pos, cname=act_attr_name)
+                    act_attr_name = EncodedString(Naming.builtin_prefix + "_active_self")
+                    scope.declare_var(EncodedString("<active_self>"), act_type, pos, cname=act_attr_name)
                     from . import Builtin
                     queue_type = Builtin.acthon_queue_type
                     result_type = Builtin.acthon_result_type
-                    queue_arg = PyrexTypes.CFuncTypeArg("queue", queue_type, pos)
+                    queue_arg = PyrexTypes.CFuncTypeArg(EncodedString("queue"), queue_type, pos)
                     result_type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(result_type, [], nogil = 1))
-                    result_arg = PyrexTypes.CFuncTypeArg("result", result_type, pos)
+                    result_arg = PyrexTypes.CFuncTypeArg(EncodedString("result"), result_type, pos)
                     activate_type = PyrexTypes.CFuncType(act_type, [queue_arg, result_arg], nogil = 1, optional_arg_count = 2)
 
                     # HACK !!! This is a dirty duplication of Nodes.CFuncDeclaratorNode.declare_optional_arg_struct
                     def declare_opt_arg_struct(func_type, name, env, pos):
                         scope = StructOrUnionScope()
-                        arg_count_member = '%sn' % Naming.pyrex_prefix
+                        arg_count_member = EncodedString('%sn' % Naming.pyrex_prefix)
                         scope.declare_var(arg_count_member, PyrexTypes.c_int_type, pos)
 
                         for arg in func_type.args[len(func_type.args) - func_type.optional_arg_count:]:
@@ -849,7 +849,7 @@ class Scope(object):
                         struct_cname = env.mangle(Naming.opt_arg_prefix, name)
 
                         op_args_struct = env.global_scope().declare_struct_or_union(
-                            name=struct_cname,
+                            name=EncodedString(struct_cname),
                             kind='struct',
                             scope=scope,
                             typedef_flag=0,
@@ -863,7 +863,7 @@ class Scope(object):
 
                     declare_opt_arg_struct(activate_type, name, self, pos)
 
-                    activate_entry = scope.declare("__activate__", "__activate__", activate_type, None, 'extern')
+                    activate_entry = scope.declare(EncodedString("__activate__"), "__activate__", activate_type, None, 'extern')
                     activate_entry.is_variable = activate_entry.is_cfunction = 1
                     activate_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), "__activate__")
 
@@ -2789,9 +2789,9 @@ class CppClassScope(Scope):
         if not return_type:
             return_type = self.type
         class_type = self.parent_type
-        class_name = self.name.split('::')[-1]
+        class_name = EncodedString(self.name.split('::')[-1])
         wrapper_cname = "%s__constructor__%s" % (Naming.func_prefix, class_name)
-        wrapper_name = "<constructor>"
+        wrapper_name = EncodedString("<constructor>")
         wrapper_type = PyrexTypes.CFuncType(return_type, args, nogil=1,
                                             has_varargs=has_varargs,
                                             optional_arg_count=optional_arg_count)
@@ -2808,7 +2808,7 @@ class CppClassScope(Scope):
         if entry.type.has_varargs:
             error(entry.pos, "Could not reify method with ellipsis (you can use optional arguments)")
         # Create the reifying class
-        reified_name = "reified_" + entry.name
+        reified_name = EncodedString("reified_" + entry.name)
         reified_cname = Naming.builtin_prefix + reified_name
         scope = CppClassScope(reified_name, self)
         reified_type = PyrexTypes.CypClassType(reified_name, scope, reified_cname, None, templates = None, lock_mode="nolock")
@@ -2911,7 +2911,7 @@ class CppClassScope(Scope):
         elif name == '__alloc__' and self.type.is_cyp_class:
             reify = False
             cname = "%s__alloc__%s" % (Naming.func_prefix, class_name)
-            name = '<alloc>'
+            name = EncodedString('<alloc>')
         elif name == '__new__' and self.type.is_cyp_class:
             reify = False
             if name in self.entries:
@@ -2931,13 +2931,13 @@ class CppClassScope(Scope):
             operator = self.operator_table.get(name, None)
             if operator:
                 reify = False
-                name = 'operator'+operator
+                name = EncodedString('operator'+operator)
             elif name.startswith('__') and name.endswith('__'):
                 stripped_name = name[2:-2]
                 as_operator_name = self._as_type_operator(stripped_name)
                 if as_operator_name:
                     reify = False
-                    name = 'operator ' + as_operator_name
+                    name = EncodedString('operator ' + as_operator_name)
                     type.args = []
 
         if name in ('<init>', '<del>') and type.nogil:

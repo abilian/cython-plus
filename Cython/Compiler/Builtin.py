@@ -652,8 +652,15 @@ def init_builtin_structs():
             name, "struct", scope, 1, None, cname = cname)
 
 def inject_cypclass_refcount_macros():
-    macro_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)], nogil = 1)
-    for macro in ["Cy_INCREF", "Cy_DECREF", "Cy_XDECREF"]:
+    reference_to_cy_object_type = PyrexTypes.CReferenceType(PyrexTypes.cy_object_type)
+    incref_macro_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)], nogil = 1)
+
+    # The decref macros set their argument to NULL when the counter reaches 0,
+    # so we pretend to Cython that it's a c++ function with the argument passed by reference.
+    # This keeps the compiler from using std::move when calling the macro for instance.
+    decref_macro_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", reference_to_cy_object_type, None)], nogil = 1)
+
+    for macro, macro_type in [("Cy_INCREF", incref_macro_type), ("Cy_DECREF", decref_macro_type), ("Cy_XDECREF", decref_macro_type)]:
         builtin_scope.declare_builtin_cfunction(macro, macro_type, macro)
 
 def inject_cypclass_lock_macros():

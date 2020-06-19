@@ -1,90 +1,28 @@
 #
-#   Code generation for wrapping cypclass as a Python Extension Type
-#
-#   Will be generated:
-#       - a PyTypeObject definition for each user defined cypclass
-#       - Python wrappers for cypclass methods
-#       - Python getters/setters for cypclass attributes
-#       - Specific 'tp slots' for handling cycplass objects from Python:
-#           . tp_new
-#           . tp_init
-#           . tp_dealloc
-#           ...
-#
-#   Functions defined here will be called from ModuleNode.py
-#
-#   Reasons for using a separate file:
-#       - avoid cluttering ModuleNode.py
-#       - regroup common logic
-#       - decouple the code generation process from that of 'cdef class'
-#
-#   Code generation for cypclass will be similar to code generation for 'cdef class' in ModuleNode.py,
-#   but differences are significant enough that it is better to introduce some redundancy than try to
-#   handle both 'cdef class' and 'cypclass' in ModuleNode.py.
+#   Code generation for wrapping cypclasses with cclasses
 #
 
 
 from __future__ import absolute_import
 
 import cython
-cython.declare(Naming=object, Options=object, PyrexTypes=object, TypeSlots=object,
-               error=object, warning=object, py_object_type=object, cy_object_type=object, UtilityCode=object,
-               EncodedString=object, re=object)
+cython.declare(Naming=object, PyrexTypes=object, error=object, warning=object, EncodedString=object)
 
 from collections import defaultdict
-import json
-import operator
-import os
-import re
 
-from .PyrexTypes import CPtrType
-from . import Future
-from . import Annotate
-from . import Code
 from . import CypclassWrapper
 from . import Naming
 from . import Nodes
-from . import Options
-from . import TypeSlots
 from . import PyrexTypes
-from . import Pythran
+from . import ExprNodes
+from . import Visitor
 
 from .Errors import error, warning
-from .PyrexTypes import py_object_type, cy_object_type
-from ..Utils import open_new_file, replace_suffix, decode_filename, build_hex_version
-from .Code import UtilityCode, IncludeCode
 from .StringEncoding import EncodedString
-from .Pythran import has_np_pythran
-from .Visitor import VisitorTransform, CythonTransform
+from .ParseTreeTransforms import InterpretCompilerDirectives, AnalyseDeclarationsTransform
 
 
-#
-#   Utilities for cypclasses
-#
-def cypclass_iter(scope):
-    """
-        Recursively iterate over nested cypclasses
-    """
-
-    for entry in scope.cypclass_entries:
-        yield entry
-        cypclass_scope = entry.type.scope
-        if cypclass_scope:
-            for e in cypclass_iter(cypclass_scope):
-                yield e
-
-def cypclass_iter_scopes(scope):
-    """
-        Recursively iterate over nested cypclasses and their associated scope
-    """
-
-    for entry in scope.cypclass_entries:
-        cypclass_scope = entry.type.scope
-        yield entry, cypclass_scope
-        if cypclass_scope:
-            for e, s in cypclass_iter_scopes(cypclass_scope):
-                yield e, s
-
+# cython name for underlying cypclass attribute in cypclass wrappers
 underlying_name = EncodedString("nogil_cyobject")
 
 
@@ -94,15 +32,15 @@ underlying_name = EncodedString("nogil_cyobject")
 #   - Insert additional cclass wrapper nodes by returning lists of nodes
 #       => must run after NormalizeTree (otherwise single statements might not be held in a list)
 #
-class CypclassWrapperInjection(CythonTransform):
+class CypclassWrapperInjection(Visitor.CythonTransform):
     """
         Synthesize and insert a wrapper c class at the module level for each cypclass that supports it.
         - Even nested cypclasses have their wrapper at the module level.
         - Must run after NormalizeTree.
         - The root node passed when calling this visitor should not be lower than a ModuleNode.
     """
+
     def __call__(self, root):
-        from .ParseTreeTransforms import AnalyseDeclarationsTransform, InterpretCompilerDirectives
         self.pipeline = [
             InterpretCompilerDirectives(self.context, self.context.compiler_directives),
             AnalyseDeclarationsTransform(self.context)
@@ -231,17 +169,16 @@ class CypclassWrapperInjection(CythonTransform):
         pyclass = self.synthesize_wrapper_pyclass(node, cclass, qualified_name, cclass_name, pyclass_name)
 
         # allow the cclass methods to bind on instance of the pyclass
-        from .ExprNodes import SimpleCallNode, AttributeNode, NameNode, BoolNode
         binding_decorator = Nodes.DecoratorNode(
             node.pos,
-            decorator=SimpleCallNode(
+            decorator=ExprNodes.SimpleCallNode(
                 node.pos,
-                function=AttributeNode(
+                function=ExprNodes.AttributeNode(
                     node.pos,
                     attribute=EncodedString("binding"),
-                    obj=NameNode(node.pos, name=self.cython_as_name)
+                    obj=ExprNodes.NameNode(node.pos, name=self.cython_as_name)
                 ),
-                args=[BoolNode(node.pos, value=True)]
+                args=[ExprNodes.BoolNode(node.pos, value=True)]
             )
         )
         cclass.decorators = [binding_decorator]
@@ -254,8 +191,6 @@ class CypclassWrapperInjection(CythonTransform):
             thunk()
 
     def synthesize_base_tuple(self, node):
-        from .ExprNodes import NameNode, TupleNode
-
         node_type = node.entry.type
 
         bases_args = []
@@ -266,20 +201,20 @@ class CypclassWrapperInjection(CythonTransform):
             # consume the first wrapped base from the iterator
             first_wrapped_base = next(wrapped_bases_iterator)
             first_base_cclass_name = first_wrapped_base.wrapper_type.name
-            wrapped_first_base = NameNode(node.pos, name=first_base_cclass_name)
+            wrapped_first_base = ExprNodes.NameNode(node.pos, name=first_base_cclass_name)
             bases_args.append(wrapped_first_base)
 
             # use the pyclass wrapper for the other bases
             for other_base in wrapped_bases_iterator:
                 _, __, other_base_pyclass_name = self.type_to_names[other_base]
-                other_base_arg = NameNode(node.pos, name=other_base_pyclass_name)
+                other_base_arg = ExprNodes.NameNode(node.pos, name=other_base_pyclass_name)
                 bases_args.append(other_base_arg)
 
         except StopIteration:
             # no bases
             pass
 
-        return TupleNode(node.pos, args=bases_args)
+        return ExprNodes.TupleNode(node.pos, args=bases_args)
 
     def synthesize_wrapper_cclass(self, node, cclass_name, qualified_name):
 
@@ -324,7 +259,7 @@ class CypclassWrapperInjection(CythonTransform):
         return wrapper
 
     def synthesize_underlying_cyobject_attribute(self, node):
-        base_type = cy_object_type
+        base_type = PyrexTypes.cy_object_type
 
         base_type_node = Nodes.CSimpleBaseTypeNode(
             node.pos,
@@ -338,7 +273,11 @@ class CypclassWrapperInjection(CythonTransform):
             templates = None
         )
 
-        underlying_name_declarator = Nodes.CNameDeclaratorNode(node.pos, name=underlying_name, cname=None)
+        underlying_name_declarator = Nodes.CNameDeclaratorNode(
+            node.pos,
+            name=underlying_name,
+            cname=Naming.cypclass_attr_cname
+        )
 
         underlying_cyobject = Nodes.CVarDefNode(
             pos = node.pos,
@@ -383,6 +322,24 @@ class CypclassWrapperInjection(CythonTransform):
 
         return dict_attribute
 
+    def synthesize_underlying_assignment(self, pos, cast_name_node, self_name, underlying_name, underlying_type):
+        # > reference to the self argument of the wrapper method
+        self_obj = ExprNodes.NameNode(pos, name=self_name)
+
+        # > access the underlying cyobject from the self argument of the wrapper method
+        underlying_obj = ExprNodes.AttributeNode(pos, obj=self_obj, attribute=underlying_name)
+
+        # > cast the underlying object back to this type
+        cast_operation = ExprNodes.TypecastNode(
+            pos,
+            type = underlying_type,
+            operand = underlying_obj,
+            typecheck = False
+        )
+        cast_assignment = Nodes.SingleAssignmentNode(pos, lhs=cast_name_node, rhs=cast_operation)
+
+        return cast_assignment
+
     def insert_cypclass_method_wrappers(self, node, cclass_name, stats):
         for attr in node.attributes:
             if isinstance(attr, Nodes.CFuncDefNode):
@@ -424,9 +381,6 @@ class CypclassWrapperInjection(CythonTransform):
             if not argtype.type.can_coerce_to_pyobject(self.module_scope):
                 return # skip c methods with Python-incompatible argument types
 
-        from .CypclassWrapper import underlying_name
-        from . import ExprNodes
-
         # > name of the wrapping method: same name as in the original code
         cfunc_name = cfunc_declarator.base.name
         py_name = cfunc_name
@@ -464,26 +418,19 @@ class CypclassWrapperInjection(CythonTransform):
         # > names of the arguments passed when calling the underlying method; self not included
         arg_objs = [ExprNodes.NameNode(arg.pos, name=arg.name) for arg in cfunc_declarator.args]
 
-        # > reference to the self argument of the wrapper method
-        self_obj = ExprNodes.NameNode(self_pos, name=self_name)
-
-        # > access the underlying cyobject from the self argument of the wrapper method
-        underlying_obj = ExprNodes.AttributeNode(cfunc_method.pos, obj=self_obj, attribute=underlying_name)
-
-        # > cast the underlying object back to this type
+        # > access the underlying attribute
         underlying_type = node.entry.type
-        cast_operation = ExprNodes.TypecastNode(
-            cfunc_method.pos,
-            type = underlying_type,
-            operand = underlying_obj,
-            typecheck = False
+        underlying_obj = ExprNodes.NameNode(self_pos, name=underlying_name)
+        underlying_assignment = self.synthesize_underlying_assignment(
+            self_pos,
+            underlying_obj,
+            self_name,
+            underlying_name,
+            underlying_type
         )
 
-        cast_underlying_obj = ExprNodes.NameNode(self_pos, name=EncodedString("cast_cyobject"))
-        cast_assignment = Nodes.SingleAssignmentNode(self_pos, lhs=cast_underlying_obj, rhs=cast_operation)
-
         # > access the method of the underlying object
-        cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=cast_underlying_obj, attribute=cfunc_name)
+        cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=underlying_obj, attribute=cfunc_name)
 
         # > call to the underlying method
         c_call = ExprNodes.SimpleCallNode(
@@ -497,7 +444,7 @@ class CypclassWrapperInjection(CythonTransform):
             py_stat = Nodes.ExprStatNode(cfunc_method.pos, expr=c_call)
         else:
             py_stat = Nodes.ReturnStatNode(cfunc_method.pos, return_type=PyrexTypes.py_object_type, value=c_call)
-        py_body = Nodes.StatListNode(cfunc_method.pos, stats=[cast_assignment, py_stat])
+        py_body = Nodes.StatListNode(cfunc_method.pos, stats=[underlying_assignment, py_stat])
 
         # > lock around the call in checklock mode
         if node.lock_mode == 'checklock':
@@ -505,7 +452,7 @@ class CypclassWrapperInjection(CythonTransform):
             lock_node = Nodes.LockCypclassNode(
                 cfunc_method.pos,
                 state = 'wlocked' if need_wlock else 'rlocked',
-                obj = cast_underlying_obj,
+                obj = underlying_obj,
                 body = py_body
             )
             py_body = lock_node
@@ -526,8 +473,6 @@ class CypclassWrapperInjection(CythonTransform):
 
     def synthesize_wrapper_pyclass(self, node, cclass_wrapper, qualified_name, cclass_name, pyclass_name):
 
-        from .ExprNodes import AttributeNode, NameNode
-
         py_bases = self.synthesize_base_tuple(node)
 
         py_stats = []
@@ -535,10 +480,10 @@ class CypclassWrapperInjection(CythonTransform):
             if isinstance(defnode, Nodes.DefNode):
                 def_name = defnode.name
 
-                lhs = NameNode(defnode.pos, name=def_name)
+                lhs = ExprNodes.NameNode(defnode.pos, name=def_name)
 
-                rhs_obj = NameNode(defnode.pos, name=cclass_name)
-                rhs = AttributeNode(defnode.pos, obj=rhs_obj, attribute=def_name)
+                rhs_obj = ExprNodes.NameNode(defnode.pos, name=cclass_name)
+                rhs = ExprNodes.AttributeNode(defnode.pos, obj=rhs_obj, attribute=def_name)
 
                 stat = Nodes.SingleAssignmentNode(defnode.pos, lhs=lhs, rhs=rhs)
                 py_stats.append(stat)
@@ -556,6 +501,23 @@ class CypclassWrapperInjection(CythonTransform):
         )
 
         return py_class_node
+
+
+#
+#   Utilities for cypclasses
+#
+
+def cypclass_iter_scopes(scope):
+    """
+        Recursively iterate over nested cypclasses and their associated scope
+    """
+
+    for entry in scope.cypclass_entries:
+        cypclass_scope = entry.type.scope
+        yield entry, cypclass_scope
+        if cypclass_scope:
+            for e, s in cypclass_iter_scopes(cypclass_scope):
+                yield e, s
 
 #
 #   Cypclass code generation
@@ -1058,7 +1020,7 @@ def generate_cyp_class_wrapper_definition(type, wrapper_entry, constructor_entry
         cclass_wrapper_base = type.wrapped_base_type().wrapper_type
         code.putln("if(self) {")
         code.putln("%s * wrapper = new %s();" % (objstruct_cname, objstruct_cname))
-        code.putln("((%s *)wrapper)->nogil_cyobject = self;" % cclass_wrapper_base.objstruct_cname)
+        code.putln("((%s *)wrapper)->%s = self;" % (cclass_wrapper_base.objstruct_cname, Naming.cypclass_attr_cname))
         code.putln("PyObject * wrapper_as_py = (PyObject *) wrapper;")
         code.putln("wrapper_as_py->ob_refcnt = 0;")
         code.putln("wrapper_as_py->ob_type = %s;" % type.wrapper_type.typeptr_cname)

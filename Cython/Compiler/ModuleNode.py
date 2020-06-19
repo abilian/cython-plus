@@ -20,7 +20,6 @@ from .PyrexTypes import CPtrType
 from . import Future
 from . import Annotate
 from . import Code
-from . import CypclassWrapper
 from . import Naming
 from . import Nodes
 from . import Options
@@ -663,12 +662,13 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             self.generate_exttype_vtable_struct(entry, code)
             self.generate_exttype_vtabptr_declaration(entry, code)
             self.generate_exttype_final_methods_declaration(entry, code)
-        
+
+        from .CypclassWrapper import generate_cyp_class_deferred_definitions
         for module in modules:
             definition = module is env
             code.putln("")
             code.putln("/* Deferred definitions for cypclasses */")
-            CypclassWrapper.generate_cyp_class_deferred_definitions(env, code, definition)
+            generate_cyp_class_deferred_definitions(env, code, definition)
 
     def generate_declarations_for_modules(self, env, modules, globalstate):
         typecode = globalstate['type_declarations']
@@ -1686,7 +1686,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         # for cyp wrappers, just decrement the atomic counter of the underlying type
         parent_type = scope.parent_type
         if parent_type.is_cyp_wrapper:
-            underlying_attribute_name = CypclassWrapper.underlying_name
+            underlying_attribute_name = Naming.cypclass_attr_cname
             self.generate_self_cast(scope, code)
             code.putln(
                 "CyObject * p_nogil_cyobject = p->%s;"

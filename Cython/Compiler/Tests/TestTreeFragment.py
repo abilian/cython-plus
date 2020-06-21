@@ -1,6 +1,7 @@
 from Cython.TestUtils import CythonTest
 from Cython.Compiler.TreeFragment import *
 from Cython.Compiler.Nodes import *
+from Cython.Compiler.ExprNodes import *
 from Cython.Compiler.UtilNodes import *
 import Cython.Compiler.Naming as Naming
 
@@ -58,6 +59,81 @@ class TestTreeFragments(CythonTest):
         self.assertTrue(isinstance(s[0].expr, TempRefNode))
         self.assertTrue(isinstance(s[1].rhs, TempRefNode))
         self.assertTrue(s[0].expr.handle is s[1].rhs.handle)
+
+    def test_declarator(self):
+        F = self.fragment(u"cdef int NAME")
+        declarator = CNameDeclaratorNode(pos=None, name="a")
+        T = F.substitute({"NAME" : declarator})
+        self.assertTrue(isinstance(T.stats[0], CVarDefNode), T)
+        self.assertTrue(isinstance(T.stats[0].declarators[0], CNameDeclaratorNode), T)
+        self.assertTrue(T.stats[0].declarators[0].name == "a", T)
+
+    def test_simple_base_type(self):
+        F = self.fragment(u"cdef TYPE a")
+        base_type = CSimpleBaseTypeNode(pos=None, name="int", module_path = [],
+        is_basic_c_type = 1, signed = 1,
+        complex = 0, longness = 0,
+        is_self_arg = 0, templates = None)
+        T = F.substitute({"TYPE" : base_type})
+        self.assertTrue(isinstance(T.stats[0], CVarDefNode), T)
+        self.assertTrue(isinstance(T.stats[0].base_type, CSimpleBaseTypeNode), T)
+        self.assertTrue(T.stats[0].base_type.name == "int", T)
+
+    def test_typecast(self):
+        F = self.fragment(u"a = <TYPE> b")
+
+        T1 = F.substitute({"TYPE" : PyrexTypes.c_int_type})
+        self.assertTrue(isinstance(T1.stats[0], SingleAssignmentNode), T1)
+        self.assertTrue(isinstance(T1.stats[0].rhs, TypecastNode), T1)
+        self.assertTrue(T1.stats[0].rhs.type is PyrexTypes.c_int_type, T1)
+        self.assertTrue(isinstance(T1.stats[0].rhs.operand, NameNode), T1)
+        self.assertTrue(T1.stats[0].rhs.operand.name == "b", T1)
+
+        base_type = CSimpleBaseTypeNode(pos=None, name="int", module_path = [],
+        is_basic_c_type = 1, signed = 1,
+        complex = 0, longness = 0,
+        is_self_arg = 0, templates = None)
+        T2 = F.substitute({"TYPE" : base_type})
+        self.assertTrue(isinstance(T2.stats[0], SingleAssignmentNode), T2)
+        self.assertTrue(isinstance(T2.stats[0].rhs, TypecastNode), T2)
+        self.assertTrue(isinstance(T2.stats[0].rhs.base_type, CSimpleBaseTypeNode), T2)
+        self.assertTrue(T2.stats[0].rhs.base_type.name == "int", T2)
+        self.assertTrue(isinstance(T2.stats[0].rhs.declarator, CNameDeclaratorNode), T2)
+        self.assertTrue(T2.stats[0].rhs.declarator.name == "", T2)
+        self.assertTrue(isinstance(T2.stats[0].rhs.operand, NameNode), T2)
+        self.assertTrue(T2.stats[0].rhs.operand.name == "b", T2)
+
+        typecast = TypecastNode(
+            pos=None,
+            base_type=base_type,
+            declarator=CNameDeclaratorNode(pos=None, name=EncodedString(""), cname=None),
+            operand = NameNode(pos=None, name="c")
+        )
+        T3 = F.substitute({"TYPE" : typecast})
+        self.assertTrue(isinstance(T3.stats[0], SingleAssignmentNode), T3)
+        self.assertTrue(isinstance(T3.stats[0].rhs, TypecastNode), T3)
+        self.assertTrue(isinstance(T3.stats[0].rhs.base_type, CSimpleBaseTypeNode), T3)
+        self.assertTrue(T3.stats[0].rhs.base_type.name == "int", T3)
+        self.assertTrue(isinstance(T3.stats[0].rhs.declarator, CNameDeclaratorNode), T3)
+        self.assertTrue(T3.stats[0].rhs.declarator.name == "", T3)
+        self.assertTrue(isinstance(T3.stats[0].rhs.operand, NameNode), T3)
+        self.assertTrue(T3.stats[0].rhs.operand.name == "c", T3)
+
+    def test_attribute(self):
+        F = self.fragment(u"OBJ.ATTR")
+        base_type = CSimpleBaseTypeNode(pos=None, name="int", module_path = [],
+        is_basic_c_type = 1, signed = 1,
+        complex = 0, longness = 0,
+        is_self_arg = 0, templates = None)
+        T = F.substitute({
+            "OBJ" : NameNode(pos=None, name="x"),
+            "ATTR" : "y"
+        })
+        self.assertTrue(isinstance(T.stats[0], ExprStatNode), T)
+        self.assertTrue(isinstance(T.stats[0].expr, AttributeNode), T)
+        self.assertTrue(isinstance(T.stats[0].expr.obj, NameNode), T)
+        self.assertTrue(T.stats[0].expr.obj.name == "x", T)
+        self.assertTrue(T.stats[0].expr.attribute == "y", T)
 
 if __name__ == "__main__":
     import unittest

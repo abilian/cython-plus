@@ -15,9 +15,9 @@ from .Scanning import PyrexScanner, StringSourceDescriptor
 from .Symtab import ModuleScope
 from . import PyrexTypes
 from .Visitor import VisitorTransform
-from .Nodes import Node, StatListNode
-from .ExprNodes import NameNode
-from .StringEncoding import _unicode
+from .Nodes import Node, StatListNode, CSimpleBaseTypeNode, CNameDeclaratorNode
+from .ExprNodes import NameNode, TypecastNode
+from .StringEncoding import _unicode, EncodedString
 from . import Parsing
 from . import Main
 from . import UtilNodes
@@ -187,6 +187,33 @@ class TemplateTransform(VisitorTransform):
             return temphandle.ref(self.get_pos(node))
         else:
             return self.try_substitution(node, node.name)
+
+    def visit_CNameDeclaratorNode(self, node):
+        return self.try_substitution(node, node.name)
+
+    def visit_CSimpleBaseTypeNode(self, node):
+        return self.try_substitution(node, node.name)
+
+    def visit_TypecastNode(self, node):
+        ret = self.visit_Node(node)
+        sub = self.substitutions.get(node.base_type.name)
+        if isinstance(sub, TypecastNode):
+            return sub
+        elif isinstance(sub, PyrexTypes.BaseType):
+            ret.type = sub
+        elif isinstance(sub, CSimpleBaseTypeNode):
+            ret.base_type = sub
+            ret.declarator = CNameDeclaratorNode(pos=node.pos, name=EncodedString(""), cname=None)
+        return ret
+
+    def visit_AttributeNode(self, node):
+        ret = self.visit_Node(node)
+        sub = self.substitutions.get(node.attribute)
+        if isinstance(sub, EncodedString):
+            ret.attribute = sub
+        elif isinstance(sub, str):
+            ret.attribute = EncodedString(sub)
+        return ret
 
     def visit_ExprStatNode(self, node):
         # If an expression-as-statement consists of only a replaceable

@@ -119,6 +119,33 @@ class TestTreeFragments(CythonTest):
         self.assertTrue(isinstance(T3.stats[0].rhs.operand, NameNode), T3)
         self.assertTrue(T3.stats[0].rhs.operand.name == "c", T3)
 
+    def test_args(self):
+        F = self.fragment(u"def test(self, ARGS): pass")
+        args = [
+            CArgDeclNode(
+                pos = None,
+                base_type = CSimpleBaseTypeNode(pos=None, signed=1),
+                declarator = CNameDeclaratorNode(pos=None, name="a")
+            ),
+            CArgDeclNode(
+                pos = None,
+                base_type = CSimpleBaseTypeNode(pos=None, signed=1),
+                declarator = CNameDeclaratorNode(pos=None, name="b")
+            )
+        ]
+        T = F.substitute({"ARGS" : args})
+        self.assertTrue(isinstance(T.stats[0], DefNode), T)
+        self.assertTrue(isinstance(T.stats[0].args[0], CArgDeclNode), T)
+        self.assertTrue(isinstance(T.stats[0].args[1], CArgDeclNode), T)
+        self.assertTrue(isinstance(T.stats[0].args[2], CArgDeclNode), T)
+        self.assertTrue(isinstance(T.stats[0].args[0].declarator, CNameDeclaratorNode), T)
+        self.assertTrue(isinstance(T.stats[0].args[1].declarator, CNameDeclaratorNode), T)
+        self.assertTrue(isinstance(T.stats[0].args[2].declarator, CNameDeclaratorNode), T)
+        self.assertTrue(T.stats[0].args[0].declarator.name == "self", T)
+        self.assertTrue(T.stats[0].args[1].declarator.name == "a", T)
+        self.assertTrue(T.stats[0].args[2].declarator.name == "b", T)
+        self.assertTrue(len(T.stats[0].args) == 3, T)
+
     def test_attribute(self):
         F = self.fragment(u"OBJ.ATTR")
         base_type = CSimpleBaseTypeNode(pos=None, name="int", module_path = [],

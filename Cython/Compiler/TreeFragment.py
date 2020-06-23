@@ -215,6 +215,13 @@ class TemplateTransform(VisitorTransform):
             ret.attribute = EncodedString(sub)
         return ret
 
+    def visit_CArgDeclNode(self, node):
+        if isinstance(node.declarator, CNameDeclaratorNode):
+            sub = self.substitutions.get(node.declarator.name)
+            if sub is not None:
+                return sub
+        return self.visit_Node(node)
+
     def visit_ExprStatNode(self, node):
         # If an expression-as-statement consists of only a replaceable
         # NameNode, we replace the entire statement, not only the NameNode

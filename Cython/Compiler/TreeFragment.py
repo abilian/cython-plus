@@ -206,13 +206,16 @@ class TemplateTransform(VisitorTransform):
             ret.declarator = CNameDeclaratorNode(pos=node.pos, name=EncodedString(""), cname=None)
         return ret
 
+    def try_substitute_string_attribute(self, node, attrname):
+        sub = self.substitutions.get(getattr(node, attrname))
+        if isinstance(sub, EncodedString):
+            setattr(node, attrname, sub)
+        elif isinstance(sub, str):
+            setattr(node, attrname, EncodedString(sub))
+
     def visit_AttributeNode(self, node):
         ret = self.visit_Node(node)
-        sub = self.substitutions.get(node.attribute)
-        if isinstance(sub, EncodedString):
-            ret.attribute = sub
-        elif isinstance(sub, str):
-            ret.attribute = EncodedString(sub)
+        self.try_substitute_string_attribute(ret, "attribute")
         return ret
 
     def visit_CArgDeclNode(self, node):
@@ -221,6 +224,16 @@ class TemplateTransform(VisitorTransform):
             if sub is not None:
                 return sub
         return self.visit_Node(node)
+
+    def visit_DefNode(self, node):
+        ret = self.visit_Node(node)
+        self.try_substitute_string_attribute(ret, "name")
+        return ret
+
+    def visit_PropertyNode(self, node):
+        ret = self.visit_Node(node)
+        self.try_substitute_string_attribute(ret, "name")
+        return ret
 
     def visit_ExprStatNode(self, node):
         # If an expression-as-statement consists of only a replaceable

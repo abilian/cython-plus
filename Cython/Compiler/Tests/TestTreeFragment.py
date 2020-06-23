@@ -162,6 +162,22 @@ class TestTreeFragments(CythonTest):
         self.assertTrue(T.stats[0].expr.obj.name == "x", T)
         self.assertTrue(T.stats[0].expr.attribute == "y", T)
 
+    def test_defnode(self):
+        F = self.fragment(u"def NAME(): pass")
+        T = F.substitute({
+            "NAME" : "test",
+        })
+        self.assertTrue(isinstance(T.stats[0], DefNode), T)
+        self.assertTrue(T.stats[0].name == "test", T)
+
+    def test_propertynode(self):
+        F = TreeFragment(u"property NAME: pass", level='c_class')
+        T = F.substitute({
+            "NAME" : "test",
+        })
+        self.assertTrue(isinstance(T.stats[0], PropertyNode), T)
+        self.assertTrue(T.stats[0].name == "test", T)
+
 if __name__ == "__main__":
     import unittest
     unittest.main()

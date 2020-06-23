@@ -40,6 +40,8 @@ class CypclassWrapperInjection(Visitor.CythonTransform):
         - Must run after NormalizeTree.
         - The root node passed when calling this visitor should not be lower than a ModuleNode.
     """
+
+    # property templates
     unlocked_property = TreeFragment.TreeFragment(u"""
 property NAME:
     def __get__(self):
@@ -49,6 +51,7 @@ property NAME:
         OBJ = <TYPE> self.UNDERLYING
         OBJ.ATTR = value
     """, level='c_class', pipeline=[NormalizeTree(None)])
+
     locked_property = TreeFragment.TreeFragment(u"""
 property NAME:
     def __get__(self):
@@ -61,6 +64,48 @@ property NAME:
         with wlocked OBJ:
             OBJ.ATTR = value
     """, level='c_class', pipeline=[NormalizeTree(None)])
+
+    # method wrapper templates
+    unlocked_method = TreeFragment.TreeFragment(u"""
+def NAME(self, ARGDECLS):
+    OBJ = <TYPE> self.UNDERLYING
+    return OBJ.NAME(ARGS)
+    """, level='c_class', pipeline=[NormalizeTree(None)])
+
+    unlocked_method_no_return = TreeFragment.TreeFragment(u"""
+def NAME(self, ARGDECLS):
+    OBJ = <TYPE> self.UNDERLYING
+    OBJ.NAME(ARGS)
+    """, level='c_class', pipeline=[NormalizeTree(None)])
+
+    rlocked_method = TreeFragment.TreeFragment(u"""
+def NAME(self, ARGDECLS):
+    OBJ = <TYPE> self.UNDERLYING
+    with rlocked OBJ:
+        return OBJ.NAME(ARGS)
+    """, level='c_class', pipeline=[NormalizeTree(None)])
+
+    rlocked_method_no_return = TreeFragment.TreeFragment(u"""
+def NAME(self, ARGDECLS):
+    OBJ = <TYPE> self.UNDERLYING
+    with rlocked OBJ:
+        OBJ.NAME(ARGS)
+    """, level='c_class', pipeline=[NormalizeTree(None)])
+
+    wlocked_method = TreeFragment.TreeFragment(u"""
+def NAME(self, ARGDECLS):
+    OBJ = <TYPE> self.UNDERLYING
+    with wlocked OBJ:
+        return OBJ.NAME(ARGS)
+    """, level='c_class', pipeline=[NormalizeTree(None)])
+
+    wlocked_method_no_return = TreeFragment.TreeFragment(u"""
+def NAME(self, ARGDECLS):
+    OBJ = <TYPE> self.UNDERLYING
+    with wlocked OBJ:
+        OBJ.NAME(ARGS)
+    """, level='c_class', pipeline=[NormalizeTree(None)])
+
     def __call__(self, root):
         self.pipeline = [
             InterpretCompilerDirectives(self.context, self.context.compiler_directives),
@@ -430,32 +475,10 @@ property NAME:
         cfunc_name = cfunc_declarator.base.name
         py_name = cfunc_name
 
-        # > self argument of the wrapper method: same name, but type of the wrapper cclass
-        self_name, self_type, self_pos, self_arg = skipped_self
-        py_self_arg = Nodes.CArgDeclNode(
-            self_pos,
-            base_type = Nodes.CSimpleBaseTypeNode(
-                self_pos,
-                name = cclass_name,
-                module_path = [],
-                signed = 1,
-                is_basic_c_type = 0,
-                longness = 0,
-                is_self_arg = 0, # only true for C methods
-                templates = None
-            ),
-            declarator = Nodes.CNameDeclaratorNode(self_pos, name=self_name, cname=None),
-            not_none = 0,
-            or_none = 0,
-            default = None,
-            annotation = None,
-            kw_only = 0
-        )
-
         # > all arguments of the wrapper method declaration
-        py_args = [py_self_arg]
+        py_args_decls = []
         for arg in cfunc_declarator.args:
-            py_args.append(arg.clone_node())
+            py_args_decls.append(arg.clone_node())
 
         # > same docstring
         py_doc = cfunc_method.doc
@@ -465,56 +488,30 @@ property NAME:
 
         # > access the underlying attribute
         underlying_type = node.entry.type
-        underlying_obj = ExprNodes.NameNode(self_pos, name=underlying_name)
-        underlying_assignment = self.synthesize_underlying_assignment(
-            self_pos,
-            underlying_obj,
-            self_name,
-            underlying_name,
-            underlying_type
-        )
 
-        # > access the method of the underlying object
-        cfunc = ExprNodes.AttributeNode(cfunc_method.pos, obj=underlying_obj, attribute=cfunc_name)
-
-        # > call to the underlying method
-        c_call = ExprNodes.SimpleCallNode(
-            cfunc_method.pos,
-            function=cfunc,
-            args=arg_objs
-        )
-
-        # > return the result of the call if the underlying return type is not void
-        if cfunc_return_type.is_void:
-            py_stat = Nodes.ExprStatNode(cfunc_method.pos, expr=c_call)
-        else:
-            py_stat = Nodes.ReturnStatNode(cfunc_method.pos, return_type=PyrexTypes.py_object_type, value=c_call)
-        py_body = Nodes.StatListNode(cfunc_method.pos, stats=[underlying_assignment, py_stat])
-
-        # > lock around the call in checklock mode
+        # > select the appropriate template
+        need_return = not cfunc_return_type.is_void
         if node.lock_mode == 'checklock':
             need_wlock = not cfunc_type.is_const_method
-            lock_node = Nodes.LockCypclassNode(
-                cfunc_method.pos,
-                state = 'wlocked' if need_wlock else 'rlocked',
-                obj = underlying_obj,
-                body = py_body
-            )
-            py_body = lock_node
+            if need_wlock:
+                template = self.wlocked_method if need_return else self.wlocked_method_no_return
+            else:
+                template = self.rlocked_method if need_return else self.rlocked_method_no_return
+        else:
+            template = self.unlocked_method if need_return else self.unlocked_method_no_return
 
-        # > the wrapper method
-        return Nodes.DefNode(
-            cfunc_method.pos,
-            name = py_name,
-            args = py_args,
-            star_arg = None,
-            starstar_arg = None,
-            doc = py_doc,
-            body = py_body,
-            decorators = None,
-            is_async_def = 0,
-            return_type_annotation = None
-        )
+        # > instanciate the wrapper from the template
+        method_wrapper = template.substitute({
+            "NAME": cfunc_name,
+            "ARGDECLS": py_args_decls,
+            "TYPE": underlying_type,
+            "OBJ": ExprNodes.NameNode(cfunc_method.pos, name=underlying_name),
+            "UNDERLYING": underlying_name,
+            "ARGS": arg_objs
+        }).stats[0]
+        method_wrapper.doc = py_doc
+
+        return method_wrapper
 
     def synthesize_wrapper_pyclass(self, node, cclass_wrapper, qualified_name, cclass_name, pyclass_name):
 

@@ -6,7 +6,8 @@ from libcpp.deque cimport deque
 ctypedef deque[ActhonMessageInterface] message_queue_t
 
 cdef extern from "<semaphore.h>" nogil:
-  ctypedef int sem_t
+  ctypedef struct sem_t:
+    pass
   int sem_init(sem_t *sem, int pshared, unsigned int value)
   int sem_wait(sem_t *sem)
   int sem_post(sem_t *sem)

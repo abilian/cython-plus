@@ -16,10 +16,11 @@ from . import Nodes
 from . import PyrexTypes
 from . import ExprNodes
 from . import Visitor
+from . import TreeFragment
 
 from .Errors import error, warning
 from .StringEncoding import EncodedString
-from .ParseTreeTransforms import InterpretCompilerDirectives, AnalyseDeclarationsTransform
+from .ParseTreeTransforms import NormalizeTree, InterpretCompilerDirectives, AnalyseDeclarationsTransform
 
 
 # cython name for underlying cypclass attribute in cypclass wrappers
@@ -39,7 +40,27 @@ class CypclassWrapperInjection(Visitor.CythonTransform):
         - Must run after NormalizeTree.
         - The root node passed when calling this visitor should not be lower than a ModuleNode.
     """
-
+    unlocked_property = TreeFragment.TreeFragment(u"""
+property NAME:
+    def __get__(self):
+        OBJ = <TYPE> self.UNDERLYING
+        return OBJ.ATTR
+    def __set__(self, value):
+        OBJ = <TYPE> self.UNDERLYING
+        OBJ.ATTR = value
+    """, level='c_class', pipeline=[NormalizeTree(None)])
+    locked_property = TreeFragment.TreeFragment(u"""
+property NAME:
+    def __get__(self):
+        OBJ = <TYPE> self.UNDERLYING
+        with rlocked OBJ:
+            value = OBJ.ATTR
+        return value
+    def __set__(self, value):
+        OBJ = <TYPE> self.UNDERLYING
+        with wlocked OBJ:
+            OBJ.ATTR = value
+    """, level='c_class', pipeline=[NormalizeTree(None)])
     def __call__(self, root):
         self.pipeline = [
             InterpretCompilerDirectives(self.context, self.context.compiler_directives),
@@ -346,6 +367,30 @@ class CypclassWrapperInjection(Visitor.CythonTransform):
                 py_method_wrapper = self.synthesize_cypclass_method_wrapper(node, cclass_name, attr)
                 if py_method_wrapper:
                     stats.append(py_method_wrapper)
+        for attr in node.scope.var_entries:
+            if not (attr.is_cfunction or attr.is_type):
+                property = self.synthesize_property(attr, node.entry)
+                if property:
+                    stats.append(property)
+
+    def synthesize_property(self, attr_entry, node_entry):
+        if not attr_entry.type.can_coerce_to_pyobject(self.module_scope):
+            return None
+        if not attr_entry.type.can_coerce_from_pyobject(self.module_scope):
+            return None
+        if node_entry.type.lock_mode == 'checklock':
+            template = self.locked_property
+        else:
+            template = self.unlocked_property
+        property = template.substitute({
+            "ATTR": attr_entry.name,
+            "TYPE": node_entry.type,
+            "OBJ": ExprNodes.NameNode(attr_entry.pos, name=underlying_name),
+            "UNDERLYING": underlying_name
+        }, pos=attr_entry.pos).stats[0]
+        property.name = attr_entry.name
+        property.doc = attr_entry.doc
+        return property
 
     def synthesize_cypclass_method_wrapper(self, node, cclass_name, cfunc_method):
         if cfunc_method.is_static_method:

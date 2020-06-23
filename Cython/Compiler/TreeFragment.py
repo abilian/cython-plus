@@ -176,6 +176,8 @@ class TemplateTransform(VisitorTransform):
         if sub is not None:
             pos = self.pos
             if pos is None: pos = node.pos
+            if type(sub) is list:
+                return [ApplyPositionAndCopy(pos)(s) for s in sub]
             return ApplyPositionAndCopy(pos)(sub)
         else:
             return self.visit_Node(node)  # make copy as usual
@@ -201,6 +203,7 @@ class TemplateTransform(VisitorTransform):
             return sub
         elif isinstance(sub, PyrexTypes.BaseType):
             ret.type = sub
+            ret.declarator = ret.base_type = None
         elif isinstance(sub, CSimpleBaseTypeNode):
             ret.base_type = sub
             ret.declarator = CNameDeclaratorNode(pos=node.pos, name=EncodedString(""), cname=None)

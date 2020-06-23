@@ -3573,6 +3573,9 @@ class CStructOrUnionType(CType):
     def can_coerce_from_pyobject(self, env):
         if env.outer_scope is None or self._convert_from_py_code is False:
             return False
+        if self._convert_from_py_code is None and not self.scope.var_entries:
+            # stay consistent with "create_from_py_utility_code"
+            return False
         for member in self.scope.var_entries:
             if not member.type.can_coerce_from_pyobject(env):
                 return False

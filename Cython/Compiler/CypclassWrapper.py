@@ -378,7 +378,7 @@ class CypclassWrapperInjection(Visitor.CythonTransform):
             return # skip c methods with Python-incompatible return types
 
         for argtype in cfunc_type.args:
-            if not argtype.type.can_coerce_to_pyobject(self.module_scope):
+            if not argtype.type.can_coerce_from_pyobject(self.module_scope):
                 return # skip c methods with Python-incompatible argument types
 
         # > name of the wrapping method: same name as in the original code

@@ -63,8 +63,8 @@
           RecursiveUpgradeableRWLock ob_lock;
         public:
           PyObject * cy_pyobject;
-          CyObject(): nogil_ob_refcnt(1) {}
-          virtual ~CyObject() {}
+          CyObject(): nogil_ob_refcnt(1), cy_pyobject(NULL) {}
+          virtual ~CyObject();
           void CyObject_INCREF();
           int CyObject_DECREF();
           void CyObject_RLOCK();
@@ -446,6 +446,14 @@ int RecursiveUpgradeableRWLock::trywlock() {
     return 0;
 }
 
+CyObject::~CyObject() {
+  if (cy_pyobject) {
+    printf("deleting wrapper object @ %p\n", cy_pyobject);
+    printf("python refcount: %ld\n", cy_pyobject->ob_refcnt);
+    ::operator delete(cy_pyobject);
+    printf("wrapper deleted\n\n");
+  }
+}
 
 void CyObject::CyObject_INCREF()
 {

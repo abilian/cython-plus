@@ -166,7 +166,7 @@
     }
 
     /*
-     * Cast from PyObject to CyObject:
+     * Cast from CyObject to PyObject:
      *  - borrow an atomic reference
      *  - return a new Python reference
      * 
@@ -191,7 +191,7 @@
     }
 
     /*
-     * Cast from CyObject to PyObject:
+     * Cast from PyObject to CyObject:
      *  - borrow an Python reference
      *  - return a new atomic reference
      * 

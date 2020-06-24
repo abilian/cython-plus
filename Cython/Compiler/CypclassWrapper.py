@@ -288,13 +288,10 @@ def NAME(self, ARGDECLS):
 
         stats = []
         if not cclass_bases.args:
-            # the memory layout for the underlying cyobject and the __dict__should always be the same
+            # the memory layout for the underlying cyobject should always be the same
             # -> maybe use a single common base cclass in the future
             underlying_cyobject = self.synthesize_underlying_cyobject_attribute(node)
             stats.append(underlying_cyobject)
-            # add a __dict__ to support inheriting from a pyclass
-            dict_attribute = self.synthesize_dict_attribute(node)
-            stats.append(dict_attribute)
 
         # insert method wrappers in the statement list
         self.insert_cypclass_method_wrappers(node, cclass_name, stats)
@@ -358,35 +355,6 @@ def NAME(self, ARGDECLS):
         )
 
         return underlying_cyobject
-
-    def synthesize_dict_attribute(self, node):
-        base_type_node = Nodes.CSimpleBaseTypeNode(
-            node.pos,
-            name = EncodedString("dict"),
-            module_path = [],
-            is_basic_c_type = 0,
-            signed = 1,
-            complex = 0,
-            longness = 0,
-            is_self_arg = 0,
-            templates = None
-        )
-
-        dict_name_declarator = Nodes.CNameDeclaratorNode(node.pos, name=EncodedString("__dict__"), cname=None)
-
-        dict_attribute = Nodes.CVarDefNode(
-            pos = node.pos,
-            visibility = 'private',
-            base_type = base_type_node,
-            declarators = [dict_name_declarator],
-            in_pxd = node.in_pxd,
-            doc = None,
-            api = 0,
-            modifiers = [],
-            overridable = 0
-        )
-
-        return dict_attribute
 
     def synthesize_underlying_assignment(self, pos, cast_name_node, self_name, underlying_name, underlying_type):
         # > reference to the self argument of the wrapper method
@@ -513,11 +481,24 @@ def NAME(self, ARGDECLS):
 
         return method_wrapper
 
+    def synthesize_empty_slots(self, node):
+        lhs = ExprNodes.NameNode(node.pos, name=EncodedString("__slots__"))
+
+        rhs = ExprNodes.TupleNode(node.pos, args=[])
+
+        stat = Nodes.SingleAssignmentNode(node.pos, lhs=lhs, rhs=rhs)
+
+        return stat
+
     def synthesize_wrapper_pyclass(self, node, cclass_wrapper, qualified_name, cclass_name, pyclass_name):
 
         py_bases = self.synthesize_base_tuple(node)
 
-        py_stats = []
+        # declare '__slots__ = ()' to allow this pyclass to be a base class
+        # of an extension type that doesn't define a 'cdef dict __dict__'.
+        py_empty_slots = self.synthesize_empty_slots(node)
+
+        py_stats = [py_empty_slots]
         for defnode in cclass_wrapper.body.stats:
             if isinstance(defnode, Nodes.DefNode):
                 def_name = defnode.name

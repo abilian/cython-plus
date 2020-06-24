@@ -3698,6 +3698,15 @@ class DefNodeWrapper(FuncDefNode):
                     code.put_var_xdecref(entry)
                 else:
                     code.put_var_decref(entry)
+            elif entry.is_arg and entry.type.is_cyp_class:
+                # The conversion from PyObject to CyObject creates a new CyObject reference.
+                code.put_cyxdecref(entry.cname)
+        for entry in lenv.arg_entries:
+            if entry.type.is_cyp_class:
+                # The conversion from PyObject to CyObject creates a new CyObject reference.
+                # Such a conversion occurs even when the argument is not explicitly marked
+                # as needing a conversion and declared as a variable in var_entries.
+                code.put_cyxdecref(entry.cname)
 
         code.put_finish_refcount_context()
         if not self.return_type.is_void:

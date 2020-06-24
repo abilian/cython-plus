@@ -67,6 +67,7 @@
           virtual ~CyObject();
           void CyObject_INCREF();
           int CyObject_DECREF();
+          int CyObject_GETREF();
           void CyObject_RLOCK();
           void CyObject_WLOCK();
           void CyObject_UNLOCK();
@@ -123,6 +124,10 @@
 
     static inline void _Cy_INCREF(CyObject *op) {
         op->CyObject_INCREF();
+    }
+
+    static inline int _Cy_GETREF(CyObject *op) {
+        return op->CyObject_GETREF();
     }
 
     static inline void _Cy_RLOCK(CyObject *op) {
@@ -227,6 +232,7 @@
     #define Cy_INCREF(op) do {if (op != NULL) {_Cy_INCREF(_CyObject_CAST(op));}} while(0)
     #define Cy_DECREF(op) do {if (_Cy_DECREF(_CyObject_CAST(op))) {op = NULL;}} while(0)
     #define Cy_XDECREF(op) do {if (op != NULL) {Cy_DECREF(op);}} while(0)
+    #define Cy_GETREF(op) (_Cy_GETREF(_CyObject_CAST(op)))
     #define Cy_GOTREF(op)
     #define Cy_XGOTREF(op)
     #define Cy_GIVEREF(op)
@@ -467,6 +473,11 @@ int CyObject::CyObject_DECREF()
     return 1;
   }
   return 0;
+}
+
+int CyObject::CyObject_GETREF()
+{
+  return this->nogil_ob_refcnt;
 }
 
 void CyObject::CyObject_RLOCK()

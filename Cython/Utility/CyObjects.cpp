@@ -202,7 +202,6 @@
      * template:
      *  - W: the type of the extension type wrapper
      *  - U: the type of the underlying cypclass
-     *  - T: pointer to the PyTypeObject instance of the wrapper
      */
     template <typename W, typename U>
     static inline U* __Pyx_PyObject_AsCyObject(PyObject * ob, PyTypeObject * type) {

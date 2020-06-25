@@ -356,24 +356,6 @@ def NAME(self, ARGDECLS):
 
         return underlying_cyobject
 
-    def synthesize_underlying_assignment(self, pos, cast_name_node, self_name, underlying_name, underlying_type):
-        # > reference to the self argument of the wrapper method
-        self_obj = ExprNodes.NameNode(pos, name=self_name)
-
-        # > access the underlying cyobject from the self argument of the wrapper method
-        underlying_obj = ExprNodes.AttributeNode(pos, obj=self_obj, attribute=underlying_name)
-
-        # > cast the underlying object back to this type
-        cast_operation = ExprNodes.TypecastNode(
-            pos,
-            type = underlying_type,
-            operand = underlying_obj,
-            typecheck = False
-        )
-        cast_assignment = Nodes.SingleAssignmentNode(pos, lhs=cast_name_node, rhs=cast_operation)
-
-        return cast_assignment
-
     def insert_cypclass_method_wrappers(self, node, cclass_name, stats):
         for attr in node.attributes:
             if isinstance(attr, Nodes.CFuncDefNode):

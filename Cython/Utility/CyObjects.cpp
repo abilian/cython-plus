@@ -454,10 +454,7 @@ int RecursiveUpgradeableRWLock::trywlock() {
 
 CyObject::~CyObject() {
   if (cy_pyobject) {
-    printf("deleting wrapper object @ %p\n", cy_pyobject);
-    printf("python refcount: %ld\n", cy_pyobject->ob_refcnt);
     ::operator delete(cy_pyobject);
-    printf("wrapper deleted\n\n");
   }
 }
 

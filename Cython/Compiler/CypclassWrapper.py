@@ -1041,9 +1041,7 @@ def generate_cyp_class_wrapper_definition(type, wrapper_entry, constructor_entry
         objstruct_cname = type.wrapper_type.objstruct_cname
         cclass_wrapper_base = type.wrapped_base_type().wrapper_type
         code.putln("if(self) {")
-        code.putln("printf(\"allocating wrapper for %s cypclass\\n\");" % type.name)
         code.putln("%s * wrapper = (%s *) ::operator new(sizeof *wrapper);" % (objstruct_cname, objstruct_cname))
-        code.putln("printf(\"allocated wrapper object @ %p\\n\\n\", wrapper);")
         code.putln("((%s *)wrapper)->%s = self;" % (cclass_wrapper_base.objstruct_cname, Naming.cypclass_attr_cname))
         code.putln("PyObject * wrapper_as_py = (PyObject *) wrapper;")
         code.putln("wrapper_as_py->ob_refcnt = 0;")

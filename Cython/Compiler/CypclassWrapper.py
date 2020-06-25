@@ -153,6 +153,11 @@ def NAME(self, ARGDECLS):
             # skip forward declarations
             return
 
+        new_entry = node.scope.lookup_here("__new__")
+        if new_entry and new_entry.type.return_type is not node.entry.type:
+            # skip cypclasses that don't instanciate their own type
+            return
+
         # indicate that the cypclass will have a wrapper
         node.entry.type.support_wrapper = True
 

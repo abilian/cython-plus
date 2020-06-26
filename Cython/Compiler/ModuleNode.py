@@ -582,11 +582,20 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         vtab_dict, vtab_dict_order = {}, []
         vtabslot_dict, vtabslot_dict_order = {}, []
 
+        def vtab_key_func(entry_type):
+            return entry_type.vtabstruct_cname
+
+        def vtabslot_key_func(entry_type):
+            if entry_type.is_cyp_wrapper:
+                # cyp_wrappers all have the same objstruct_cname
+                return entry_type.wrapped_cname
+            return entry_type.objstruct_cname
+
         for module in module_list:
             for entry in module.c_class_entries:
                 if entry.used and not entry.in_cinclude:
                     type = entry.type
-                    key = type.vtabstruct_cname
+                    key = vtab_key_func(type)
                     if not key:
                         continue
                     if key in vtab_dict:
@@ -604,25 +613,26 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     type = entry.type
                     if type.is_extension_type and not entry.in_cinclude:
                         type = entry.type
-                        key = type.objstruct_cname
+                        key = vtabslot_key_func(type)
                         assert key not in vtabslot_dict, key
                         vtabslot_dict[key] = entry
                         vtabslot_dict_order.append(key)
 
-        def vtabstruct_cname(entry_type):
-            return entry_type.vtabstruct_cname
         vtab_list = self.sort_types_by_inheritance(
-            vtab_dict, vtab_dict_order, vtabstruct_cname)
+            vtab_dict, vtab_dict_order, vtab_key_func)
 
-        def objstruct_cname(entry_type):
-            return entry_type.objstruct_cname
         vtabslot_list = self.sort_types_by_inheritance(
-            vtabslot_dict, vtabslot_dict_order, objstruct_cname)
+            vtabslot_dict, vtabslot_dict_order, vtabslot_key_func)
 
         return (vtab_list, vtabslot_list)
 
     def sort_cdef_classes(self, env):
-        key_func = operator.attrgetter('objstruct_cname')
+        def key_func(entry_type):
+            if entry_type.is_cyp_wrapper:
+                # cyp_wrappers all have the same objstruct_cname
+                return entry_type.wrapped_cname
+            return entry_type.objstruct_cname
+
         entry_dict, entry_order = {}, []
         for entry in env.c_class_entries:
             key = key_func(entry.type)
@@ -1296,6 +1306,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln(self.sue_predeclaration(type, "struct", type.objstruct_cname))
 
     def generate_objstruct_definition(self, type, code):
+        if type.is_cyp_wrapper:
+            # cclass wrappers for cypclass already have an objstruct
+            return
+
         code.mark_pos(type.pos)
         # Generate object struct definition for an
         # extension type.
@@ -1686,11 +1700,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         # for cyp wrappers, just decrement the atomic counter of the underlying type
         parent_type = scope.parent_type
         if parent_type.is_cyp_wrapper:
-            underlying_attribute_name = Naming.cypclass_wrapper_underlying_attr
             self.generate_self_cast(scope, code)
             code.putln(
-                "CyObject * p_nogil_cyobject = p->%s;"
-                % underlying_attribute_name
+                "CyObject * p_nogil_cyobject = static_cast<CyObject *>(p);"
             )
             code.putln("Cy_DECREF(p_nogil_cyobject);")
             code.putln("}")

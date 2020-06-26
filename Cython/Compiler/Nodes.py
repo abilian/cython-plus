@@ -5586,6 +5586,8 @@ class CypclassWrapperDefNode(CClassDefNode):
         self.entry.type.is_cyp_wrapper = 1
         # > associate the wrapper type to the wrapped type
         self.wrapped_cypclass.entry.type.wrapper_type = self.entry.type
+        # > remember the declaration of the wrapped type
+        self.entry.type.wrapped_cname = self.wrapped_cypclass.entry.type.empty_declaration_code()
 
 
 class PropertyNode(StatNode):

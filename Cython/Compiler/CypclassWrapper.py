@@ -22,11 +22,6 @@ from .Errors import error, warning
 from .StringEncoding import EncodedString
 from .ParseTreeTransforms import NormalizeTree, InterpretCompilerDirectives, AnalyseDeclarationsTransform
 
-
-# cython name for underlying cypclass attribute in cypclass wrappers
-underlying_name = EncodedString("nogil_cyobject")
-
-
 #
 #   Visitor for wrapper cclass injection
 #
@@ -45,22 +40,22 @@ class CypclassWrapperInjection(Visitor.CythonTransform):
     unlocked_property = TreeFragment.TreeFragment(u"""
 property NAME:
     def __get__(self):
-        OBJ = <TYPE> self.UNDERLYING
+        OBJ = <TYPE> <CyObject> self
         return OBJ.ATTR
     def __set__(self, value):
-        OBJ = <TYPE> self.UNDERLYING
+        OBJ = <TYPE> <CyObject> self
         OBJ.ATTR = value
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     locked_property = TreeFragment.TreeFragment(u"""
 property NAME:
     def __get__(self):
-        OBJ = <TYPE> self.UNDERLYING
+        OBJ = <TYPE> <CyObject> self
         with rlocked OBJ:
             value = OBJ.ATTR
         return value
     def __set__(self, value):
-        OBJ = <TYPE> self.UNDERLYING
+        OBJ = <TYPE> <CyObject> self
         with wlocked OBJ:
             OBJ.ATTR = value
     """, level='c_class', pipeline=[NormalizeTree(None)])
@@ -68,40 +63,40 @@ property NAME:
     # method wrapper templates
     unlocked_method = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
-    OBJ = <TYPE> self.UNDERLYING
+    OBJ = <TYPE> <CyObject> self
     return OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     unlocked_method_no_return = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
-    OBJ = <TYPE> self.UNDERLYING
+    OBJ = <TYPE> <CyObject> self
     OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     rlocked_method = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
-    OBJ = <TYPE> self.UNDERLYING
+    OBJ = <TYPE> <CyObject> self
     with rlocked OBJ:
         return OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     rlocked_method_no_return = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
-    OBJ = <TYPE> self.UNDERLYING
+    OBJ = <TYPE> <CyObject> self
     with rlocked OBJ:
         OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     wlocked_method = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
-    OBJ = <TYPE> self.UNDERLYING
+    OBJ = <TYPE> <CyObject> self
     with wlocked OBJ:
         return OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     wlocked_method_no_return = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
-    OBJ = <TYPE> self.UNDERLYING
+    OBJ = <TYPE> <CyObject> self
     with wlocked OBJ:
         OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
@@ -164,15 +159,17 @@ def NAME(self, ARGDECLS):
         self.derive_names(node)
         self.collected_cypclasses.append(node)
 
-    def create_unique_name(self, name):
+    def create_unique_name(self, name, entries=None):
         # output: name(_u_*)?
         # guarantees:
         # - different inputs always result in different outputs
-        # - the output is not in the module scope dictionary
+        # - the output is not among the given entries
+        # if entries is None, the module scope entries are used
         unique_name = name
-        if unique_name in self.module_scope.entries:
+        entries = self.module_scope.entries if entries is None else entries
+        if unique_name in entries:
             unique_name = "%s_u" % unique_name
-        while unique_name in self.module_scope.entries:
+        while unique_name in entries:
             unique_name = "%s_" % unique_name
         return EncodedString(unique_name)
 
@@ -292,11 +289,6 @@ def NAME(self, ARGDECLS):
         cclass_bases = self.synthesize_base_tuple(node)
 
         stats = []
-        if not cclass_bases.args:
-            # the memory layout for the underlying cyobject should always be the same
-            # and match the memory layout of CyPyObject.
-            underlying_cyobject = self.synthesize_underlying_cyobject_attribute(node)
-            stats.append(underlying_cyobject)
 
         # insert method wrappers in the statement list
         self.insert_cypclass_method_wrappers(node, cclass_name, stats)
@@ -314,7 +306,7 @@ def NAME(self, ARGDECLS):
             class_name = cclass_name,
             as_name = cclass_name,
             bases = cclass_bases,
-            objstruct_name = None,
+            objstruct_name = Naming.cypclass_wrapper_layout_type,
             typeobj_name = None,
             check_size = None,
             in_pxd = node.in_pxd,
@@ -325,41 +317,6 @@ def NAME(self, ARGDECLS):
         )
 
         return wrapper
-
-    def synthesize_underlying_cyobject_attribute(self, node):
-        base_type = PyrexTypes.cy_object_type
-
-        base_type_node = Nodes.CSimpleBaseTypeNode(
-            node.pos,
-            name = base_type.name,
-            module_path = [],
-            is_basic_c_type = 0,
-            signed = 1,
-            complex = 0,
-            longness = 0,
-            is_self_arg = 0,
-            templates = None
-        )
-
-        underlying_name_declarator = Nodes.CNameDeclaratorNode(
-            node.pos,
-            name=underlying_name,
-            cname=Naming.cypclass_wrapper_underlying_attr
-        )
-
-        underlying_cyobject = Nodes.CVarDefNode(
-            pos = node.pos,
-            visibility = 'private',
-            base_type = base_type_node,
-            declarators = [underlying_name_declarator],
-            in_pxd = node.in_pxd,
-            doc = None,
-            api = 0,
-            modifiers = [],
-            overridable = 0
-        )
-
-        return underlying_cyobject
 
     def insert_cypclass_method_wrappers(self, node, cclass_name, stats):
         for attr in node.attributes:
@@ -382,11 +339,11 @@ def NAME(self, ARGDECLS):
             template = self.locked_property
         else:
             template = self.unlocked_property
+        underlying_name = EncodedString("o")
         property = template.substitute({
             "ATTR": attr_entry.name,
             "TYPE": node_entry.type,
             "OBJ": ExprNodes.NameNode(attr_entry.pos, name=underlying_name),
-            "UNDERLYING": underlying_name
         }, pos=attr_entry.pos).stats[0]
         property.name = attr_entry.name
         property.doc = attr_entry.doc
@@ -455,13 +412,15 @@ def NAME(self, ARGDECLS):
         else:
             template = self.unlocked_method if need_return else self.unlocked_method_no_return
 
+        # > derive a unique name that doesn't collide with the arguments
+        underlying_name = self.create_unique_name("o", entries=[arg.name for arg in arg_objs])
+
         # > instanciate the wrapper from the template
         method_wrapper = template.substitute({
             "NAME": cfunc_name,
             "ARGDECLS": py_args_decls,
             "TYPE": underlying_type,
             "OBJ": ExprNodes.NameNode(cfunc_method.pos, name=underlying_name),
-            "UNDERLYING": underlying_name,
             "ARGS": arg_objs
         }).stats[0]
         method_wrapper.doc = py_doc
@@ -1124,9 +1083,7 @@ def generate_cypclass_wrapper_allocation(code, wrapper_type):
 
     objstruct_cname = wrapper_type.objstruct_cname
     code.putln("if (self) {")
-    code.putln("%s * wrapper = (%s *) ::operator new(sizeof *wrapper);" % (objstruct_cname, objstruct_cname))
+    code.putln("%s * wrapper = (%s *) self;" % (objstruct_cname, objstruct_cname))
     code.putln("((PyObject *)wrapper)->ob_refcnt = 0;")
     code.putln("((PyObject *)wrapper)->ob_type = %s;" % wrapper_type.typeptr_cname)
-    code.putln("((%s *)wrapper)->%s = self;" % (Naming.cypclass_wrapper_layout_type, Naming.cypclass_wrapper_underlying_attr))
-    code.putln("self->cy_pyobject = (PyObject *) wrapper;")
     code.putln("}")

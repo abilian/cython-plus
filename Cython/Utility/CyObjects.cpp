@@ -56,15 +56,18 @@
             int trywlock();
     };
 
-    class CyObject {
+    struct CyPyObject {
+        PyObject_HEAD
+    };
+
+    class CyObject : public CyPyObject {
         private:
           CyObject_ATOMIC_REFCOUNT_TYPE nogil_ob_refcnt;
           //pthread_rwlock_t ob_lock;
           RecursiveUpgradeableRWLock ob_lock;
         public:
-          PyObject * cy_pyobject;
-          CyObject(): nogil_ob_refcnt(1), cy_pyobject(NULL) {}
-          virtual ~CyObject();
+          CyObject(): nogil_ob_refcnt(1) {}
+          virtual ~CyObject() {}
           void CyObject_INCREF();
           int CyObject_DECREF();
           int CyObject_GETREF();
@@ -74,19 +77,6 @@
           int CyObject_TRYRLOCK();
           int CyObject_TRYWLOCK();
     };
-
-    /*
-     * A POD type that has a compatible memory layout with any wrapper for a cypclass.
-     *
-     * Serves as a:
-     *  - convenience type to cast a wrapper and access its underlying cyobject pointer.
-     *  - reference for the memory layout that all cypclass wrappers must respect.
-     */
-    struct CyPyObject {
-        PyObject_HEAD
-        CyObject * nogil_cyobject;
-    };
-
 
     /* All this is made available by member injection inside the module scope */
 
@@ -194,7 +184,7 @@
             Py_INCREF(Py_None);
             return Py_None;
         }
-        PyObject * ob = cy->cy_pyobject;
+        PyObject * ob = reinterpret_cast<PyObject *>(static_cast<CyPyObject *>(cy));
         // artificial atomic increment the first time Python gets a reference
         if (ob->ob_refcnt == 0)
             cy->CyObject_INCREF();
@@ -224,7 +214,7 @@
         }
 
         CyPyObject * wrapper = (CyPyObject *)ob;
-        U * underlying = dynamic_cast<U *>(wrapper->nogil_cyobject);
+        U * underlying = dynamic_cast<U *>(static_cast<CyObject *>(wrapper));
 
         // no underlying cyobject: shouldn't happen, playing it safe for now
         if (underlying == NULL) {
@@ -461,12 +451,6 @@ int RecursiveUpgradeableRWLock::trywlock() {
     }
     ++my_counts.write_count;
     return 0;
-}
-
-CyObject::~CyObject() {
-  if (cy_pyobject) {
-    ::operator delete(cy_pyobject);
-  }
 }
 
 void CyObject::CyObject_INCREF()

@@ -294,7 +294,7 @@ def NAME(self, ARGDECLS):
         stats = []
         if not cclass_bases.args:
             # the memory layout for the underlying cyobject should always be the same
-            # -> maybe use a single common base cclass in the future
+            # and match the memory layout of CyPyObject.
             underlying_cyobject = self.synthesize_underlying_cyobject_attribute(node)
             stats.append(underlying_cyobject)
 
@@ -344,7 +344,7 @@ def NAME(self, ARGDECLS):
         underlying_name_declarator = Nodes.CNameDeclaratorNode(
             node.pos,
             name=underlying_name,
-            cname=Naming.cypclass_attr_cname
+            cname=Naming.cypclass_wrapper_underlying_attr
         )
 
         underlying_cyobject = Nodes.CVarDefNode(
@@ -1023,18 +1023,9 @@ def generate_cyp_class_wrapper_definition(type, wrapper_entry, constructor_entry
     # __new__ can be defined by user and return another type
     is_new_return_type = not new_entry or new_entry.type.return_type == type
 
-    # initialise PyObject fields
+    # allocate and initialise PyObject fields
     if is_new_return_type and type.wrapper_type:
-        objstruct_cname = type.wrapper_type.objstruct_cname
-        cclass_wrapper_base = type.wrapped_base_type().wrapper_type
-        code.putln("if(self) {")
-        code.putln("%s * wrapper = (%s *) ::operator new(sizeof *wrapper);" % (objstruct_cname, objstruct_cname))
-        code.putln("((%s *)wrapper)->%s = self;" % (cclass_wrapper_base.objstruct_cname, Naming.cypclass_attr_cname))
-        code.putln("PyObject * wrapper_as_py = (PyObject *) wrapper;")
-        code.putln("wrapper_as_py->ob_refcnt = 0;")
-        code.putln("wrapper_as_py->ob_type = %s;" % type.wrapper_type.typeptr_cname)
-        code.putln("self->cy_pyobject = wrapper_as_py;")
-        code.putln("}")
+        generate_cypclass_wrapper_allocation(code, type.wrapper_type)
 
     if init_entry:
         init_entry = PyrexTypes.best_match(wrapper_arg_types,
@@ -1124,3 +1115,18 @@ def generate_cyp_class_wrapper_definition(type, wrapper_entry, constructor_entry
     code.putln("return self;")
     code.putln("}")
 
+def generate_cypclass_wrapper_allocation(code, wrapper_type):
+    """
+        Generate allocation and essential setup of the wrapper object.
+        The cname of the cyobject is assumed to be 'self'.
+        The cname 'wrapper' is assumed to be available.
+    """
+
+    objstruct_cname = wrapper_type.objstruct_cname
+    code.putln("if (self) {")
+    code.putln("%s * wrapper = (%s *) ::operator new(sizeof *wrapper);" % (objstruct_cname, objstruct_cname))
+    code.putln("((PyObject *)wrapper)->ob_refcnt = 0;")
+    code.putln("((PyObject *)wrapper)->ob_type = %s;" % wrapper_type.typeptr_cname)
+    code.putln("((%s *)wrapper)->%s = self;" % (Naming.cypclass_wrapper_layout_type, Naming.cypclass_wrapper_underlying_attr))
+    code.putln("self->cy_pyobject = (PyObject *) wrapper;")
+    code.putln("}")

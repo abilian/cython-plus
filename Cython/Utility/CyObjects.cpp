@@ -75,6 +75,19 @@
           int CyObject_TRYWLOCK();
     };
 
+    /*
+     * A POD type that has a compatible memory layout with any wrapper for a cypclass.
+     *
+     * Serves as a:
+     *  - convenience type to cast a wrapper and access its underlying cyobject pointer.
+     *  - reference for the memory layout that all cypclass wrappers must respect.
+     */
+    struct CyPyObject {
+        PyObject_HEAD
+        CyObject * nogil_cyobject;
+    };
+
+
     /* All this is made available by member injection inside the module scope */
 
     struct ActhonResultInterface : public CyObject {
@@ -200,10 +213,9 @@
      *  - return NULL
      * 
      * template:
-     *  - W: the type of the extension type wrapper
      *  - U: the type of the underlying cypclass
      */
-    template <typename W, typename U>
+    template <typename U>
     static inline U* __Pyx_PyObject_AsCyObject(PyObject * ob, PyTypeObject * type) {
         // the PyObject is not of the expected type
         if (ob->ob_type != type) {
@@ -211,7 +223,7 @@
             return NULL;
         }
 
-        W * wrapper = (W *)ob;
+        CyPyObject * wrapper = (CyPyObject *)ob;
         U * underlying = dynamic_cast<U *>(wrapper->nogil_cyobject);
 
         // no underlying cyobject: shouldn't happen, playing it safe for now

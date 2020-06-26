@@ -4180,7 +4180,6 @@ class CypClassType(CppClassType):
     #  _mro               [CppClassType] or None       the Method Resolution Order of this cypclass according to Python
     #  support_wrapper    boolean                      whether this cypclass will be wrapped
     #  wrapper_type       PyExtensionType or None      the type of the cclass wrapper
-    #  _wrapped_base_type CypClassType or None         the type of the oldest wrapped cypclass base
 
     is_cyp_class = 1
     to_py_function = None
@@ -4194,20 +4193,6 @@ class CypClassType(CppClassType):
         self.support_wrapper = False
         self.wrapper_type = None
         self._wrapped_base_type = None
-
-    # return the oldest left-path superclass such that all intervening classes have a wrapper
-    def wrapped_base_type(self):
-        # if the result has already been computed, return it
-        if self._wrapped_base_type is not None:
-            return self._wrapped_base_type
-        # find the first wrapped base (if there is one) and take the same oldest superclass
-        for base_type in self.base_classes:
-            if base_type.is_cyp_class and base_type.support_wrapper:
-                self._wrapped_base_type = base_type.wrapped_base_type()
-                return self._wrapped_base_type
-        # if no wrapped base was found, this type is the oldest wrapped base
-        self._wrapped_base_type = self
-        return self
 
     # iterate over the direct bases that support wrapping
     def iter_wrapped_base_types(self):
@@ -4252,11 +4237,10 @@ class CypClassType(CppClassType):
     def create_from_py_utility_code(self, env):
         if not self.wrapper_type:
             return False
-        wrapper_objstruct = self.wrapped_base_type().wrapper_type.objstruct_cname
         underlying_type_name = self.cname
-        self.from_py_function = "__Pyx_PyObject_AsCyObject<%s, %s>" % (wrapper_objstruct, underlying_type_name)
+        self.from_py_function = "__Pyx_PyObject_AsCyObject<%s>" % underlying_type_name
         return True
-    
+
     def from_py_call_code(self, source_code, result_code, error_pos, code,
                           from_py_function=None, error_condition=None):
         extra_args = [self.wrapper_type.typeptr_cname if self.wrapper_type else None]
@@ -4265,7 +4249,7 @@ class CypClassType(CppClassType):
         return self._assign_from_py_code(
             source_code, result_code, error_pos, code, from_py_function, error_condition, extra_args=extra_args)
 
-    
+
     def empty_declaration_code(self):
         if self._empty_declaration is None:
             self._empty_declaration = self.declaration_code('', deref=1)

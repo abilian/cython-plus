@@ -166,8 +166,12 @@ exc_vars = (exc_type_name, exc_value_name, exc_tb_name)
 
 api_name        = pyrex_prefix + "capi__"
 
-# c name for underlying cypclass attribute in cypclass wrappers
-cypclass_attr_cname = "nogil_cyobject"
+# cname for the type that defines the essential memory layout of a cypclass wrapper.
+cypclass_wrapper_layout_type = "CyPyObject"
+
+# cname for the underlying cypclass attribute in the memory layout of a cypclass wrapper.
+cypclass_wrapper_underlying_attr = "nogil_cyobject"
+
 
 # the h and api guards get changed to:
 #  __PYX_HAVE__FILENAME (for ascii filenames)

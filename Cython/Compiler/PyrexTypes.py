@@ -165,6 +165,7 @@ class PyrexType(BaseType):
     #
     #  is_pyobject           boolean     Is a Python object type
     #  is_extension_type     boolean     Is a Python extension type
+    #  is_cyp_wrapper        boolean     Is a Python extension type that wraps a cypclass
     #  is_final_type         boolean     Is a final extension type
     #  is_numeric            boolean     Is a C numeric type
     #  is_int                boolean     Is a C integer type
@@ -228,6 +229,7 @@ class PyrexType(BaseType):
     is_pyobject = 0
     is_unspecified = 0
     is_extension_type = 0
+    is_cyp_wrapper = 0
     is_final_type = 0
     is_builtin_type = 0
     is_cython_builtin_type = 0
@@ -1498,13 +1500,11 @@ class PyExtensionType(PyObjectType):
     #  early_init       boolean          Whether to initialize early (as opposed to during module execution).
     #  defered_declarations [thunk]      Used to declare class hierarchies in order
     #  check_size       'warn', 'error', 'ignore'    What to do if tp_basicsize does not match
-    #  is_cyp_wrapper   boolean          Whether this extension type wraps a cypclass
     #  wrapped_cname    string or None   The full namespace declaration of the wrapped type when this is a cyp_wrapper
 
     is_extension_type = 1
     has_attributes = 1
     early_init = 1
-    is_cyp_wrapper = 0
 
     wrapper_cname = None
 

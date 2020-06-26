@@ -1565,6 +1565,29 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             "static PyObject *%s(PyTypeObject *t, %sPyObject *a, %sPyObject *k) {" % (
                 slot_func, unused_marker, unused_marker))
 
+        # for cyp wrappers, just allocate the cyobject and return the wrapper
+        # let the wrapped __init__ handle initialisation
+        if type.is_cyp_wrapper:
+            from .CypclassWrapper import generate_cypclass_wrapper_allocation
+
+            code.putln("if (t != %s) {" % type.typeptr_cname)
+            code.putln(
+                "PyErr_SetString(PyExc_TypeError,\"Cannot build a subtype of %s with %s.__new__\");"
+                % (scope.qualified_name, scope.qualified_name)
+            )
+            code.putln("return NULL;")
+            code.putln("}")
+            code.putln("CyObject * self = %s();" % type.wrapped_alloc)
+            generate_cypclass_wrapper_allocation(code, type)
+            code.putln(
+                "PyObject* wrapper = reinterpret_cast<PyObject *>(static_cast<%s *>(self));"
+                % Naming.cypclass_wrapper_layout_type
+            )
+            code.putln("Py_INCREF(wrapper);")
+            code.putln("return wrapper;")
+            code.putln("}")
+            return
+
         need_self_cast = (type.vtabslot_cname or
                           (py_buffers or memoryview_slices or py_attrs) or
                           cpp_class_attrs or cyp_class_attrs)

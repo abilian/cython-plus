@@ -5588,6 +5588,9 @@ class CypclassWrapperDefNode(CClassDefNode):
         self.wrapped_cypclass.entry.type.wrapper_type = self.entry.type
         # > remember the declaration of the wrapped type
         self.entry.type.wrapped_cname = self.wrapped_cypclass.entry.type.empty_declaration_code()
+        # > remember the cname of the wrapped type allocation function
+        alloc_entry = self.wrapped_cypclass.entry.type.scope.lookup_here("<alloc>")
+        self.entry.type.wrapped_alloc = alloc_entry.func_cname
 
 
 class PropertyNode(StatNode):

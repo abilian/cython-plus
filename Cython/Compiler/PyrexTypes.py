@@ -1501,12 +1501,14 @@ class PyExtensionType(PyObjectType):
     #  defered_declarations [thunk]      Used to declare class hierarchies in order
     #  check_size       'warn', 'error', 'ignore'    What to do if tp_basicsize does not match
     #  wrapped_cname    string or None   The full namespace declaration of the wrapped type when this is a cyp_wrapper
+    #  wrapped_alloc    string or None   The cname of the wrapped type allocation function when this is a cyp_wrapper
 
     is_extension_type = 1
     has_attributes = 1
     early_init = 1
 
     wrapper_cname = None
+    wrapped_alloc = None
 
     objtypedef_cname = None
 

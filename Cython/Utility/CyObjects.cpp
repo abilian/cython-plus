@@ -209,16 +209,16 @@
     static inline U* __Pyx_PyObject_AsCyObject(PyObject * ob, PyTypeObject * type) {
         // the PyObject is not of the expected type
         if (ob->ob_type != type) {
-            PyErr_SetString(PyExc_TypeError, "Conversion Error: Could not convert to CyObject");
+            PyErr_Format(PyExc_TypeError, "Cannot convert PyObject %s to CyObject %s", ob->ob_type->tp_name, type->tp_name);
             return NULL;
         }
 
         CyPyObject * wrapper = (CyPyObject *)ob;
         U * underlying = dynamic_cast<U *>(static_cast<CyObject *>(wrapper));
 
-        // no underlying cyobject: shouldn't happen, playing it safe for now
+        // failed dynamic cast: should not happen
         if (underlying == NULL) {
-            PyErr_SetString(PyExc_TypeError, "Conversion Error: CyObject wrapper has no underlying CyObject");
+            PyErr_Format(PyExc_TypeError, "Could not convert %s PyObject wrapper to its underlying CyObject", type->tp_name);
             return NULL;
         }
 

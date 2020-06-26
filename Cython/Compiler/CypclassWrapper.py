@@ -335,7 +335,7 @@ def NAME(self, ARGDECLS):
             return None
         if not attr_entry.type.can_coerce_from_pyobject(self.module_scope):
             return None
-        if node_entry.type.lock_mode == 'checklock':
+        if node_entry.type.lock_mode in ('checklock', 'autolock'):
             template = self.locked_property
         else:
             template = self.unlocked_property

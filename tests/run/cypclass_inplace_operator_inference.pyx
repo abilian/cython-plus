@@ -13,30 +13,29 @@ cdef cypclass A nolock:
 cdef cypclass B(A) nolock:
     B __iadd__(self, A other):
         self.val += (other.val + 10)
-
-    B __iadd__(self, B other):
-        self.val += (other.val + 100)
+    
+    int is_inferred_as_B(self):
+        return 1
 
 def test_inplace_operator_inference():
     """
     >>> test_inplace_operator_inference()
-    111
+    (11, 1)
     """
     a = A(0)
-    b0 = B(0)
-    b1 = B(0)
+    b = B(0)
 
     # at this point, the types are unambiguous and the following assignments should not cause them to infer as another type.
 
-    a += b0 # should add 1
+    a += b  # should add 1
 
-    # before it being fixed, 'b0 += a' where 'a' is of type A caused 'b0' to be inferred as type A instead of B.
+    # before it being fixed, 'b += a' where 'a' is of type A caused 'b' to be inferred as type A instead of B.
     
-    b0 += a # should add 10
+    b += a  # should add 10
 
-    # since all cypclass methods are virtual, 'b0' being erroneously inferred as type A would cause 
-    # 'b0 += b1' to call 'B __iadd__(self, A other)' instead of 'B __iadd__(self, B other)'.
+    # since all cypclass methods are virtual, 'b' being erroneously inferred as type A would cause a compilation error
+    # when calling 'b.is_inferred_as_B()'.
 
-    b0 += b1 # should add 100
+    r = b.is_inferred_as_B()
 
-    return b0.val
+    return b.val, r

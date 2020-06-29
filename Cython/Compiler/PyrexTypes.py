@@ -2958,18 +2958,17 @@ class CFuncType(CType):
             return 0
         return 1
 
-    def compatible_signature_with(self, other_type, as_cmethod = 0, ignore_return_type=0):
-        return self.compatible_signature_with_resolved_type(other_type.resolve(), as_cmethod, ignore_return_type)
+    def compatible_arguments_with(self, other_type, as_cmethod=0):
+        return self.compatible_arguments_with_resolved_type(other_type.resolve(), as_cmethod)
 
-    def compatible_signature_with_resolved_type(self, other_type, as_cmethod, ignore_return_type=0):
-        #print "CFuncType.same_c_signature_as_resolved_type:", \
-        #    self, other_type, "as_cmethod =", as_cmethod ###
+    def compatible_arguments_with_resolved_type(self, other_type, as_cmethod):
         if other_type is error_type:
             return 1
         if not other_type.is_cfunction:
             return 0
-        if not self.is_overridable and other_type.is_overridable:
-            return 0
+        return self.__compatible_arguments_with_resolved_type(other_type, as_cmethod)
+
+    def __compatible_arguments_with_resolved_type(self, other_type, as_cmethod):
         nargs = len(self.args)
         if nargs - self.optional_arg_count != len(other_type.args) - other_type.optional_arg_count:
             return 0
@@ -2984,9 +2983,24 @@ class CFuncType(CType):
                 return 0
         if self.has_varargs != other_type.has_varargs:
             return 0
-        if not ignore_return_type:
-            if not self.return_type.subtype_of_resolved_type(other_type.return_type):
-                return 0
+        return 1
+
+    def compatible_signature_with(self, other_type, as_cmethod = 0, skip_args=0, skip_return=0):
+        return self.compatible_signature_with_resolved_type(other_type.resolve(), as_cmethod, skip_args, skip_return)
+
+    def compatible_signature_with_resolved_type(self, other_type, as_cmethod, skip_args=0, skip_return=0):
+        #print "CFuncType.same_c_signature_as_resolved_type:", \
+        #    self, other_type, "as_cmethod =", as_cmethod ###
+        if other_type is error_type:
+            return 1
+        if not other_type.is_cfunction:
+            return 0
+        if not self.is_overridable and other_type.is_overridable:
+            return 0
+        if not skip_args and not self.compatible_arguments_with_resolved_type(other_type, as_cmethod):
+            return 0
+        if not self.return_type.subtype_of_resolved_type(other_type.return_type):
+            return 0
         if not self.same_calling_convention_as(other_type):
             return 0
         if self.nogil != other_type.nogil:
@@ -3010,14 +3024,17 @@ class CFuncType(CType):
                 return 0
         return 1
 
-    def narrower_c_signature_than(self, other_type, as_cmethod = 0):
-        return self.narrower_c_signature_than_resolved_type(other_type.resolve(), as_cmethod)
+    def narrower_arguments_than(self, other_type, as_cmethod = 0):
+        return self.narrower_arguments_than_resolved_type(other_type.resolve(), as_cmethod)
 
-    def narrower_c_signature_than_resolved_type(self, other_type, as_cmethod):
+    def narrower_arguments_than_resolved_type(self, other_type, as_cmethod):
         if other_type is error_type:
             return 1
         if not other_type.is_cfunction:
             return 0
+        return self.__narrower_arguments_than_resolved_type(other_type, as_cmethod)
+
+    def __narrower_arguments_than_resolved_type(self, other_type, as_cmethod):
         nargs = len(self.args)
         if nargs != len(other_type.args):
             return 0
@@ -3030,6 +3047,18 @@ class CFuncType(CType):
         if self.has_varargs != other_type.has_varargs:
             return 0
         if self.optional_arg_count != other_type.optional_arg_count:
+            return 0
+        return 1
+
+    def narrower_c_signature_than(self, other_type, as_cmethod = 0, skip_args=0):
+        return self.narrower_c_signature_than_resolved_type(other_type.resolve(), as_cmethod)
+
+    def narrower_c_signature_than_resolved_type(self, other_type, as_cmethod, skip_args=0):
+        if other_type is error_type:
+            return 1
+        if not other_type.is_cfunction:
+            return 0
+        if not skip_args and not self.__narrower_arguments_than_resolved_type(other_type, as_cmethod):
             return 0
         if not self.return_type.subtype_of_resolved_type(other_type.return_type):
             return 0
@@ -3965,6 +3994,9 @@ class CppClassType(CType):
                 base_code = "%s::%s" % (self.namespace.empty_declaration_code(), base_code)
             base_code = public_decl(base_code, dll_linkage)
         return self.base_declaration_code(base_code, entity_code)
+
+    def subtype_of_resolved_type(self, other_type):
+        return self.is_subclass(other_type)
 
     def is_subclass(self, other_type):
         if self.same_as_resolved_type(other_type):

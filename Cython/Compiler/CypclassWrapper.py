@@ -120,7 +120,6 @@ def NAME(self, ARGDECLS):
         self.synthesized = set()
         self.nesting_stack = []
         self.module_scope = node.scope
-        self.cimport_cython = True
         self.visitchildren(node)
         self.inject_cypclass_wrappers(node)
         return node
@@ -183,24 +182,10 @@ def NAME(self, ARGDECLS):
         nested_name = "_".join(nested_names)
 
         cclass_name = self.create_unique_name("%s_cyp_cclass_wrapper" % nested_name)
-        pyclass_name = self.create_unique_name("%s_cyp_pyclass_wrapper" % nested_name)
 
-        self.type_to_names[node.entry.type] = qualified_name, cclass_name, pyclass_name
+        self.type_to_names[node.entry.type] = qualified_name, cclass_name
 
     def inject_cypclass_wrappers(self, module_node):
-        if self.cimport_cython:
-            # cimport cython to access the @cython.binding decorator
-            # use a unique name for "cimport cython as <name>" if necessary
-            as_name = self.create_unique_name("cython")
-            self.cython_as_name = as_name
-            cimport_stmt = Nodes.CImportStatNode(
-                module_node.pos,
-                module_name=EncodedString("cython"),
-                as_name=None if as_name == "cython" else as_name,
-                is_absolute=True
-            )
-            self.wrappers.append(cimport_stmt)
-
         for collected in self.collected_cypclasses:
             self.synthesize_wrappers(collected)
 
@@ -224,7 +209,7 @@ def NAME(self, ARGDECLS):
                 self.base_type_to_deferred[wrapped_base_type].append(lambda: self.synthesize_wrappers(node))
                 return
 
-        qualified_name, cclass_name, pyclass_name = self.type_to_names[node_type]
+        qualified_name, cclass_name = self.type_to_names[node_type]
 
         cclass = self.synthesize_wrapper_cclass(node, cclass_name, qualified_name)
 
@@ -234,25 +219,7 @@ def NAME(self, ARGDECLS):
         # forward declare the cclass wrapper
         cclass.declare(self.module_scope)
 
-        pyclass = self.synthesize_wrapper_pyclass(node, cclass, qualified_name, cclass_name, pyclass_name)
-
-        # allow the cclass methods to bind on instance of the pyclass
-        binding_decorator = Nodes.DecoratorNode(
-            node.pos,
-            decorator=ExprNodes.SimpleCallNode(
-                node.pos,
-                function=ExprNodes.AttributeNode(
-                    node.pos,
-                    attribute=EncodedString("binding"),
-                    obj=ExprNodes.NameNode(node.pos, name=self.cython_as_name)
-                ),
-                args=[ExprNodes.BoolNode(node.pos, value=True)]
-            )
-        )
-        cclass.decorators = [binding_decorator]
-
         self.wrappers.append(cclass)
-        self.wrappers.append(pyclass)
 
         # synthesize deferred dependent subclasses
         for thunk in self.base_type_to_deferred[node_type]:
@@ -263,24 +230,8 @@ def NAME(self, ARGDECLS):
 
         bases_args = []
 
-        wrapped_bases_iterator = node_type.iter_wrapped_base_types()
-
-        try:
-            # consume the first wrapped base from the iterator
-            first_wrapped_base = next(wrapped_bases_iterator)
-            first_base_cclass_name = first_wrapped_base.wrapper_type.name
-            wrapped_first_base = ExprNodes.NameNode(node.pos, name=first_base_cclass_name)
-            bases_args.append(wrapped_first_base)
-
-            # use the pyclass wrapper for the other bases
-            for other_base in wrapped_bases_iterator:
-                _, __, other_base_pyclass_name = self.type_to_names[other_base]
-                other_base_arg = ExprNodes.NameNode(node.pos, name=other_base_pyclass_name)
-                bases_args.append(other_base_arg)
-
-        except StopIteration:
-            # no bases
-            pass
+        for base in node_type.iter_wrapped_base_types():
+            bases_args.append(ExprNodes.NameNode(node.pos, name=base.wrapper_type.name))
 
         return ExprNodes.TupleNode(node.pos, args=bases_args)
 
@@ -426,50 +377,6 @@ def NAME(self, ARGDECLS):
         method_wrapper.doc = py_doc
 
         return method_wrapper
-
-    def synthesize_empty_slots(self, node):
-        lhs = ExprNodes.NameNode(node.pos, name=EncodedString("__slots__"))
-
-        rhs = ExprNodes.TupleNode(node.pos, args=[])
-
-        stat = Nodes.SingleAssignmentNode(node.pos, lhs=lhs, rhs=rhs)
-
-        return stat
-
-    def synthesize_wrapper_pyclass(self, node, cclass_wrapper, qualified_name, cclass_name, pyclass_name):
-
-        py_bases = self.synthesize_base_tuple(node)
-
-        # declare '__slots__ = ()' to allow this pyclass to be a base class
-        # of an extension type that doesn't define a 'cdef dict __dict__'.
-        py_empty_slots = self.synthesize_empty_slots(node)
-
-        py_stats = [py_empty_slots]
-        for defnode in cclass_wrapper.body.stats:
-            if isinstance(defnode, Nodes.DefNode):
-                def_name = defnode.name
-
-                lhs = ExprNodes.NameNode(defnode.pos, name=def_name)
-
-                rhs_obj = ExprNodes.NameNode(defnode.pos, name=cclass_name)
-                rhs = ExprNodes.AttributeNode(defnode.pos, obj=rhs_obj, attribute=def_name)
-
-                stat = Nodes.SingleAssignmentNode(defnode.pos, lhs=lhs, rhs=rhs)
-                py_stats.append(stat)
-
-        py_body = Nodes.StatListNode(cclass_wrapper.pos, stats=py_stats)
-
-        py_class_node = Nodes.PyClassDefNode(
-            cclass_wrapper.pos,
-            name=pyclass_name,
-            bases=py_bases,
-            keyword_args=None,
-            doc=cclass_wrapper.doc,
-            body=py_body,
-            decorators=None,
-        )
-
-        return py_class_node
 
 
 #

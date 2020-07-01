@@ -5305,8 +5305,17 @@ class CClassDefNode(ClassDefNode):
             # At runtime, we check that the other bases are heap types
             # and that a __dict__ is added if required.
             for other_base in self.bases.args[1:]:
-                if other_base.analyse_as_type(env):
-                    error(other_base.pos, "Only one extension type base class allowed.")
+                base_extension_type = other_base.analyse_as_type(env)
+                if base_extension_type:
+                    if base_extension_type.attributes_known():
+                        base_scope = base_extension_type.scope
+                        # Allow other extension type bases if they only
+                        # have python function or python property members.
+                        npyfunc = len(base_scope.pyfunc_entries)
+                        npyproperty = len([e for e in base_scope.property_entries if not e.is_cproperty])
+                        if npyfunc + npyproperty == len(base_scope.entries):
+                            continue
+                    error(other_base.pos, "Only one extension type base class with non-empty C layout allowed.")
             self.entry.type.early_init = 0
             from . import ExprNodes
             self.type_init_args = ExprNodes.TupleNode(

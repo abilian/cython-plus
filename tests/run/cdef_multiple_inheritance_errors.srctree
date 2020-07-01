@@ -13,9 +13,25 @@ setup(ext_modules=cythonize("*.pyx"))
 cdef class Base:
     pass
 
-Obj = type(object())
+NonEmptyLayout = type(list())
 
-cdef class Foo(Base, Obj):
+cdef class Foo(Base, NonEmptyLayout):
+    pass
+
+######## notheaptype2.pyx ########
+
+cdef class Base:
+    cdef int somelayout
+
+cdef class Left(Base):
+    pass
+
+cdef class Right(Base):
+    pass
+
+Other = type(Right())
+
+cdef class Diamond(Left, Other):
     pass
 
 ######## wrongbase.pyx ########
@@ -67,7 +83,13 @@ try:
     import notheaptype
     assert False
 except TypeError as msg:
-    assert str(msg) == "base class 'object' is not a heap type"
+    assert str(msg) == "best base 'list' must be equal to first base 'notheaptype.Base'"
+
+try:
+    import notheaptype2
+    assert False
+except TypeError as msg:
+    assert str(msg) == "base class 'notheaptype2.Right' is not a heap type and has non-empty C layout"
 
 try:
     import wrongbase

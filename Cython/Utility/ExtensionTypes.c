@@ -38,11 +38,15 @@ static int __Pyx_PyType_Ready(PyTypeObject *t) {
             b = (PyTypeObject*)b0;
             if (!__Pyx_PyType_HasFeature(b, Py_TPFLAGS_HEAPTYPE))
             {
-                __Pyx_TypeName b_name = __Pyx_PyType_GetName(b);
-                PyErr_Format(PyExc_TypeError,
-                    "base class '" __Pyx_FMT_TYPENAME "' is not a heap type", b_name);
-                __Pyx_DECREF_TypeName(b_name);
-                return -1;
+                // Allow non-heap base types that strictly have the layout of a PyObject,
+                // as there is no chance of layout-conflict in that case.
+                if ( (b->tp_basicsize != sizeof(PyObject)) || (b->tp_itemsize != 0) ) {
+                    __Pyx_TypeName b_name = __Pyx_PyType_GetName(b);
+                    PyErr_Format(PyExc_TypeError,
+                        "base class '" __Pyx_FMT_TYPENAME "' is not a heap type and has non-empty C layout", b_name);
+                    __Pyx_DECREF_TypeName(b_name);
+                    return -1;
+                }
             }
             if (t->tp_dictoffset == 0 && b->tp_dictoffset)
             {

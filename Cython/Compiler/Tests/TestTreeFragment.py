@@ -178,6 +178,15 @@ class TestTreeFragments(CythonTest):
         self.assertTrue(isinstance(T.stats[0], PropertyNode), T)
         self.assertTrue(T.stats[0].name == "test", T)
 
+    def test_fromimportstatnode(self):
+        F = TreeFragment(u"from A import b as NAME")
+        T = F.substitute({
+            "NAME" : NameNode(None, name="test"),
+        })
+        self.assertTrue(isinstance(T.stats[0], FromImportStatNode), T)
+        self.assertTrue(isinstance(T.stats[0].items[0][1], NameNode), T)
+        self.assertTrue(T.stats[0].items[0][1].name == "test", T)
+
 if __name__ == "__main__":
     import unittest
     unittest.main()

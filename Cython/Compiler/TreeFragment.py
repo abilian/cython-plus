@@ -246,6 +246,13 @@ class TemplateTransform(VisitorTransform):
         else:
             return self.visit_Node(node)
 
+    def visit_FromImportStatNode(self, node):
+        for i, item in enumerate(node.items):
+            name, target_namenode = item
+            new_namenode = self.visit(target_namenode)
+            node.items[i] = (name, new_namenode)
+        return self.visit_Node(node)
+
 
 def copy_code_tree(node):
     return TreeCopier()(node)

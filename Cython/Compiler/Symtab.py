@@ -554,28 +554,20 @@ class Scope(object):
                                 cpp_override_allowed = True
                                 continue
 
+                            # in a cypclass, if the arguments are compatible
+                            # then the whole signature must be identical (return type excluded)
+                            old_declarator = alt_entry.type.declarator_code(name, for_display = 1).strip()
+                            new_declarator = type.declarator_code(name, for_display = 1).strip()
+                            if not new_declarator == old_declarator:
+                                comparison_message = " ---> %s\nvs -> %s" % (new_declarator, old_declarator)
+                                error(pos, "Cypclass method with compatible arguments but incompatible signature:\n%s"
+                                           % comparison_message)
+                                if alt_entry.pos is not None:
+                                        error(alt_entry.pos, "Conflicting method is defined here")
+
                         # Any inherited method is visible
                         # until overloaded by a method with the same signature
                         if alt_entry.is_inherited:
-
-                            # in a cypclass, if the arguments are compatible
-                            # then the whole signature must also be compatible
-                            if self.is_cyp_class_scope:
-                                if not type.compatible_signature_with(alt_entry.type, skip_args=1):
-                                    error(pos, "Cypclass overriding method with incompatible return type")
-                                    if alt_entry.pos is not None:
-                                        error(alt_entry.pos, "Overriden method is defined here")
-
-                                # 'CFuncType.compatible_signature_with' doesn't compare constness, so we're doing it here.
-                                # TODO: Maybe it should.
-                                elif (type.is_const_method and not alt_entry.type.is_const_method
-                                      or not type.is_const_method and alt_entry.type.is_const_method):
-                                    print(type.is_const_method)
-                                    print(alt_entry.type.is_const_method)
-                                    error(pos, "Cypclass overriding method with conflicting constness")
-                                    if alt_entry.pos is not None:
-                                        error(alt_entry.pos, "Overriden method is defined here")
-
                             previous_alternative_indices.append(index)
                             cpp_override_allowed = True
                             continue

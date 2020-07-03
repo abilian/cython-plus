@@ -3096,8 +3096,8 @@ class CFuncType(CType):
         return rhs_type.same_c_signature_as_resolved_type(self, exact_semantics=False) \
             and not (self.nogil and not rhs_type.nogil)
 
-    def declaration_code(self, entity_code,
-                         for_display = 0, dll_linkage = None, pyrex = 0,
+    def declarator_code(self, entity_code,
+                         for_display = 0, pyrex = 0,
                          with_calling_convention = 1):
         arg_decl_list = []
         for arg in self.args[:len(self.args)-self.optional_arg_count]:
@@ -3134,9 +3134,13 @@ class CFuncType(CType):
                 cc = ""
         if self.is_const_method:
             trailer += " const"
-        return self.return_type.declaration_code(
-            "%s%s(%s)%s" % (cc, entity_code, arg_decl_code, trailer),
-            for_display, dll_linkage, pyrex)
+        return "%s%s(%s)%s" % (cc, entity_code, arg_decl_code, trailer)
+
+    def declaration_code(self, entity_code,
+                         for_display = 0, dll_linkage = None, pyrex = 0,
+                         with_calling_convention = 1):
+        declarator_code = self.declarator_code(entity_code, for_display, pyrex, with_calling_convention)
+        return self.return_type.declaration_code(declarator_code, for_display, dll_linkage, pyrex)
 
     def function_header_code(self, func_name, arg_code):
         if self.is_const_method:

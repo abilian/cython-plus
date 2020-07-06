@@ -186,7 +186,7 @@
         }
         PyObject * ob = reinterpret_cast<PyObject *>(static_cast<CyPyObject *>(cy));
         // artificial atomic increment the first time Python gets a reference
-        if (ob->ob_refcnt == 0)
+        if (Py_REFCNT(ob) == 0)
             cy->CyObject_INCREF();
         // return a new Python reference
         Py_INCREF(ob);
@@ -208,8 +208,8 @@
     template <typename U>
     static inline U* __Pyx_PyObject_AsCyObject(PyObject * ob, PyTypeObject * type) {
         // the PyObject is not of the expected type
-        if ( !PyType_IsSubtype(ob->ob_type, type) ) {
-            PyErr_Format(PyExc_TypeError, "Cannot convert PyObject %s to CyObject %s", ob->ob_type->tp_name, type->tp_name);
+        if ( !PyType_IsSubtype(Py_TYPE(ob), type) ) {
+            PyErr_Format(PyExc_TypeError, "Cannot convert PyObject %s to CyObject %s", Py_TYPE(ob)->tp_name, type->tp_name);
             return NULL;
         }
 

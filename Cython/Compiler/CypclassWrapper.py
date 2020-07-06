@@ -991,6 +991,6 @@ def generate_cypclass_wrapper_allocation(code, wrapper_type):
     objstruct_cname = wrapper_type.objstruct_cname
     code.putln("if (self) {")
     code.putln("%s * wrapper = (%s *) self;" % (objstruct_cname, objstruct_cname))
-    code.putln("((PyObject *)wrapper)->ob_refcnt = 0;")
-    code.putln("((PyObject *)wrapper)->ob_type = %s;" % wrapper_type.typeptr_cname)
+    code.putln("Py_REFCNT(wrapper) = 0;")
+    code.putln("Py_TYPE(wrapper) = %s;" % wrapper_type.typeptr_cname)
     code.putln("}")

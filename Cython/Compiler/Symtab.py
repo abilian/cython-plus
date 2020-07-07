@@ -554,20 +554,29 @@ class Scope(object):
                                 cpp_override_allowed = True
                                 continue
 
-                            # in a cypclass, if the arguments are compatible
-                            # then the whole signature must be identical (return type excluded)
-                            old_declarator = alt_entry.type.declarator_code(name, for_display = 1).strip()
-                            new_declarator = type.declarator_code(name, for_display = 1).strip()
-                            if not new_declarator == old_declarator:
-                                comparison_message = " ---> %s\nvs -> %s" % (new_declarator, old_declarator)
-                                error(pos, "Cypclass method with compatible arguments but incompatible signature:\n%s"
-                                           % comparison_message)
-                                if alt_entry.pos is not None:
-                                        error(alt_entry.pos, "Conflicting method is defined here")
-
                         # Any inherited method is visible
                         # until overloaded by a method with the same signature
                         if alt_entry.is_inherited:
+
+                            if self.is_cyp_class_scope:
+
+                                # in a cypclass, if the arguments are compatible, then the new method must actually
+                                # override the inherited method: the whole signature must be identical
+                                old_declarator = alt_entry.type.declarator_code(name, for_display = 1).strip()
+                                new_declarator = type.declarator_code(name, for_display = 1).strip()
+                                if not new_declarator == old_declarator:
+                                    comparison_message = " ---> %s\nvs -> %s" % (new_declarator, old_declarator)
+                                    error(pos, "Cypclass method with compatible arguments but incompatible signature:\n%s"
+                                            % comparison_message)
+                                    if alt_entry.pos is not None:
+                                            error(alt_entry.pos, "Conflicting method is defined here")
+
+                                # also, the return type must be covariant
+                                elif not type.return_type.subtype_of_resolved_type(alt_entry.type.return_type):
+                                    error(pos, "Cypclass method overrides another with incompatible return type")
+                                    if alt_entry.pos is not None:
+                                            error(alt_entry.pos, "Conflicting method is defined here")
+
                             previous_alternative_indices.append(index)
                             cpp_override_allowed = True
                             continue

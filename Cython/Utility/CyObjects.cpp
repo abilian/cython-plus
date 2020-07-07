@@ -169,6 +169,17 @@
     }
 
     /*
+     * Check whether a CyObject is an instance of a given type.
+     * 
+     * template:
+     *  - T: the type
+     */
+    template <typename T>
+    static inline int isinstanceof(CyObject * ob) {
+        return dynamic_cast<T *>(ob) != NULL;
+    }
+
+    /*
      * Cast from CyObject to PyObject:
      *  - borrow an atomic reference
      *  - return a new Python reference

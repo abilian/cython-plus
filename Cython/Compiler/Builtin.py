@@ -673,6 +673,19 @@ def inject_cypclass_lock_macros():
     for macro in ("Cy_TRYRLOCK", "Cy_TRYWLOCK"):
         builtin_scope.declare_builtin_cfunction(macro, nonblocking_macro_type, macro)
 
+def inject_cypclass_typecheck_functions():
+    template_placeholder_type = PyrexTypes.TemplatePlaceholderType("T")
+    isinstanceof_type = PyrexTypes.CFuncType(
+        PyrexTypes.c_int_type,
+        [
+            PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None),
+            PyrexTypes.CFuncTypeArg("type", template_placeholder_type, None)
+        ],
+        nogil = 1,
+        templates = [template_placeholder_type]
+    )
+    builtin_scope.declare_builtin_cfunction("isinstanceof", isinstanceof_type, "isinstanceof")
+
 def init_builtins():
     init_builtin_structs()
     init_builtin_types()
@@ -702,6 +715,7 @@ def init_builtins():
     complex_type  = builtin_scope.lookup('complex').type
     inject_cypclass_refcount_macros()
     inject_cypclass_lock_macros()
+    inject_cypclass_typecheck_functions()
     inject_acthon_interfaces(builtin_scope)
     inject_cy_object(builtin_scope)
 

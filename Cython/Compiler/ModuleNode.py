@@ -1168,6 +1168,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             if e.is_cfunction
             and e.from_type
             and e.mro_index > 0
+            and e.from_type.is_cyp_class     # avoid dealing with methods inherited from non-cypclass bases for now
             and not e.type.is_static_method  # avoid dealing with static methods for now
             and e.name not in ("<init>", "<del>")
             and not e.type.has_varargs  # avoid dealing with varargs for now (is this ever required anyway ?)
@@ -1178,8 +1179,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         for e in inherited_methods:
             modifiers = code.build_function_modifiers(e.func_modifiers)
 
-            arg_decls = [arg.declaration_code() for arg in e.type.args]
-            arg_names = [arg.cname for arg in e.type.args]
+            arg_names = ["%s_%d" % (arg.cname, i) for i, arg in enumerate(e.type.args)]
+            arg_decls = [arg.type.declaration_code(arg_name) for arg, arg_name in zip(e.type.args, arg_names)]
             if e.type.optional_arg_count:
                 opt_name = Naming.optional_args_cname
                 arg_decls.append(e.type.op_arg_struct.declaration_code(opt_name))

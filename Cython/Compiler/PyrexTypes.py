@@ -4207,7 +4207,6 @@ def mro_C3_merge(sequences):
 #   - if a class has bases, they are held in 'base_classes' attribute
 #
 def compute_mro_generic(cls):
-    print("GENERIC C3 !!")
     if not hasattr(cls, "base_classes") or cls.base_classes is None:
         return [cls]
     inputs = [[cls]]

@@ -1167,6 +1167,11 @@ class ExprNode(Node):
         elif type.is_pyobject or type.is_int or type.is_ptr or type.is_float:
             return CoerceToBooleanNode(self, env)
         elif type.is_cpp_class:
+            if type.is_cyp_class:
+                has_bool_operator = type.scope.lookup_here("operator bool")
+                # let cypclass truth-testing fall back on the value of the pointer
+                if not has_bool_operator:
+                    return CoerceToBooleanNode(self, env)
             return SimpleCallNode(
                 self.pos,
                 function=AttributeNode(

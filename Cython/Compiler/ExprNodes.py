@@ -10551,6 +10551,12 @@ class UnopNode(ExprNode):
             return
         self.type = cpp_type
 
+    def calculate_operation_result_code(self, operator):
+        op = self.operand.result()
+        if self.operand.type.is_cyp_class:
+            op = "(*%s)" % op
+        return "(%s%s)" % (operator, op)
+
 
 class NotNode(UnopNode):
     #  'not' operator
@@ -10600,7 +10606,7 @@ class UnaryPlusNode(UnopNode):
 
     def calculate_result_code(self):
         if self.is_cpp_operation():
-            return "(+%s)" % self.operand.result()
+            return self.calculate_operation_result_code(self.operator)
         else:
             return self.operand.result()
 
@@ -10626,7 +10632,7 @@ class UnaryMinusNode(UnopNode):
 
     def calculate_result_code(self):
         if self.infix:
-            return "(-%s)" % self.operand.result()
+            return self.calculate_operation_result_code(self.operator)
         else:
             return "%s(%s)" % (self.operand.type.unary_op('-'), self.operand.result())
 
@@ -10651,7 +10657,7 @@ class TildeNode(UnopNode):
         return "PyNumber_Invert"
 
     def calculate_result_code(self):
-        return "(~%s)" % self.operand.result()
+        return self.calculate_operation_result_code('~')
 
 
 class CUnopNode(UnopNode):
@@ -10718,6 +10724,8 @@ class AmpersandNode(CUnopNode):
         self.operand = self.operand.analyse_types(env)
         argtype = self.operand.type
         if argtype.is_cpp_class:
+            if argtype.is_cyp_class:
+                self.error("Cannot take address of cypclass")
             self.analyse_cpp_operation(env, overload_check=False)
         if not (argtype.is_cfunction or argtype.is_reference or self.operand.is_addressable()):
             if argtype.is_memoryviewslice:

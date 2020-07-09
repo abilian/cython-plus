@@ -4755,7 +4755,19 @@ def is_promotion(src_type, dst_type):
             return src_type.is_float and src_type.rank <= dst_type.rank
     return False
 
-def best_match(arg_types, functions, pos=None, env=None, args=None):
+class CallException(Exception):
+    pass
+
+class NoCandidateCallException(CallException):
+    pass
+
+class AmbiguousCallException(CallException):
+    pass
+
+class NoTypeMatchCallException(CallException):
+    pass
+
+def best_match(arg_types, functions, pos=None, env=None, args=None, throw=False):
     """
     Given a list args of arguments and a list of functions, choose one
     to call which seems to be the "best" fit for this list of arguments.
@@ -4776,6 +4788,12 @@ def best_match(arg_types, functions, pos=None, env=None, args=None):
     If no function is deemed a good fit, or if two or more functions have
     the same weight, we return None (as there is no best match). If pos
     is not None, we also generate an error.
+
+    If throw is True, an exception is raised instead of returning None:
+      * NoCandidateCallException:   when no candidate is found
+      * AmbiguousCallException:     when the call is ambiguous
+      * NoTypeMatchCallException:   when no candidate matches
+    This allows the caller to determine why no best match was found.
     """
     # TODO: args should be a list of types, not a list of Nodes.
     actual_nargs = len(arg_types)
@@ -4833,12 +4851,16 @@ def best_match(arg_types, functions, pos=None, env=None, args=None):
     if len(candidates) == 1:
         return candidates[0][0]
     elif len(candidates) == 0:
-        if pos is not None:
+        if pos is not None or throw:
             func, errmsg = errors[0]
             if len(errors) == 1 or [1 for func, e in errors if e == errmsg]:
-                error(pos, errmsg)
+                pass
             else:
-                error(pos, "no suitable method found")
+                errmsg = "no suitable method found"
+        if pos is not None:
+            error(pos, errmsg)
+        if throw:
+            raise NoCandidateCallException(errmsg)
         return None
 
     possibilities = []
@@ -4908,8 +4930,11 @@ def best_match(arg_types, functions, pos=None, env=None, args=None):
             score1 = possibilities[0][0]
             score2 = possibilities[1][0]
             if score1 == score2:
+                errmsg = "ambiguous overloaded method"
                 if pos is not None:
-                    error(pos, "ambiguous overloaded method")
+                    error(pos, errmsg)
+                if throw:
+                    raise AmbiguousCallException(errmsg)
                 return None
 
         function = possibilities[0][-1]
@@ -4920,12 +4945,16 @@ def best_match(arg_types, functions, pos=None, env=None, args=None):
 
         return function
 
-    if pos is not None:
-        if len(bad_types) == 1:
-            error(pos, bad_types[0][1])
-        else:
-            error(pos, "no suitable method found")
+    if len(bad_types) == 1:
+        errmsg = bad_types[0][1]
+    else:
+        errmsg = "no suitable method found"
 
+    if pos is not None:
+        error(pos, errmsg)
+
+    if throw:
+        raise NoTypeMatchCallException(errmsg)
     return None
 
 def merge_template_deductions(a, b):

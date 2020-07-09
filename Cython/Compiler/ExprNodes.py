@@ -11522,7 +11522,19 @@ class BinopNode(ExprNode):
 
     def analyse_cpp_py_operation(self, env):
         operator = self.operator if not self.inplace else self.operator+"="
-        entry = env.lookup_operator(operator, [self.operand1, self.operand2])
+        entry = None
+        try:
+            entry = env.lookup_operator(operator, [self.operand1, self.operand2], throw=True)
+        except (PyrexTypes.AmbiguousCallException, PyrexTypes.NoTypeMatchCallException):
+            error(self.pos, ("Ambiguous operation with PyObject operand\n"
+                             "To select one of the alternatives, explicitly cast the PyObject operand\n"
+                             "To let Python handle the operation instead, cast the other operand to 'object'"
+                             "\n"))
+            self.type = PyrexTypes.error_type
+            return
+        except PyrexTypes.CallException:
+            pass
+
         if entry:
             self.analyse_cpp_operation(env)
         else:

@@ -1205,13 +1205,13 @@ class Scope(object):
                 return entry.type.specialize(self.fused_to_specific)
             return entry.type
 
-    def lookup_operator(self, operator, operands):
+    def lookup_operator(self, operator, operands, throw=False):
         if operands[0].type.is_cpp_class:
             obj_type = operands[0].type
             method = obj_type.scope.lookup("operator%s" % operator)
             if method is not None:
                 arg_types = [arg.type for arg in operands[1:]]
-                res = PyrexTypes.best_match(arg_types, method.all_alternatives())
+                res = PyrexTypes.best_match(arg_types, method.all_alternatives(), throw=throw)
                 if res is not None:
                     return res
         function = self.lookup("operator%s" % operator)
@@ -1236,7 +1236,7 @@ class Scope(object):
         all_alternatives = list(set(method_alternatives + function_alternatives))
 
         return PyrexTypes.best_match([arg.type for arg in operands],
-                                     all_alternatives)
+                                     all_alternatives, throw=throw)
 
     def lookup_operator_for_types(self, pos, operator, types):
         from .Nodes import Node

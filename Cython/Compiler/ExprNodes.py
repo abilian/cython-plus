@@ -10587,7 +10587,7 @@ class NotNode(UnopNode):
     def analyse_types(self, env):
         self.operand = self.operand.analyse_types(env)
         operand_type = self.operand.type
-        if operand_type.is_cpp_class:
+        if operand_type.is_cpp_class and not operand_type.is_cyp_class:
             self.analyse_cpp_operation(env)
         else:
             self.operand = self.operand.coerce_to_boolean(env)

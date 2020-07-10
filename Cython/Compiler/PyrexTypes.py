@@ -2958,23 +2958,26 @@ class CFuncType(CType):
             return 0
         return 1
 
-    def convertible_arguments_with(self, other_type):
-        return self.convertible_arguments_with_resolved_type(other_type.resolve())
+    def convertible_arguments_to(self, other_type):
+        return self.convertible_arguments_to_resolved_type(other_type.resolve())
 
-    def convertible_arguments_with_resolved_type(self, other_type):
+    def convertible_arguments_to_resolved_type(self, other_type):
         if other_type is error_type:
             return 1
         if not other_type.is_cfunction:
             return 0
-        if len(self.args) - self.optional_arg_count != len(other_type.args) - other_type.optional_arg_count:
-            return 0
         if self.has_varargs != other_type.has_varargs:
             return 0
-        arg_type_pairs = ((arg.type, other_arg.type) for arg, other_arg in zip(self.args, other_type.args))
-        if (all((arg.assignable_from(other) for arg, other in arg_type_pairs))
-            or
-            all((other.assignable_from(arg) for arg, other in arg_type_pairs))):
-                return 1
+        self_minargs = len(self.args) - self.optional_arg_count
+        if self_minargs > len(other_type.args):
+            return 0
+        other_minargs = len(other_type.args) - other_type.optional_arg_count
+        if other_minargs > len(self.args):
+            return 0
+        minargs = max(self_minargs, other_minargs)
+        arg_type_pairs = ((arg.type, o_arg.type) for arg, o_arg in zip(self.args[:minargs], other_type.args))
+        if all( (o_arg.assignable_from(arg) for arg, o_arg in arg_type_pairs) ):
+            return 1
         return 0
 
     def compatible_arguments_with(self, other_type, as_cmethod=0):

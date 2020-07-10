@@ -172,6 +172,10 @@ class Entry(object):
     #
     # mro_index        integer    The index of the type where this entry was originally
     #                             declared in the mro of the cypclass where it is now
+    #
+    # defining_classes   [CypClassType or CppClassType or CStructOrUnionType]
+    #                             All the base classes that define an entry that this entry
+    #                             overrides, if this entry represents a cypclass method
 
     # TODO: utility_code and utility_code_definition serves the same purpose...
 
@@ -248,6 +252,8 @@ class Entry(object):
     needs_rlock = False
     needs_wlock = False
     is_default = False
+    mro_index = 0
+    from_type = None
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name
@@ -260,8 +266,7 @@ class Entry(object):
         self.cf_references = []
         self.inner_entries = []
         self.defining_entry = self
-        self.mro_index = 0
-        self.from_type = None
+        self.defining_classes = []
 
     def __repr__(self):
         return "%s(<%x>, name=%s, type=%s)" % (type(self).__name__, id(self), self.name, self.type)
@@ -526,6 +531,9 @@ class Scope(object):
 
         entries = self.entries
 
+        if from_type is None and self.is_cyp_class_scope:
+            from_type = self.parent_type
+
         # The indices of all previous overloaded alternatives that this declaration will hide.
         previous_alternative_indices = []
 
@@ -541,7 +549,7 @@ class Scope(object):
                     for index, alt_entry in enumerate(old_entry.all_alternatives()):
                         alt_type = alt_entry.type
 
-                        if type.convertible_arguments_with(alt_type):
+                        if type.compatible_arguments_with(alt_type):
                             cpp_override_allowed = False
 
                             # allow default constructor or __alloc__ to be redeclared by user
@@ -550,26 +558,27 @@ class Scope(object):
                                 cpp_override_allowed = True
                                 continue
 
-                            # enforce cypclass overloading rules
-                            alt_declarator_str = alt_type.declarator_code(name, for_display = 1).strip()
-                            new_declarator_str = type.declarator_code(name, for_display = 1).strip()
-                            if new_declarator_str != alt_declarator_str:
-                                error(pos, ("Cypclass methods have conflicting signatures:\n"
-                                            "Cypclass method\n"
-                                            ">>     %s\n"
-                                            "has implicitly convertible arguments from or to:\n"
-                                            ">>     %s\n"
-                                            "but their signatures are not exactly the same"
-                                            % (type.declaration_code(name, for_display = 1).strip(),
-                                               alt_type.declaration_code(name, for_display = 1).strip()))
-                                )
-                                if alt_entry.pos is not None:
-                                        error(alt_entry.pos, "Conflicting method is defined here")
-
                             elif alt_entry.is_inherited:
 
+                                # if the arguments are compatible, then the signatures need to actually be the
+                                # same so that this method actually overrides the other in the virtual table
+                                alt_declarator_str = alt_type.declarator_code(name, for_display = 1).strip()
+                                new_declarator_str = type.declarator_code(name, for_display = 1).strip()
+                                if new_declarator_str != alt_declarator_str:
+                                    error(pos, ("Fallacious override:\n"
+                                                "Cypclass method\n"
+                                                ">>     %s\n"
+                                                "has compatible arguments with inherited method\n"
+                                                ">>     %s\n"
+                                                "but their signatures are not exactly the same\n"
+                                                % (type.declaration_code(name, for_display = 1).strip(),
+                                                alt_type.declaration_code(name, for_display = 1).strip()))
+                                    )
+                                    if alt_entry.pos is not None:
+                                            error(alt_entry.pos, "Conflicting method is defined here")
+
                                 # the return type must be covariant
-                                if not type.return_type.subtype_of_resolved_type(alt_type.return_type):
+                                elif not type.return_type.subtype_of_resolved_type(alt_type.return_type):
                                     error(pos, "Cypclass method overrides another with incompatible return type")
                                     if alt_entry.pos is not None:
                                             error(alt_entry.pos, "Conflicting method is defined here")
@@ -580,6 +589,13 @@ class Scope(object):
 
                             # stop if cpp_override_allowed is False for the current alternative
                             break
+
+                        # if an overloaded alternative has narrower argument types than another, then the method
+                        # actually called will depend on the static type of the arguments
+                        elif type.narrower_arguments_than(alt_type) or alt_type.narrower_arguments_than(type):
+                            error(pos, "Cypclass overloaded method with narrower arguments")
+                            if alt_entry.pos is not None:
+                                error(alt_entry.pos, "Conflicting method is defined here")
 
                 # normal cpp case
                 else:
@@ -622,6 +638,7 @@ class Scope(object):
         if from_type and self.is_cyp_class_scope:
             entry.mro_index = self.parent_type.mro().index(from_type)
             entry.from_type = from_type
+            entry.defining_classes.append(from_type)
         entry.in_cinclude = self.in_cinclude
         entry.create_wrapper = create_wrapper
 
@@ -634,25 +651,26 @@ class Scope(object):
                     # give all alternative entries access to all overloaded alternatives
                     entry.overloaded_alternatives = entries[name].overloaded_alternatives
 
-                    # sort the indices in decreasing order
-                    previous_alternative_indices.reverse()
-
-                    # remplace the first hidden entry with the new entry
+                    # remplace the overriden entry with the new entry
                     if previous_alternative_indices:
-                        first_index = previous_alternative_indices.pop()
-                        entries[name].overloaded_alternatives[first_index] = entry
+                        # there should never be more than one entry that this entry can override
+                        assert(len(previous_alternative_indices) == 1)
+
+                        index = previous_alternative_indices[0]
+                        if self.is_cyp_class_scope:
+                            # remember all the bases from which this entry was overridden
+                            overridden_entry = entries[name].overloaded_alternatives[index]
+                            entry.defining_classes = overridden_entry.defining_classes
+                            entry.defining_classes.append(from_type)
+                        entries[name].overloaded_alternatives[index] = entry
 
                         # the overloaded entry at index 0 is always the one in the scope dict
-                        if first_index == 0:
+                        if index == 0:
                             entries[name] = entry
 
                     # if no entries are hidden by the new entry, just add it to the alternatives
                     else:
                         entries[name].overloaded_alternatives.append(entry)
-
-                    # outright remove the entries for the remaining indices (in decreasing order)
-                    for index in previous_alternative_indices:
-                        del entries[name].overloaded_alternatives[index]
 
                 else:
                     # this is the first entry with this name

@@ -1584,6 +1584,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
             if not cyobject_base:
                 base_class_types.append(cy_object_type)
 
+        # declare this class
         self.entry = env.declare_cpp_class(
             self.name, scope, self.pos,
             self.cname, base_class_types, visibility=self.visibility, templates=template_types,
@@ -1593,6 +1594,8 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         self.entry.is_cpp_class = 1
         if scope is not None:
             scope.type = self.entry.type
+
+        # analyse the sub-declarations
         defined_funcs = []
         def func_attributes(attributes):
             for attr in attributes:
@@ -1616,6 +1619,40 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                 if self.templates is not None:
                     func.template_declaration = "template <typename %s>" % ", typename ".join(template_names)
         self.body = StatListNode(self.pos, stats=defined_funcs)
+
+        # check for illegal implicit conversion paths between method arguments
+        if self.cypclass and scope is not None:
+            for method_entry in scope.entries.values():
+                if method_entry.is_cfunction:
+                    from_type = method_entry.from_type
+                    for alt_entry in method_entry.all_alternatives():
+                        alt_type = alt_entry.type
+                        for other_entry in method_entry.all_alternatives():
+                            if alt_entry is other_entry:
+                                continue
+                            other_type = other_entry.type
+                            # if there is a conversion path from one method to another
+                            # the set of classes that define the first must be a superset
+                            # of the set of base classes that define the second method
+                            if alt_type.convertible_arguments_to(other_type):
+                                # since the classes are MRO-ordered, a subset is actually the same as a subsequence
+                                def is_subsequence(s, seq):
+                                    return all(e in iter(seq) for e in s)
+                                if not is_subsequence(other_entry.defining_classes, alt_entry.defining_classes):
+                                    error(
+                                        alt_entry.pos, (
+                                            "Illegal implicit conversion path between cypclass methods:\n"
+                                            "Cypclass method\n"
+                                            ">>     %s\n"
+                                            "has argument types implicitely convertible to method\n"
+                                            ">>     %s\n"
+                                            "but some superclasses of '%s' only declare the second method\n"
+                                            % (alt_type.declaration_code(alt_entry.name, for_display = 1).strip(),
+                                            other_type.declaration_code(alt_entry.name, for_display = 1).strip(),
+                                            self.name)
+                                        )
+                                    )
+
 
         # analyse the subclasses that were waiting for this class (their base) to be analysed
         for thunk in self.entry.type.deferred_declarations:

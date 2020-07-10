@@ -526,7 +526,7 @@ class Scope(object):
 
         entries = self.entries
 
-        # The indices of an overridable overloaded alternatives that this declaration will hide.
+        # The indices of all previous overloaded alternatives that this declaration will hide.
         previous_alternative_indices = []
 
         if name and name in entries and not shadow:
@@ -535,58 +535,66 @@ class Scope(object):
             cpp_override_allowed = False
             if type.is_cfunction and old_entry.type.is_cfunction and self.is_cpp():
                 cpp_override_allowed = True
-                for index, alt_entry in enumerate(old_entry.all_alternatives()):
-                    # in a cypclass, a method can hide a method inherited from a different class
-                    # based only on their argument types
-                    if self.is_cyp_class_scope:
-                        might_redeclare_or_override = type.compatible_arguments_with
-                    else:
-                        might_redeclare_or_override = type.compatible_signature_with
 
-                    if might_redeclare_or_override(alt_entry.type):
+                if self.is_cyp_class_scope:
 
-                        cpp_override_allowed = False
+                    for index, alt_entry in enumerate(old_entry.all_alternatives()):
+                        alt_type = alt_entry.type
 
-                        if self.is_cyp_class_scope:
+                        if type.convertible_arguments_with(alt_type):
+                            cpp_override_allowed = False
+
                             # allow default constructor or __alloc__ to be redeclared by user
                             if alt_entry.is_default:
                                 previous_alternative_indices.append(index)
                                 cpp_override_allowed = True
                                 continue
 
-                        # Any inherited method is visible
-                        # until overloaded by a method with the same signature
-                        if alt_entry.is_inherited:
+                            # enforce cypclass overloading rules
+                            alt_declarator_str = alt_type.declarator_code(name, for_display = 1).strip()
+                            new_declarator_str = type.declarator_code(name, for_display = 1).strip()
+                            if new_declarator_str != alt_declarator_str:
+                                error(pos, ("Cypclass methods have conflicting signatures:\n"
+                                            "Cypclass method\n"
+                                            ">>     %s\n"
+                                            "has implicitly convertible arguments from or to:\n"
+                                            ">>     %s\n"
+                                            "but their signatures are not exactly the same"
+                                            % (type.declaration_code(name, for_display = 1).strip(),
+                                               alt_type.declaration_code(name, for_display = 1).strip()))
+                                )
+                                if alt_entry.pos is not None:
+                                        error(alt_entry.pos, "Conflicting method is defined here")
 
-                            if self.is_cyp_class_scope:
+                            elif alt_entry.is_inherited:
 
-                                # in a cypclass, if the arguments are compatible, then the new method must actually
-                                # override the inherited method: the whole signature must be identical
-                                old_declarator = alt_entry.type.declarator_code(name, for_display = 1).strip()
-                                new_declarator = type.declarator_code(name, for_display = 1).strip()
-                                if not new_declarator == old_declarator:
-                                    comparison_message = " ---> %s\nvs -> %s" % (new_declarator, old_declarator)
-                                    error(pos, "Cypclass method with compatible arguments but incompatible signature:\n%s"
-                                            % comparison_message)
-                                    if alt_entry.pos is not None:
-                                            error(alt_entry.pos, "Conflicting method is defined here")
-
-                                # also, the return type must be covariant
-                                elif not type.return_type.subtype_of_resolved_type(alt_entry.type.return_type):
+                                # the return type must be covariant
+                                if not type.return_type.subtype_of_resolved_type(alt_type.return_type):
                                     error(pos, "Cypclass method overrides another with incompatible return type")
                                     if alt_entry.pos is not None:
                                             error(alt_entry.pos, "Conflicting method is defined here")
 
-                            previous_alternative_indices.append(index)
-                            cpp_override_allowed = True
-                            continue
+                                previous_alternative_indices.append(index)
+                                cpp_override_allowed = True
+                                continue
 
-                    elif self.is_cyp_class_scope:
-                        if (type.narrower_arguments_than(alt_entry.type)
-                            or alt_entry.type.narrower_arguments_than(type)):
-                            error(pos, "Cypclass overloaded method with narrower arguments")
-                            if alt_entry.pos is not None:
-                                error(alt_entry.pos, "Conflicting method is defined here")
+                            # stop if cpp_override_allowed is False for the current alternative
+                            break
+
+                # normal cpp case
+                else:
+                    for index, alt_entry in enumerate(old_entry.all_alternatives()):
+                        if type.compatible_signature_with(alt_entry.type):
+
+                            cpp_override_allowed = False
+
+                            if alt_entry.is_inherited:
+                                previous_alternative_indices.append(index)
+                                cpp_override_allowed = True
+                                continue
+
+                            # stop if cpp_override_allowed is False for the current alternative
+                            break
 
             if cpp_override_allowed:
                 # C++ function/method overrides with different signatures are ok.

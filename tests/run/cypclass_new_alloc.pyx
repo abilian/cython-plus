@@ -29,13 +29,13 @@ def test_singleton():
 cdef cypclass Base:
     double value
 
-    __init__(self, int a):
-        self.value = (<double> a)*1.2
+    __init__(self, int a, double b):
+        self.value = (<double> a)*b
 
     __init__(self, double b):
         self.value = b
 
-    Base __new__(alloc, int a):
+    Base __new__(alloc, int a, double b):
         return alloc()
 
 cdef cypclass Derived(Base):
@@ -48,7 +48,7 @@ def test_changing_init_choice():
     6.0
     5.0
     """
-    cdef Base base = Base(5)
+    cdef Base base = Base(5, 1.2)
     cdef Derived derived = Derived(5)
     print base.value
     print derived.value

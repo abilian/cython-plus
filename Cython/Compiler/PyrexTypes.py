@@ -2997,7 +2997,7 @@ class CFuncType(CType):
             return 0
         if not self.is_overridable and other_type.is_overridable:
             return 0
-        if not skip_args and not self.compatible_arguments_with_resolved_type(other_type, as_cmethod):
+        if not skip_args and not self.__compatible_arguments_with_resolved_type(other_type, as_cmethod):
             return 0
         if not self.return_type.subtype_of_resolved_type(other_type.return_type):
             return 0

@@ -5807,6 +5807,7 @@ class SimpleCallNode(CallNode):
     #  rlocked        bool                 used internally
     #  wlocked        bool                 used internally
     #  tracked_state  bool                 used internally
+    #  needs_deref    bool                 used internally
 
     subexprs = ['self', 'coerced_self', 'function', 'args', 'arg_tuple']
 
@@ -5822,6 +5823,7 @@ class SimpleCallNode(CallNode):
     rlocked = False
     wlocked = False
     tracked_state = True  # Something random, anything that is not None
+    needs_deref = False
 
     def compile_time_value(self, denv):
         function = self.function.compile_time_value(denv)
@@ -5981,6 +5983,8 @@ class SimpleCallNode(CallNode):
             entry.used = True
             if not func_type.is_cpp_class:
                 self.function.entry = entry
+            elif func_type.is_cyp_class:
+                self.needs_deref = True
             self.function.type = entry.type
             func_type = self.function_type()
         else:
@@ -6242,6 +6246,8 @@ class SimpleCallNode(CallNode):
         # argument. This is the opposite of self.self purpose.
         if self.explicit_cpp_self:
             result = "%s->%s(%s)" % (self.explicit_cpp_self, self.function.result(), ', '.join(arg_list_code))
+        elif self.needs_deref:
+            result = "(*%s)(%s)" % (self.function.result(), ', '.join(arg_list_code))
         else:
             result = "%s(%s)" % (self.function.result(), ', '.join(arg_list_code))
         return result

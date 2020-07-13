@@ -4223,7 +4223,10 @@ class IndexNode(_IndexingBaseNode):
             if (self.type.is_ptr or self.type.is_array) and self.type == self.base.type:
                 error(self.pos, "Invalid use of pointer slice")
                 return
-            index_code = "(%s[%s])"
+            if self.base.type.is_cyp_class:
+                index_code = "((*%s)[%s])"
+            else:
+                index_code = "(%s[%s])"
         return index_code % (self.base.result(), self.index.result())
 
     def extra_index_params(self, code):
@@ -4296,8 +4299,11 @@ class IndexNode(_IndexingBaseNode):
             index_code = self.index.py_result()
 
         if self.base.type.is_cpp_class and self.exception_check:
+            base_result = self.base.result()
+            if self.base.type.is_cyp_class:
+                base_result = "(*%s)" % base_result
             translate_cpp_exception(code, self.pos,
-                "%s = %s[%s];" % (self.result(), self.base.result(),
+                "%s = %s[%s];" % (self.result(), base_result,
                                   self.index.result()),
                 self.result() if self.type.is_pyobject else None,
                 self.exception_value, self.in_nogil_context)

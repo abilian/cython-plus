@@ -2794,7 +2794,8 @@ class CppClassScope(Scope):
         '__gt__': '>',
         '__le__': '<=',
         '__ge__': '>=',
-        '__call__':'()'
+        '__call__':'()',
+        '__getitem__':'[]'
     }
 
     def __init__(self, name, outer_scope, templates=None):

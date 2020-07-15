@@ -4018,6 +4018,9 @@ class CppClassType(CType):
             base_code = "%s%s" % (self.cname, templates)
             if self.namespace is not None:
                 base_code = "%s::%s" % (self.namespace.empty_declaration_code(), base_code)
+                if (self.namespace.templates is not None
+                    and any(isinstance(t, TemplatePlaceholderType) for t in self.namespace.templates)):
+                        base_code = "typename %s" % base_code
             base_code = public_decl(base_code, dll_linkage)
         return self.base_declaration_code(base_code, entity_code)
 

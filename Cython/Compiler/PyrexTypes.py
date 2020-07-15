@@ -4863,9 +4863,16 @@ def best_match(arg_types, functions, pos=None, env=None, args=None, throw=False)
             else:
                 type_list = [deductions[param] for param in func_type.templates]
                 from .Symtab import Entry
+                template_cstrings = [
+                        "%s%s" % (
+                            t.empty_declaration_code(),
+                            "*" if t.is_cyp_class else ""
+                        )
+                        for t in type_list
+                    ]
                 specialization = Entry(
                     name = func.name + "[%s]" % ",".join([str(t) for t in type_list]),
-                    cname = func.cname + "<%s>" % ",".join([t.empty_declaration_code() for t in type_list]),
+                    cname = func.cname + "<%s>" % ",".join(template_cstrings),
                     type = func_type.specialize(deductions),
                     pos = func.pos)
                 candidates.append((specialization, specialization.type))

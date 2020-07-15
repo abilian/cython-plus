@@ -4241,9 +4241,16 @@ class IndexNode(_IndexingBaseNode):
             else:
                 assert False, "unexpected base type in indexing: %s" % self.base.type
         elif self.base.type.is_cfunction:
+            template_strings = [
+                "%s%s" % (
+                    param.empty_declaration_code(),
+                    "*" if param.is_cyp_class else ""
+                )
+                for param in self.type_indices
+            ]
             return "%s<%s>" % (
                 self.base.result(),
-                ",".join([param.empty_declaration_code() for param in self.type_indices]))
+                ",".join(template_strings))
         elif self.base.type.is_ctuple:
             index = self.index.constant_result
             if index < 0:

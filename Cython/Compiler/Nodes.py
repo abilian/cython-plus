@@ -1620,26 +1620,6 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                     func.template_declaration = "template <typename %s>" % ", typename ".join(template_names)
         self.body = StatListNode(self.pos, stats=defined_funcs)
 
-        # check that all overloaded alternatives for cypclass methods come from the same cypclass
-        if self.cypclass and scope is not None:
-            for method_entry in scope.entries.values():
-                if (method_entry.is_cfunction
-                        and not method_entry.type.is_static_method
-                        and method_entry.name not in ("<init>", "<alloc>", "<constructor>", "<del>")):
-                    from_type = method_entry.from_type
-                    for alternative in method_entry.all_alternatives():
-                        if alternative.from_type is not from_type:
-                            error(self.pos,
-                                (
-                                    "Cypclass %s's method %s comes from %s but method %s comes from %s\n"
-                                    "Cypclass %s must either inherit all overload alternatives for %s from"
-                                    "the same base class or override all inherited alternatives itself"
-                                )
-                                % (self.name, str(method_entry.type), from_type.name, str(alternative.type),
-                                   alternative.from_type.name, self.name, method_entry.name)
-                            )
-
-
         # check for illegal implicit conversion paths between method arguments
         if self.cypclass and scope is not None:
             for method_entry in scope.entries.values():

@@ -40,22 +40,22 @@ class CypclassWrapperInjection(Visitor.CythonTransform):
     unlocked_property = TreeFragment.TreeFragment(u"""
 property NAME:
     def __get__(self):
-        OBJ = <TYPE> <CyObject> self
+        OBJ = <TYPE> self
         return OBJ.ATTR
     def __set__(self, value):
-        OBJ = <TYPE> <CyObject> self
+        OBJ = <TYPE> self
         OBJ.ATTR = value
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     locked_property = TreeFragment.TreeFragment(u"""
 property NAME:
     def __get__(self):
-        OBJ = <TYPE> <CyObject> self
+        OBJ = <TYPE> self
         with rlocked OBJ:
             value = OBJ.ATTR
         return value
     def __set__(self, value):
-        OBJ = <TYPE> <CyObject> self
+        OBJ = <TYPE> self
         with wlocked OBJ:
             OBJ.ATTR = value
     """, level='c_class', pipeline=[NormalizeTree(None)])
@@ -63,40 +63,40 @@ property NAME:
     # method wrapper templates
     unlocked_method = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
-    OBJ = <TYPE> <CyObject> self
+    OBJ = <TYPE> self
     return OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     unlocked_method_no_return = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
-    OBJ = <TYPE> <CyObject> self
+    OBJ = <TYPE> self
     OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     rlocked_method = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
-    OBJ = <TYPE> <CyObject> self
+    OBJ = <TYPE> self
     with rlocked OBJ:
         return OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     rlocked_method_no_return = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
-    OBJ = <TYPE> <CyObject> self
+    OBJ = <TYPE> self
     with rlocked OBJ:
         OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     wlocked_method = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
-    OBJ = <TYPE> <CyObject> self
+    OBJ = <TYPE> self
     with wlocked OBJ:
         return OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     wlocked_method_no_return = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
-    OBJ = <TYPE> <CyObject> self
+    OBJ = <TYPE> self
     with wlocked OBJ:
         OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])

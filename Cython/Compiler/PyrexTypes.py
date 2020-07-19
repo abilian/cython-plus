@@ -4302,7 +4302,7 @@ class CypClassType(CppClassType):
     def create_from_py_utility_code(self, env):
         if not self.wrapper_type:
             return False
-        underlying_type_name = self.cname
+        underlying_type_name = self.empty_declaration_code()
         self.from_py_function = "__Pyx_PyObject_AsCyObject<%s>" % underlying_type_name
         return True
 

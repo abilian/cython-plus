@@ -1624,7 +1624,6 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         if self.cypclass and scope is not None:
             for method_entry in scope.entries.values():
                 if method_entry.is_cfunction:
-                    from_type = method_entry.from_type
                     for alt_entry in method_entry.all_alternatives():
                         alt_type = alt_entry.type
                         for other_entry in method_entry.all_alternatives():
@@ -1632,13 +1631,25 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                                 continue
                             other_type = other_entry.type
                             # if there is a conversion path from one method to another
-                            # the set of classes that define the first must be a superset
-                            # of the set of base classes that define the second method
+                            # the set of classes that define or inherit the first must be a superset
+                            # of the set of base classes that define or inherit the second method
                             if alt_type.convertible_arguments_to(other_type):
+                                # since we only have the defining classes, we need to add the inheriting classes
+                                def defining_or_inheriting(defining_classes):
+                                    result = []
+                                    for superclass in self.entry.type.mro():
+                                        for defining_class in defining_classes:
+                                            if defining_class in superclass.mro():
+                                                result.append(superclass)
+                                                break
+                                    return result
                                 # since the classes are MRO-ordered, a subset is actually the same as a subsequence
                                 def is_subsequence(s, seq):
                                     return all(e in iter(seq) for e in s)
-                                if not is_subsequence(other_entry.defining_classes, alt_entry.defining_classes):
+                                if not is_subsequence(
+                                    defining_or_inheriting(other_entry.defining_classes),
+                                    defining_or_inheriting(alt_entry.defining_classes)
+                                ):
                                     error(
                                         alt_entry.pos, (
                                             "Illegal implicit conversion path between cypclass methods:\n"
@@ -1646,7 +1657,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
                                             ">>     %s\n"
                                             "has argument types implicitely convertible to method\n"
                                             ">>     %s\n"
-                                            "but some superclasses of '%s' only declare the second method\n"
+                                            "but some superclasses of '%s' only declare or inherit the second method\n"
                                             % (alt_type.declaration_code(alt_entry.name, for_display = 1).strip(),
                                             other_type.declaration_code(alt_entry.name, for_display = 1).strip(),
                                             self.name)

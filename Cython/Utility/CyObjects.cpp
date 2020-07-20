@@ -123,12 +123,38 @@
       virtual ~ActhonActivableClass();
     };
 
-    static inline int _Cy_DECREF(CyObject *op) {
-        return op->CyObject_DECREF();
+
+    /*
+     * Let Cy_INCREF, Cy_DECREF and Cy_XDECREF accept any argument type
+     * but only do the work when the argument is actually a CyObject
+     */
+    template <typename T, typename std::enable_if<!std::is_convertible<T, CyObject*>::value, int>::type = 0>
+    static inline void Cy_DECREF(T) {}
+
+    template <typename T, typename std::enable_if<!std::is_convertible<T, CyObject*>::value, int>::type = 0>
+    static inline void Cy_XDECREF(T) {}
+
+    template <typename T, typename std::enable_if<!std::is_convertible<T, CyObject*>::value, int>::type = 0>
+    static inline void Cy_INCREF(T) {}
+
+    template <typename T, typename std::enable_if<std::is_convertible<T, CyObject*>::value, int>::type = 0>
+    static inline void Cy_DECREF(T &op) {
+        if(op->CyObject_DECREF())
+            op = NULL;
     }
 
-    static inline void _Cy_INCREF(CyObject *op) {
-        op->CyObject_INCREF();
+    template <typename T, typename std::enable_if<std::is_convertible<T, CyObject*>::value, int>::type = 0>
+    static inline void Cy_XDECREF(T &op) {
+        if (op != NULL) {
+            if(op->CyObject_DECREF())
+            op = NULL;
+        }
+    }
+
+    template <typename T, typename std::enable_if<std::is_convertible<T, CyObject*>::value, int>::type = 0>
+    static inline void Cy_INCREF(T op) {
+        if (op != NULL)
+            op->CyObject_INCREF();
     }
 
     static inline int _Cy_GETREF(CyObject *op) {
@@ -241,12 +267,10 @@
         return underlying;
     }
 
+
     /* Cast argument to CyObject* type. */
     #define _CyObject_CAST(op) op
 
-    #define Cy_INCREF(op) do {if (op != NULL) {_Cy_INCREF(_CyObject_CAST(op));}} while(0)
-    #define Cy_DECREF(op) do {if (_Cy_DECREF(_CyObject_CAST(op))) {op = NULL;}} while(0)
-    #define Cy_XDECREF(op) do {if (op != NULL) {Cy_DECREF(op);}} while(0)
     #define Cy_GETREF(op) (_Cy_GETREF(_CyObject_CAST(op)))
     #define Cy_GOTREF(op)
     #define Cy_XGOTREF(op)

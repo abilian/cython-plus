@@ -25,6 +25,8 @@
     #include <sys/syscall.h>
     #include <vector>
 
+    #include <type_traits>
+
 
     struct ThreadStorage {
         pid_t thread_id;
@@ -174,9 +176,10 @@
      * template:
      *  - T: the type
      */
-    template <typename T>
-    static inline int isinstanceof(CyObject * ob) {
-        return dynamic_cast<T *>(ob) != NULL;
+    template <typename T, typename O>
+    static inline int isinstanceof(O ob) {
+        static_assert(std::is_convertible<T, CyObject *>::value, "wrong type 'T' for isinstanceof[T]");
+        return dynamic_cast<T>(ob) != NULL;
     }
 
     /*

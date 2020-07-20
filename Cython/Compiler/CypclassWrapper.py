@@ -314,7 +314,11 @@ def NAME(self, ARGDECLS):
         alternatives = list(filter(lambda e: e.mro_index == 0, alternatives))
 
         if len(alternatives) > 1:
-            return # for now skip overloaded methods
+            py_args_alternatives = [e for e in alternatives if all(arg.type.is_pyobject for arg in e.type.args)]
+            if len(py_args_alternatives) == 1 and cfunc_method.entry is py_args_alternatives[0]:
+                pass
+            else:
+                return # for now skip overloaded methods
 
         cfunc_declarator = cfunc_method.cfunc_declarator
 

@@ -4470,7 +4470,7 @@ class CTupleType(CType):
 
     is_ctuple = True
 
-    def __init__(self, cname, components):
+    def __init__(self, cname, components, templated_namespace = None):
         self.cname = cname
         self.components = components
         self.size = len(components)
@@ -4479,16 +4479,32 @@ class CTupleType(CType):
         self.exception_check = True
         self._convert_to_py_code = None
         self._convert_from_py_code = None
+        self.templated_namespace = templated_namespace
 
     def __str__(self):
         return "(%s)" % ", ".join(str(c) for c in self.components)
+
+    def specialize(self, values):
+        specialized_components = [c.specialize(values) for c in self.components]
+        if specialized_components != self.components:
+            ttype = CTupleType(self.cname, specialized_components, self.templated_namespace.specialize(values))
+            # specialise the names of the python conversion functions to avoid collisions
+            specialised_suffix = type_list_identifier(specialized_components)
+            ttype.to_py_function = "%s_%s" % (self.to_py_function, specialised_suffix)
+            ttype.from_py_function = "%s_%s" % (self.from_py_function, specialised_suffix)
+            return ttype
+        return super(CTupleType, self).specialize(values)
 
     def declaration_code(self, entity_code,
             for_display = 0, dll_linkage = None, pyrex = 0):
         if pyrex or for_display:
             return str(self)
         else:
-            return self.base_declaration_code(self.cname, entity_code)
+            base_code = self.base_declaration_code(self.cname, entity_code)
+            if self.templated_namespace is not None:
+                return "%s::%s" % (namespace_declaration_code(self.templated_namespace), base_code)
+            else:
+                return base_code
 
     def can_coerce_to_pyobject(self, env):
         for component in self.components:

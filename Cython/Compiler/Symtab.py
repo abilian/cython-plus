@@ -961,8 +961,14 @@ class Scope(object):
         self.sue_entries.append(entry)
         return entry
 
-    def declare_tuple_type(self, pos, components):
-        return self.outer_scope.declare_tuple_type(pos, components)
+    def declare_tuple_type(self, pos, components, templated_namespace = None):
+        # if the ctuple is nested in a templated cpp namespace it might have templated components
+        # in order to support that we'll declare the ctuple in the innermost such namespace
+        if templated_namespace is None and self.is_cpp_class_scope and self.parent_type.templates:
+            # we could declare the ctuple directly in this scope but to avoid redundant code duplication we just
+            # propagate the innermost templated cpp namespace and let the module scope handle the declaration
+            templated_namespace = self
+        return self.outer_scope.declare_tuple_type(pos, components, templated_namespace)
 
     def declare_var(self, name, type, pos,
                     cname = None, visibility = 'private',
@@ -1530,23 +1536,29 @@ class ModuleScope(Scope):
 
         return self.outer_scope.lookup(name, language_level=language_level, str_is_str=str_is_str)
 
-    def declare_tuple_type(self, pos, components):
+    def declare_tuple_type(self, pos, components, templated_namespace = None):
         components = tuple(components)
-        try:
-            ttype = self._cached_tuple_types[components]
-        except KeyError:
-            ttype = self._cached_tuple_types[components] = PyrexTypes.c_tuple_type(components)
+        if templated_namespace is None:
+            try:
+                ttype = self._cached_tuple_types[components]
+            except KeyError:
+                ttype = self._cached_tuple_types[components] = PyrexTypes.c_tuple_type(components)
+            namespace = self # declare the ctuple in the module scope
+        else:
+            namespace = templated_namespace # declare the ctuple in the templated namespace instead
+            ttype = PyrexTypes.c_tuple_type(components)
+            ttype.templated_namespace = templated_namespace.parent_type
         cname = ttype.cname
-        entry = self.lookup_here(cname)
+        entry = namespace.lookup_here(cname)
         if not entry:
             scope = StructOrUnionScope(cname)
             for ix, component in enumerate(components):
                 scope.declare_var(name="f%s" % ix, type=component, pos=pos)
-            struct_entry = self.declare_struct_or_union(
+            struct_entry = namespace.declare_struct_or_union(
                 cname + '_struct', 'struct', scope, typedef_flag=True, pos=pos, cname=cname)
-            self.type_entries.remove(struct_entry)
+            namespace.type_entries.remove(struct_entry)
             ttype.struct_entry = struct_entry
-            entry = self.declare_type(cname, ttype, pos, cname)
+            entry = namespace.declare_type(cname, ttype, pos, cname)
         ttype.entry = entry
         return entry
 

@@ -3030,6 +3030,8 @@ class CppIteratorNode(ExprNode):
 
     def generate_result_code(self, code):
         sequence_type = self.sequence.type
+        if sequence_type.is_cyp_class:
+            self.cpp_attribute_op = "->"
         # essentially 3 options:
         if self.sequence.is_name or self.sequence.is_attribute:
             # 1) is a name and can be accessed directly;

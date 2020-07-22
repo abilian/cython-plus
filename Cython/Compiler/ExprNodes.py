@@ -13239,7 +13239,12 @@ class PrimaryCmpNode(ExprNode, CmpNode):
         type1 = self.operand1.type
         type2 = self.operand2.type
         self.is_pycmp = False
-        entry = env.lookup_operator(self.operator, [self.operand1, self.operand2])
+        if type2.is_cyp_class and self.operator in ("in", "not_in"):
+            # swap operands
+            self.operand1, self.operand2 = self.operand2, self.operand1
+            entry = env.lookup_operator("__contains__", [self.operand1, self.operand2])
+        else:
+            entry = env.lookup_operator(self.operator, [self.operand1, self.operand2])
         if entry is None:
             if self.operator in ("is", "is_not")\
                and (type1.is_ptr or type1.is_cyp_class)\
@@ -13345,7 +13350,12 @@ class PrimaryCmpNode(ExprNode, CmpNode):
                 result1, result2 = operand1.pythran_result(), operand2.pythran_result()
             else:
                 result1, result2 = operand1.result(), operand2.result()
-                if operand1.type.is_cyp_class and self.operator not in ("is", "is_not"):
+                if operand1.type.is_cyp_class and self.operator in ("in", "not_in"):
+                    return "(%s%s->operator__contains__(%s))" % (
+                        "!" if self.operator is "not_in" else "",
+                        result1,
+                        result2)
+                elif operand1.type.is_cyp_class and self.operator not in ("is", "is_not"):
                     result1 = "(*%s)" % result1
                 if self.is_memslice_nonecheck:
                     if operand1.type.is_memoryviewslice:

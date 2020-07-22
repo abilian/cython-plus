@@ -2807,7 +2807,8 @@ class CppClassScope(Scope):
         '__le__': '<=',
         '__ge__': '>=',
         '__call__':'()',
-        '__getitem__':'[]'
+        '__getitem__':'[]',
+        "__contains__":"__contains__" # not actually a c++ operator: will generate a normal function named "operator__contains__"
     }
 
     def __init__(self, name, outer_scope, templates=None):

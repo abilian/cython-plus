@@ -3835,7 +3835,13 @@ class IndexNode(_IndexingBaseNode):
             error(self.pos, "Assignment to non-lvalue of type '%s'" % node.type)
         return node
 
-    def analyse_base_and_index_types(self, env, getting=False, setting=False,
+    def analyse_del_expression(self, env):
+        node = self.analyse_base_and_index_types(env, setting=True, deleting=True)
+        if node is self and not node.is_lvalue():
+            error(self.pos, "Deleting non-lvalue of type '%s'" % node.type)
+        return node
+
+    def analyse_base_and_index_types(self, env, getting=False, setting=False, deleting=False,
                                      analyse_base=True):
         # Note: This might be cleaned up by having IndexNode
         # parsed in a saner way and only construct the tuple if
@@ -3894,6 +3900,8 @@ class IndexNode(_IndexingBaseNode):
             return self.analyse_as_pyobject(env, is_slice, getting, setting)
         elif base_type.is_ptr or base_type.is_array:
             return self.analyse_as_c_array(env, is_slice)
+        elif base_type.is_cyp_class:
+            return self.analyse_as_cyp(env, setting, deleting)
         elif base_type.is_cpp_class:
             return self.analyse_as_cpp(env, setting)
         elif base_type.is_cfunction:
@@ -3975,8 +3983,6 @@ class IndexNode(_IndexingBaseNode):
 
     def analyse_as_cpp(self, env, setting):
         base_type = self.base.type
-        if base_type.is_cyp_class and setting:
-            return self.analyse_as_cyp_setitem(env)
         function = env.lookup_operator("[]", [self.base, self.index])
         if function is None:
             error(self.pos, "Indexing '%s' not supported for index type '%s'" % (base_type, self.index.type))
@@ -3999,32 +4005,55 @@ class IndexNode(_IndexingBaseNode):
             error(self.pos, "Can't set non-reference result '%s'" % self.type)
         return self
 
-    def analyse_as_cyp_setitem(self, env):
+    def analyse_as_cyp(self, env, setting, deleting):
+        if not setting:
+            return self.analyse_as_cpp(env, setting)
+        else:
+            return self.analyse_as_cyp_setitem_or_delitem(env, deleting)
+
+    def analyse_cyp_setitem_or_delitem_method(self, env, deleting):
         base_type = self.base.type
-        function = base_type.scope.lookup_here("__setitem__")
+        function_name = "__delitem__" if deleting else "__setitem__"
+        function = base_type.scope.lookup_here(function_name)
         if function is None:
-            error(self.pos, "Setting item '%s' not supported for index type '%s'" % (base_type, self.index.type))
-            self.type = PyrexTypes.error_type
-            self.result_code = "<error>"
-            return self
+            action = "Deleting" if deleting else "Setting"
+            error(self.pos, "%s item '%s' not supported for index type '%s'" % (action, base_type, self.index.type))
+            return None
         if len(function.all_alternatives()) > 1:
-            error(self.pos, "%s.__setitem__ has several alternatives" % base_type)
+            error(self.pos, "%s.%s has several alternatives" % (function_name, base_type))
+            return None
+        func_type = function.type
+        expected_nargs = 1 if deleting else 2
+        if len(func_type.args) != expected_nargs:
+            error(self.pos, "%s.%s takes wrong number of arguments" % (function_name, base_type))
+            return None
+        return func_type
+
+    def analyse_as_cyp_setitem_or_delitem(self, env, deleting):
+        base_type = self.base.type
+        func_type = self.analyse_cyp_setitem_or_delitem_method(env, deleting)
+        if func_type is None:
             self.type = PyrexTypes.error_type
             self.result_code = "<error>"
             return self
-        func_type = function.type
         self.exception_check = func_type.exception_check
         self.exception_value = func_type.exception_value
         if self.exception_check:
             if self.exception_value is None:
                 env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
-        if len(func_type.args) != 2:
-            error(self.pos, "%s.__setitem__ takes wrong number of arguments" % base_type)
-            self.type = PyrexTypes.error_type
-            self.result_code = "<error>"
-            return self
         self.index = self.index.coerce_to(func_type.args[0].type, env)
-        self.type = func_type.args[1].type
+        if not deleting:
+            self.type = func_type.args[1].type
+        else:
+            setitem_type = self.analyse_cyp_setitem_or_delitem_method(env, deleting=False)
+            if setitem_type is None:
+                # we use the setitem method to determine the contained type
+                # so we require it be defined, as we need it to add elements anyway
+                error(self.pos, "Deleting element from collection without a __setitem__ method")
+                self.type = PyrexTypes.error_type
+                self.result_code = "<error>"
+                return self
+            self.type = setitem_type.args[1].type
         return self
 
     def analyse_as_c_function(self, env):
@@ -4488,27 +4517,45 @@ class IndexNode(_IndexingBaseNode):
             value_code = '((unsigned char)%s)' % value_code
         return value_code
 
+    def generate_cyp_delitem_code(self, code):
+        function = self.base.type.scope.lookup_here("__delitem__")
+        function_code = function.cname
+        setitem_code = "%s->%s(%s);" % (
+                        self.base.result(),
+                        function_code,
+                        self.index.result())
+        if self.exception_check and self.exception_check == "+":
+            translate_cpp_exception(code, self.pos,
+                    setitem_code,
+                    None,
+                    self.exception_value, self.in_nogil_context)
+        else:
+            code.putln(setitem_code)
+
     def generate_deletion_code(self, code, ignore_nonexisting=False):
         self.generate_subexpr_evaluation_code(code)
-        #if self.type.is_pyobject:
-        if self.index.type.is_int:
-            function = "__Pyx_DelItemInt"
-            index_code = self.index.result()
-            code.globalstate.use_utility_code(
-                UtilityCode.load_cached("DelItemInt", "ObjectHandling.c"))
+        if self.base.type.is_cyp_class:
+            self.generate_cyp_delitem_code(code)
         else:
-            index_code = self.index.py_result()
-            if self.base.type is dict_type:
-                function = "PyDict_DelItem"
+            #if self.type.is_pyobject:
+            if self.index.type.is_int:
+                function = "__Pyx_DelItemInt"
+                index_code = self.index.result()
+                code.globalstate.use_utility_code(
+                    UtilityCode.load_cached("DelItemInt", "ObjectHandling.c"))
             else:
-                function = "PyObject_DelItem"
-        code.putln(code.error_goto_if_neg(
-            "%s(%s, %s%s)" % (
-                function,
-                self.base.py_result(),
-                index_code,
-                self.extra_index_params(code)),
-            self.pos))
+                index_code = self.index.py_result()
+                if self.base.type is dict_type:
+                    function = "PyDict_DelItem"
+                else:
+                    function = "PyObject_DelItem"
+            code.putln(code.error_goto_if_neg(
+                "%s(%s, %s%s)" % (
+                    function,
+                    self.base.py_result(),
+                    index_code,
+                    self.extra_index_params(code)),
+                self.pos))
         self.generate_subexpr_disposal_code(code)
         self.free_subexpr_temps(code)
 

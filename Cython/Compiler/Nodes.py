@@ -6505,7 +6505,10 @@ class DelStatNode(StatNode):
 
     def analyse_expressions(self, env):
         for i, arg in enumerate(self.args):
-            arg = self.args[i] = arg.analyse_target_expression(env, None)
+            if arg.is_subscript:
+                arg = self.args[i] = arg.analyse_del_expression(env)
+            else:
+                arg = self.args[i] = arg.analyse_target_expression(env, None)
             arg.ensure_lhs_locked(env)
             if arg.type.is_pyobject or (arg.is_name and arg.type.is_memoryviewslice):
                 if arg.is_name and arg.entry.is_cglobal:
@@ -6535,7 +6538,8 @@ class DelStatNode(StatNode):
         for arg in self.args:
             if (arg.type.is_pyobject or
                     arg.type.is_memoryviewslice or
-                    arg.is_subscript and arg.base.type is Builtin.bytearray_type):
+                    arg.is_subscript and arg.base.type is Builtin.bytearray_type or
+                    arg.is_subscript and arg.base.type.is_cyp_class):
                 arg.generate_deletion_code(
                     code, ignore_nonexisting=self.ignore_nonexisting)
             elif arg.type.is_ptr and arg.type.base_type.is_cpp_class:
@@ -6547,8 +6551,9 @@ class DelStatNode(StatNode):
                 arg.generate_evaluation_code(code)
                 if arg.type.lock_mode == "autolock" and self.was_locked:
                     code.putln("Cy_UNLOCK(%s);" % arg.result())
-                code.putln("Cy_DECREF(%s);" % arg.result())
-                code.putln("%s = NULL;" % arg.result())
+                else:
+                    code.putln("Cy_DECREF(%s);" % arg.result())
+                    code.putln("%s = NULL;" % arg.result())
                 arg.generate_disposal_code(code)
             # else error reported earlier
 

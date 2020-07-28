@@ -20,7 +20,7 @@ from . import TreeFragment
 
 from .Errors import error, warning
 from .StringEncoding import EncodedString
-from .ParseTreeTransforms import NormalizeTree, InterpretCompilerDirectives, AnalyseDeclarationsTransform
+from .ParseTreeTransforms import NormalizeTree, InterpretCompilerDirectives, DecoratorTransform, AnalyseDeclarationsTransform
 
 #
 #   Visitor for wrapper cclass injection
@@ -101,9 +101,23 @@ def NAME(self, ARGDECLS):
         OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
+    # static method wrapper templates
+    static_method = TreeFragment.TreeFragment(u"""
+@staticmethod
+def NAME(ARGDECLS):
+    return TYPE_NAME.NAME(ARGS)
+    """, level='c_class', pipeline=[NormalizeTree(None)])
+
+    static_method_no_return = TreeFragment.TreeFragment(u"""
+@staticmethod
+def NAME(ARGDECLS):
+    TYPE_NAME.NAME(ARGS)
+    """, level='c_class', pipeline=[NormalizeTree(None)])
+
     def __call__(self, root):
         self.pipeline = [
             InterpretCompilerDirectives(self.context, self.context.compiler_directives),
+            DecoratorTransform(self.context),
             AnalyseDeclarationsTransform(self.context)
         ]
         return super(CypclassWrapperInjection, self).__call__(root)
@@ -319,8 +333,9 @@ def NAME(self, ARGDECLS):
         return property
 
     def synthesize_cypclass_method_wrapper(self, node, cclass_name, method_entry):
-        if method_entry.type.is_static_method:
-            return # for now skip static methods
+        if method_entry.type.is_static_method and method_entry.static_cname is None:
+            # for now skip static methods, except when they are wrapped by a virtual method
+            return
 
         if method_entry.name in ("<del>", "<alloc>", "__new__", "<constructor>"):
             # skip special methods that should not be wrapped
@@ -329,22 +344,26 @@ def NAME(self, ARGDECLS):
         method_type = method_entry.type
 
         if method_type.optional_arg_count:
-            return # for now skip method with optional arguments
+            # for now skip methods with optional arguments
+            return
 
         return_type = method_type.return_type
 
         # we pass the global scope as argument, should not affect the result (?)
         if not return_type.can_coerce_to_pyobject(self.module_scope):
-            return # skip c methods with Python-incompatible return types
+            # skip c methods with Python-incompatible return types
+            return
 
         for argtype in method_type.args:
             if not argtype.type.can_coerce_from_pyobject(self.module_scope):
-                return # skip c methods with Python-incompatible argument types
+                # skip c methods with Python-incompatible argument types
+                return
 
         # > name of the wrapping method: same name as in the original code
         method_name = method_entry.original_name
         if method_name is None:
-            return # skip methods that don't have an original name
+            # skip methods that don't have an original name
+            return
 
         py_name = method_name
 
@@ -388,28 +407,41 @@ def NAME(self, ARGDECLS):
         # > access the underlying attribute
         underlying_type = node.entry.type
 
-        # > select the appropriate template
+        # > select the appropriate template and create the wrapper defnode
         need_return = not return_type.is_void
-        if node.lock_mode == 'checklock':
-            need_wlock = not method_type.is_const_method
-            if need_wlock:
-                template = self.wlocked_method if need_return else self.wlocked_method_no_return
-            else:
-                template = self.rlocked_method if need_return else self.rlocked_method_no_return
+
+        if method_entry.type.is_static_method:
+            template = self.static_method if need_return else self.static_method_no_return
+
+            method_wrapper = template.substitute({
+                "NAME": method_name,
+                "ARGDECLS": py_args_decls,
+                "TYPE_NAME": ExprNodes.NameNode(method_entry.pos, name=node.name),
+                "ARGS": arg_objs
+            }).stats[0]
+
         else:
-            template = self.unlocked_method if need_return else self.unlocked_method_no_return
+            if node.lock_mode == 'checklock':
+                need_wlock = not method_type.is_const_method
+                if need_wlock:
+                    template = self.wlocked_method if need_return else self.wlocked_method_no_return
+                else:
+                    template = self.rlocked_method if need_return else self.rlocked_method_no_return
+            else:
+                template = self.unlocked_method if need_return else self.unlocked_method_no_return
 
-        # > derive a unique name that doesn't collide with the arguments
-        underlying_name = self.create_unique_name("o", entries=[arg.name for arg in arg_objs])
+            # > derive a unique name that doesn't collide with the arguments
+            underlying_name = self.create_unique_name("o", entries=[arg.name for arg in arg_objs])
 
-        # > instanciate the wrapper from the template
-        method_wrapper = template.substitute({
-            "NAME": method_name,
-            "ARGDECLS": py_args_decls,
-            "TYPE": underlying_type,
-            "OBJ": ExprNodes.NameNode(method_entry.pos, name=underlying_name),
-            "ARGS": arg_objs
-        }).stats[0]
+            # > instanciate the wrapper from the template
+            method_wrapper = template.substitute({
+                "NAME": method_name,
+                "ARGDECLS": py_args_decls,
+                "TYPE": underlying_type,
+                "OBJ": ExprNodes.NameNode(method_entry.pos, name=underlying_name),
+                "ARGS": arg_objs
+            }).stats[0]
+
         method_wrapper.doc = py_doc
 
         return method_wrapper

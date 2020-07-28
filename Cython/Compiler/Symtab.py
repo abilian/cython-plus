@@ -178,6 +178,8 @@ class Entry(object):
     #                             overrides, if this entry represents a cypclass method
     #
     # static_cname     string     The cname of a static method in a cypclass
+    #
+    # original_name    string     The original name of a cpp or cypclass method
 
     # TODO: utility_code and utility_code_definition serves the same purpose...
 
@@ -257,6 +259,7 @@ class Entry(object):
     mro_index = 0
     from_type = None
     static_cname = None
+    original_name = None
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name
@@ -3031,6 +3034,8 @@ class CppClassScope(Scope):
         entry = self.declare_var(name, type, pos,
                                  defining=defining,
                                  cname=cname, visibility=visibility)
+        entry.original_name = original_name
+
         if reify:
             self.reify_method(entry)
         #if prev_entry and not defining:
@@ -3140,6 +3145,7 @@ class CppClassScope(Scope):
             if entry.is_cfunction:
                 entry.func_cname = base_entry.func_cname
                 entry.static_cname = base_entry.static_cname
+                entry.original_name = base_entry.original_name
 
         for base_entry in base_scope.type_entries:
             if base_entry.name not in base_templates:

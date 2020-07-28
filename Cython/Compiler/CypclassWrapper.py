@@ -270,13 +270,31 @@ def NAME(self, ARGDECLS):
         return wrapper
 
     def insert_cypclass_method_wrappers(self, node, cclass_name, stats):
-        for attr in node.attributes:
-            if isinstance(attr, Nodes.CFuncDefNode):
+        for attr in node.scope.entries.values():
+
+            if attr.is_cfunction:
+                alternatives = attr.all_alternatives()
+
+                # > consider the alternatives that are actually defined in this wrapped cypclass
+                local_alternatives = [e for e in alternatives if e.mro_index == 0]
+                if len(local_alternatives) == 0:
+                    # all alternatives are inherited, skip this method
+                    continue
+
+                if len(alternatives) > 1:
+                    py_args_alternatives = [e for e in local_alternatives if all(arg.type.is_pyobject for arg in e.type.args)]
+                    if len(py_args_alternatives) == 1:
+                        # if there is a single locally defined method with all-python arguments, use that one
+                        attr = py_args_alternatives[0]
+                    else:
+                        # else skip overloaded method for now
+                        continue
+
                 py_method_wrapper = self.synthesize_cypclass_method_wrapper(node, cclass_name, attr)
                 if py_method_wrapper:
                     stats.append(py_method_wrapper)
-        for attr in node.scope.var_entries:
-            if not (attr.is_cfunction or attr.is_type):
+
+            elif not attr.is_type:
                 property = self.synthesize_property(attr, node.entry)
                 if property:
                     stats.append(property)
@@ -300,66 +318,80 @@ def NAME(self, ARGDECLS):
         property.doc = attr_entry.doc
         return property
 
-    def synthesize_cypclass_method_wrapper(self, node, cclass_name, cfunc_method):
-        if cfunc_method.is_static_method:
+    def synthesize_cypclass_method_wrapper(self, node, cclass_name, method_entry):
+        if method_entry.type.is_static_method:
             return # for now skip static methods
 
-        if cfunc_method.entry.name in ("<del>", ):
+        if method_entry.name in ("<del>", "<alloc>", "__new__", "<constructor>"):
             # skip special methods that should not be wrapped
             return
 
-        alternatives = cfunc_method.entry.all_alternatives()
+        method_type = method_entry.type
 
-        # > consider only the alternatives that are actually defined in this wrapped cypclass
-        alternatives = list(filter(lambda e: e.mro_index == 0, alternatives))
+        if method_type.optional_arg_count:
+            return # for now skip method with optional arguments
 
-        if len(alternatives) > 1:
-            py_args_alternatives = [e for e in alternatives if all(arg.type.is_pyobject for arg in e.type.args)]
-            if len(py_args_alternatives) == 1 and cfunc_method.entry is py_args_alternatives[0]:
-                pass
-            else:
-                return # for now skip overloaded methods
-
-        cfunc_declarator = cfunc_method.cfunc_declarator
-
-        # > c++ methods have an implict 'this', so the 'self' argument is skipped in the declarator
-        skipped_self = cfunc_declarator.skipped_self
-        if not skipped_self:
-            return # if this ever happens (?), skip non-static methods without a self argument
-
-        cfunc_type = cfunc_method.type
-        cfunc_return_type = cfunc_type.return_type
+        return_type = method_type.return_type
 
         # we pass the global scope as argument, should not affect the result (?)
-        if not cfunc_return_type.can_coerce_to_pyobject(self.module_scope):
+        if not return_type.can_coerce_to_pyobject(self.module_scope):
             return # skip c methods with Python-incompatible return types
 
-        for argtype in cfunc_type.args:
+        for argtype in method_type.args:
             if not argtype.type.can_coerce_from_pyobject(self.module_scope):
                 return # skip c methods with Python-incompatible argument types
 
         # > name of the wrapping method: same name as in the original code
-        cfunc_name = cfunc_declarator.base.name
-        py_name = cfunc_name
+        method_name = method_entry.original_name
+        if method_name is None:
+            return # skip methods that don't have an original name
+
+        py_name = method_name
 
         # > all arguments of the wrapper method declaration
         py_args_decls = []
-        for arg in cfunc_declarator.args:
-            py_args_decls.append(arg.clone_node())
+        for arg in method_type.args:
+            arg_base_type = Nodes.CSimpleBaseTypeNode(
+                method_entry.pos,
+                name = None,
+                module_path = [],
+                is_basic_c_type = 0,
+                signed = 0,
+                complex = 0,
+                longness = 0,
+                is_self_arg = 0,
+                templates = None
+            )
+            arg_declarator = Nodes.CNameDeclaratorNode(
+                method_entry.pos,
+                name=arg.name,
+                cname=None
+            )
+            arg_decl = Nodes.CArgDeclNode(
+                method_entry.pos,
+                base_type = arg_base_type,
+                declarator = arg_declarator,
+                not_none = 0,
+                or_none = 0,
+                default = None,
+                annotation = None,
+                kw_only = 0
+            )
+            py_args_decls.append(arg_decl)
 
         # > same docstring
-        py_doc = cfunc_method.doc
+        py_doc = method_entry.doc
 
         # > names of the arguments passed when calling the underlying method; self not included
-        arg_objs = [ExprNodes.NameNode(arg.pos, name=arg.name) for arg in cfunc_declarator.args]
+        arg_objs = [ExprNodes.NameNode(arg.pos, name=arg.name) for arg in method_type.args]
 
         # > access the underlying attribute
         underlying_type = node.entry.type
 
         # > select the appropriate template
-        need_return = not cfunc_return_type.is_void
+        need_return = not return_type.is_void
         if node.lock_mode == 'checklock':
-            need_wlock = not cfunc_type.is_const_method
+            need_wlock = not method_type.is_const_method
             if need_wlock:
                 template = self.wlocked_method if need_return else self.wlocked_method_no_return
             else:
@@ -372,10 +404,10 @@ def NAME(self, ARGDECLS):
 
         # > instanciate the wrapper from the template
         method_wrapper = template.substitute({
-            "NAME": cfunc_name,
+            "NAME": method_name,
             "ARGDECLS": py_args_decls,
             "TYPE": underlying_type,
-            "OBJ": ExprNodes.NameNode(cfunc_method.pos, name=underlying_name),
+            "OBJ": ExprNodes.NameNode(method_entry.pos, name=underlying_name),
             "ARGS": arg_objs
         }).stats[0]
         method_wrapper.doc = py_doc

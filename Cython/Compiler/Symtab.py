@@ -571,7 +571,7 @@ class Scope(object):
                                 alt_declarator_str = alt_type.declarator_code(name, for_display = 1).strip()
                                 new_declarator_str = type.declarator_code(name, for_display = 1).strip()
                                 if new_declarator_str != alt_declarator_str:
-                                    error(pos, ("Fallacious override:\n"
+                                    error(pos, ("False override:\n"
                                                 "Cypclass method\n"
                                                 ">>     %s\n"
                                                 "has compatible arguments with inherited method\n"
@@ -598,8 +598,9 @@ class Scope(object):
 
                         # if an overloaded alternative has narrower argument types than another, then the method
                         # actually called will depend on the static type of the arguments
-                        elif type.narrower_arguments_than(alt_type) or alt_type.narrower_arguments_than(type):
-                            error(pos, "Cypclass overloaded method with narrower arguments")
+                        # we actually also disallow methods where each argument is either narrower or larger
+                        elif type.narrower_or_larger_arguments_than(alt_type):
+                            error(pos, "Cypclass overloaded method with narrower or larger arguments")
                             if alt_entry.pos is not None:
                                 error(alt_entry.pos, "Conflicting method is defined here")
 

@@ -3046,6 +3046,32 @@ class CFuncType(CType):
                 return 0
         return 1
 
+    def narrower_or_larger_arguments_than(self, other_type, as_cmethod = 0):
+        return self.narrower_or_larger_arguments_than_resolved_type(other_type.resolve(), as_cmethod)
+
+    def narrower_or_larger_arguments_than_resolved_type(self, other_type, as_cmethod):
+        if other_type is error_type:
+            return 1
+        if not other_type.is_cfunction:
+            return 0
+        nargs = len(self.args)
+        if nargs != len(other_type.args):
+            return 0
+        for i in range(as_cmethod, nargs):
+            if not self.args[i].type.subtype_of_resolved_type(other_type.args[i].type):
+                if not other_type.args[i].type.subtype_of_resolved_type(self.args[i].type):
+                    return 0
+                else:
+                    other_type.args[i].needs_type_test = True
+            else:
+                self.args[i].needs_type_test = other_type.args[i].needs_type_test \
+                        or not self.args[i].type.same_as(other_type.args[i].type)
+        if self.has_varargs != other_type.has_varargs:
+            return 0
+        if self.optional_arg_count != other_type.optional_arg_count:
+            return 0
+        return 1
+
     def narrower_arguments_than(self, other_type, as_cmethod = 0):
         return self.narrower_arguments_than_resolved_type(other_type.resolve(), as_cmethod)
 

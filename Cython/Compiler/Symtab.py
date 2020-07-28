@@ -2953,6 +2953,9 @@ class CppClassScope(Scope):
     def declare_cfunction(self, name, type, pos,
                           cname=None, visibility='extern', api=0, in_pxd=0,
                           defining=0, modifiers=(), utility_code=None, overridable=False):
+        # Remember the original name because it might change
+        original_name = name
+
         reify = self.type.is_cyp_class and self.type.activable
         class_name = self.name.split('::')[-1]
         if name in (class_name, '__init__') and cname is None:
@@ -3013,6 +3016,8 @@ class CppClassScope(Scope):
                     reify = False
                     name = EncodedString('operator ' + as_operator_name)
                     type.args = []
+            if name.startswith("operator") and type.is_static_method:
+                error(pos, "Operator %s cannot be a static method" % original_name)
 
         if name in ('<init>', '<del>') and type.nogil:
             for base in self.type.base_classes:

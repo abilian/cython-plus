@@ -6283,7 +6283,9 @@ class SimpleCallNode(CallNode):
                 else:
                     actual_arg.ensure_rhs_locked(env, is_dereferenced = deref_flag)
             # XXX - Should we do something in a pyfunc case ?
-            if func_type.is_const_method:
+            if func_type.is_static_method:
+                pass # no need to lock the object on which a static method is called
+            elif func_type.is_const_method:
                 self.function.ensure_rhs_locked(env)
             else:
                 self.function.ensure_lhs_locked(env)

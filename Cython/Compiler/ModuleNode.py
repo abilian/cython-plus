@@ -1042,7 +1042,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                         continue
                 elif attr.type.is_cyp_class:
                     cname = "%s = NULL" % cname
-                code.putln("%s;" % attr.type.declaration_code(cname))
+                if type.is_cyp_class and attr.type.is_cfunction and attr.type.is_static_method and attr.static_cname is not None:
+                    code.putln("%s;" % attr.type.declaration_code(attr.static_cname))
+                    self.generate_cyp_class_static_method_resolution(attr, code)
+                else:
+                    code.putln("%s;" % attr.type.declaration_code(cname))
+
             is_implementing = 'init_module' in code.globalstate.parts
 
             for reified in scope.reifying_entries:
@@ -1168,9 +1173,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             if e.is_cfunction
             and e.from_type
             and e.mro_index > 0
-            and e.from_type.is_cyp_class     # avoid dealing with methods inherited from non-cypclass bases for now
-            and not e.type.is_static_method  # avoid dealing with static methods for now
+            and e.from_type.is_cyp_class  # avoid dealing with methods inherited from non-cypclass bases for now
             and e.name not in ("<init>", "<del>")
+            and (not e.type.is_static_method
+                 or e.static_cname is not None)  # mro-resolve the virtual methods used to dispatch static methods
             and not e.type.has_varargs  # avoid dealing with varargs for now (is this ever required anyway ?)
         ]
         if inherited_methods:
@@ -1198,6 +1204,32 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("virtual %s%s {%s}" % (modifiers, header, body))
         if inherited_methods:
             code.putln("")
+
+    def generate_cyp_class_static_method_resolution(self, static_method, code):
+        """
+            Generate a virtual method in cypclass that just forward calls to associated static method.
+            The virtual version will serve to correctly dispatch static methods.
+        """
+        func_type = static_method.type
+        modifiers = code.build_function_modifiers(static_method.func_modifiers)
+
+        arg_names = ["%s_%d" % (arg.cname, i) for i, arg in enumerate(func_type.args)]
+        arg_decls = [arg.type.declaration_code(arg_name) for arg, arg_name in zip(func_type.args, arg_names)]
+        if func_type.optional_arg_count:
+            opt_name = Naming.optional_args_cname
+            arg_decls.append(func_type.op_arg_struct.declaration_code(opt_name))
+            arg_names.append(opt_name)
+
+        header = func_type.function_header_code(static_method.cname, ", ".join(arg_decls))
+        if not static_method.name.startswith("operator "):
+            header = func_type.return_type.declaration_code(header)
+
+        return_code = "" if func_type.return_type.is_void else "return "
+
+        body = "%s%s(%s);" % (return_code, static_method.static_cname, ", ".join(arg_names))
+
+        code.putln("virtual %s%s {%s}" % (modifiers, header, body))
+
 
     def generate_enum_definition(self, entry, code):
         code.mark_pos(entry.pos)

@@ -176,6 +176,8 @@ class Entry(object):
     # defining_classes   [CypClassType or CppClassType or CStructOrUnionType]
     #                             All the base classes that define an entry that this entry
     #                             overrides, if this entry represents a cypclass method
+    #
+    # static_cname     string     The cname of a static method in a cypclass
 
     # TODO: utility_code and utility_code_definition serves the same purpose...
 
@@ -254,6 +256,7 @@ class Entry(object):
     is_default = False
     mro_index = 0
     from_type = None
+    static_cname = None
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name
@@ -2827,6 +2830,8 @@ class CppClassScope(Scope):
                     cname = None, visibility = 'extern',
                     api = 0, in_pxd = 0, is_cdef = 0, defining = 0):
         # Add an entry for an attribute.
+        if name.startswith(Naming.func_prefix):
+            error(pos, "Names starting with %s are reserved inside cppclass and cypclass" % Naming.func_prefix)
         if not cname:
             cname = name
         entry = self.lookup_here(name)
@@ -2846,6 +2851,9 @@ class CppClassScope(Scope):
         entry.is_cfunction = type.is_cfunction
         if type.is_cfunction and self.type:
             if not self.type.get_fused_types():
+                if (self.parent_type.is_cyp_class and type.is_static_method and name not in ("<alloc>", "__new__")):
+                    cname = "%s__static__%s" % (Naming.func_prefix, cname)
+                    entry.static_cname = cname
                 entry.func_cname = "%s::%s" % (self.type.empty_declaration_code(), cname)
         if name != "this" and (defining or name != "<init>" or self.parent_type.is_cyp_class):
             self.var_entries.append(entry)
@@ -3126,6 +3134,7 @@ class CppClassScope(Scope):
             entry.is_cfunction = base_entry.is_cfunction
             if entry.is_cfunction:
                 entry.func_cname = base_entry.func_cname
+                entry.static_cname = base_entry.static_cname
 
         for base_entry in base_scope.type_entries:
             if base_entry.name not in base_templates:

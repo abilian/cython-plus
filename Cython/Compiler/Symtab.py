@@ -2855,9 +2855,6 @@ class CppClassScope(Scope):
         entry.is_cfunction = type.is_cfunction
         if type.is_cfunction and self.type:
             if not self.type.get_fused_types():
-                if (self.parent_type.is_cyp_class and type.is_static_method and name not in ("<alloc>", "__new__")):
-                    cname = "%s__static__%s" % (Naming.func_prefix, cname)
-                    entry.static_cname = cname
                 entry.func_cname = "%s::%s" % (self.type.empty_declaration_code(), cname)
         if name != "this" and (defining or name != "<init>" or self.parent_type.is_cyp_class):
             self.var_entries.append(entry)
@@ -3036,6 +3033,9 @@ class CppClassScope(Scope):
                                  defining=defining,
                                  cname=cname, visibility=visibility)
         entry.original_name = original_name
+
+        if (self.parent_type.is_cyp_class and type.is_static_method and name not in ("<alloc>", "__new__")):
+            entry.static_cname = "%s__static__%s" % (Naming.func_prefix, cname)
 
         if reify:
             self.reify_method(entry)

@@ -1042,11 +1042,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                         continue
                 elif attr.type.is_cyp_class:
                     cname = "%s = NULL" % cname
+                code.putln("%s;" % attr.type.declaration_code(cname))
                 if type.is_cyp_class and attr.type.is_cfunction and attr.type.is_static_method and attr.static_cname is not None:
-                    code.putln("%s;" % attr.type.declaration_code(attr.static_cname))
                     self.generate_cyp_class_static_method_resolution(attr, code)
-                else:
-                    code.putln("%s;" % attr.type.declaration_code(cname))
 
             is_implementing = 'init_module' in code.globalstate.parts
 
@@ -1192,14 +1190,16 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 arg_decls.append(e.type.op_arg_struct.declaration_code(opt_name))
                 arg_names.append(opt_name)
 
-            header = e.type.function_header_code(e.cname, ", ".join(arg_decls))
+            cname = e.cname if not e.type.is_static_method else e.static_cname
+
+            header = e.type.function_header_code(cname, ", ".join(arg_decls))
             if not e.name.startswith("operator "):
                 header = e.type.return_type.declaration_code(header)
 
             return_code = "" if e.type.return_type.is_void else "return "
             resolution = e.from_type.empty_declaration_code()
 
-            body = "%s%s::%s(%s);" % (return_code, resolution, e.cname, ", ".join(arg_names))
+            body = "%s%s::%s(%s);" % (return_code, resolution, cname, ", ".join(arg_names))
 
             code.putln("virtual %s%s {%s}" % (modifiers, header, body))
         if inherited_methods:
@@ -1220,13 +1220,13 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             arg_decls.append(func_type.op_arg_struct.declaration_code(opt_name))
             arg_names.append(opt_name)
 
-        header = func_type.function_header_code(static_method.cname, ", ".join(arg_decls))
+        header = func_type.function_header_code(static_method.static_cname, ", ".join(arg_decls))
         if not static_method.name.startswith("operator "):
             header = func_type.return_type.declaration_code(header)
 
         return_code = "" if func_type.return_type.is_void else "return "
 
-        body = "%s%s(%s);" % (return_code, static_method.static_cname, ", ".join(arg_names))
+        body = "%s%s(%s);" % (return_code, static_method.cname, ", ".join(arg_names))
 
         code.putln("virtual %s%s {%s}" % (modifiers, header, body))
 

@@ -7703,7 +7703,10 @@ class AttributeNode(ExprNode):
                 obj_code = obj.type.cast_code(obj.result(), to_object_struct = True)
             if obj.type.is_cpp_class and self.entry and self.entry.is_cfunction:
                 # the entry might have been resolved to an overladed alternative in the meantime
-                self.member = self.entry.cname
+                if obj.type.is_cyp_class and self.entry.type.is_static_method and self.entry.static_cname is not None:
+                    self.member = self.entry.static_cname
+                else:
+                    self.member = self.entry.cname
             return "%s%s%s" % (obj_code, self.op, self.member)
 
     def generate_result_code(self, code):

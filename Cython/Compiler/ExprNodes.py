@@ -11693,8 +11693,24 @@ class BinopNode(ExprNode):
         if func_type.is_ptr:
             func_type = func_type.base_type
         if len(func_type.args) == 1:
+            if func_type.is_const_method:
+                self.operand1.ensure_rhs_locked(env, is_dereferenced = True)
+            else:
+                self.operand1.ensure_lhs_locked(env, is_dereferenced = True)
+            if func_type.args[0].type.is_const:
+                self.operand2.ensure_rhs_locked(env, is_dereferenced = True)
+            else:
+                self.operand2.ensure_lhs_locked(env, is_dereferenced = True)
             self.operand2 = self.operand2.coerce_to(func_type.args[0].type, env)
         else:
+            if func_type.args[0].type.is_const:
+                self.operand1.ensure_rhs_locked(env, is_dereferenced = True)
+            else:
+                self.operand1.ensure_lhs_locked(env, is_dereferenced = True)
+            if func_type.args[1].type.is_const:
+                self.operand2.ensure_rhs_locked(env, is_dereferenced = True)
+            else:
+                self.operand2.ensure_lhs_locked(env, is_dereferenced = True)
             self.operand1 = self.operand1.coerce_to(func_type.args[0].type, env)
             self.operand2 = self.operand2.coerce_to(func_type.args[1].type, env)
         self.type = func_type.return_type
@@ -13325,8 +13341,24 @@ class PrimaryCmpNode(ExprNode, CmpNode):
             if self.exception_value is None:
                 env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
         if len(func_type.args) == 1:
+            if func_type.is_const_method:
+                self.operand1.ensure_rhs_locked(env, is_dereferenced = True)
+            else:
+                self.operand1.ensure_lhs_locked(env, is_dereferenced = True)
+            if func_type.args[0].type.is_const:
+                self.operand2.ensure_rhs_locked(env, is_dereferenced = True)
+            else:
+                self.operand2.ensure_lhs_locked(env, is_dereferenced = True)
             self.operand2 = self.operand2.coerce_to(func_type.args[0].type, env)
         else:
+            if func_type.args[0].type.is_const:
+                self.operand1.ensure_rhs_locked(env, is_dereferenced = True)
+            else:
+                self.operand1.ensure_lhs_locked(env, is_dereferenced = True)
+            if func_type.args[1].type.is_const:
+                self.operand2.ensure_rhs_locked(env, is_dereferenced = True)
+            else:
+                self.operand2.ensure_lhs_locked(env, is_dereferenced = True)
             self.operand1 = self.operand1.coerce_to(func_type.args[0].type, env)
             self.operand2 = self.operand2.coerce_to(func_type.args[1].type, env)
         self.type = func_type.return_type

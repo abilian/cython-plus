@@ -3969,7 +3969,8 @@ class CppClassType(CType):
         specialized = self.specializations[key] = \
             CppClassType(self.name, None, self.cname, [], template_values, template_type=self)\
             if not self.is_cyp_class else\
-            CypClassType(self.name, None, self.cname, [], template_values, template_type=self)
+            CypClassType(self.name, None, self.cname, [], template_values, template_type=self,
+                lock_mode=self.lock_mode, activable=self.activable)
         # Need to do these *after* self.specializations[key] is set
         # to avoid infinite recursion on circular references.
         specialized.base_classes = [b.specialize(values) for b in self.base_classes]

@@ -7637,8 +7637,15 @@ class AttributeNode(ExprNode):
     gil_message = "Accessing Python attribute"
 
     def ensure_subexpr_rhs_locked(self, env):
-        if not self.entry or self.entry.is_cfunction and not self.entry.type.is_const_method:
+        if not self.entry:
             self.obj.ensure_lhs_locked(env, is_dereferenced = True)
+        elif self.entry.is_cfunction:
+            if self.entry.type.is_static_method:
+                pass
+            elif self.entry.type.is_const_method:
+                self.obj.ensure_rhs_locked(env, is_dereferenced = True)
+            else:
+                self.obj.ensure_lhs_locked(env, is_dereferenced = True)
         else:
             self.obj.ensure_rhs_locked(env, is_dereferenced = True)
 

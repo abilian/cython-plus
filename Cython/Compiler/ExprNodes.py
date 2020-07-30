@@ -12889,6 +12889,11 @@ class CmpNode(object):
     def is_cpp_comparison(self):
         return self.operand1.type.is_cpp_class or self.operand2.type.is_cpp_class
 
+    def is_cpp_py_comparison(self):
+        type1 = self.operand1.type
+        type2 = self.operand2.type
+        return type1.is_pyobject and type2.is_cpp_class or type1.is_cpp_class and type2.is_pyobject
+
     def find_common_int_type(self, env, op, operand1, operand2):
         # type1 != type2 and at least one of the types is not a C int
         type1 = operand1.type
@@ -13235,12 +13240,17 @@ class PrimaryCmpNode(ExprNode, CmpNode):
     def analyse_types(self, env):
         self.operand1 = self.operand1.analyse_types(env)
         self.operand2 = self.operand2.analyse_types(env)
-        if self.is_cpp_comparison():
+        if self.is_cpp_py_comparison():
+            return self.analyse_cpp_py_comparison(env)
+        elif self.is_cpp_comparison():
             self.analyse_cpp_comparison(env)
             if self.cascade:
                 error(self.pos, "Cascading comparison not yet supported for cpp types.")
             return self
+        else:
+            return self.analyse_non_cpp_comparison(env)
 
+    def analyse_non_cpp_comparison(self, env):
         type1 = self.operand1.type
         type2 = self.operand2.type
         if is_pythran_expr(type1) or is_pythran_expr(type2):
@@ -13319,16 +13329,41 @@ class PrimaryCmpNode(ExprNode, CmpNode):
             self.is_temp = 1
         return self
 
+    def analyse_cpp_py_comparison(self, env):
+        operator = self.operator
+        if self.operand2.type.is_cyp_class and operator in ("in", "not_in"):
+            # swap operands
+            self.operand1, self.operand2 = self.operand2, self.operand1
+            operator = "__contains__"
+        entry = None
+        try:
+            entry = env.lookup_operator(operator, [self.operand1, self.operand2], throw=True)
+        except (PyrexTypes.AmbiguousCallException, PyrexTypes.NoTypeMatchCallException):
+            error(self.pos, ("Ambiguous operation with PyObject operand\n"
+                             "To select one of the alternatives, explicitly cast the PyObject operand\n"
+                             "To let Python handle the operation instead, cast the other operand to 'object'"
+                             "\n"))
+            self.type = PyrexTypes.error_type
+            return self
+        except PyrexTypes.CallException:
+            pass
+
+        if entry:
+            self.analyse_cpp_comparison(env)
+            return self
+        else:
+            return self.analyse_non_cpp_comparison(env)
+
     def analyse_cpp_comparison(self, env):
         type1 = self.operand1.type
         type2 = self.operand2.type
         self.is_pycmp = False
+        operator = self.operator
         if type2.is_cyp_class and self.operator in ("in", "not_in"):
             # swap operands
             self.operand1, self.operand2 = self.operand2, self.operand1
-            entry = env.lookup_operator("__contains__", [self.operand1, self.operand2])
-        else:
-            entry = env.lookup_operator(self.operator, [self.operand1, self.operand2])
+            operator = "__contains__"
+        entry = env.lookup_operator(operator, [self.operand1, self.operand2])
         if entry is None:
             if self.operator in ("is", "is_not")\
                and (type1.is_ptr or type1.is_cyp_class)\

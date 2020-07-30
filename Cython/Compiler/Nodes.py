@@ -5960,7 +5960,13 @@ class SingleAssignmentNode(AssignmentNode):
 
         self.lhs = self.lhs.analyse_target_types(env)
         self.lhs.gil_assignment_check(env)
-        self.rhs.ensure_rhs_locked(env)
+        if self.lhs.is_subscript and self.lhs.base.type.is_cyp_class:
+            if self.lhs.type.is_const: # type of the formal 'value' argument of __setitem__
+                self.rhs.ensure_rhs_locked(env, is_dereferenced = True)
+            else:
+                self.rhs.ensure_lhs_locked(env, is_dereferenced = True)
+        else:
+            self.rhs.ensure_rhs_locked(env)
         self.lhs.ensure_lhs_locked(env, is_top_lhs = True)
         unrolled_assignment = self.unroll_lhs(env)
         if unrolled_assignment:

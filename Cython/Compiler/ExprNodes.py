@@ -3981,6 +3981,16 @@ class IndexNode(_IndexingBaseNode):
             error(self.pos, "Invalid index type '%s'" % self.index.type)
         return self
 
+    def ensure_base_and_index_locked(self, env, func_type):
+        if func_type.is_const_method:
+            self.base.ensure_rhs_locked(env, is_dereferenced=True)
+        else:
+            self.base.ensure_lhs_locked(env, is_dereferenced=True)
+        if func_type.args[0].type.is_const:
+            self.index.ensure_rhs_locked(env, is_dereferenced=True)
+        else:
+            self.index.ensure_lhs_locked(env, is_dereferenced=True)
+
     def analyse_as_cpp(self, env, setting):
         base_type = self.base.type
         function = env.lookup_operator("[]", [self.base, self.index])
@@ -3999,6 +4009,7 @@ class IndexNode(_IndexingBaseNode):
                 self.is_temp = True
             if self.exception_value is None:
                 env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
+        self.ensure_base_and_index_locked(env, func_type)
         self.index = self.index.coerce_to(func_type.args[0].type, env)
         self.type = func_type.return_type
         if setting and not func_type.return_type.is_reference:
@@ -4047,13 +4058,14 @@ class IndexNode(_IndexingBaseNode):
         else:
             setitem_type = self.analyse_cyp_setitem_or_delitem_method(env, deleting=False)
             if setitem_type is None:
-                # we use the setitem method to determine the contained type
-                # so we require it be defined, as we need it to add elements anyway
+                # Hack: we use the setitem method to find the contained type and error out if there isn't one.
+                # We need it to add elements anyway, but a better way to find the contained type would be good.
                 error(self.pos, "Deleting element from collection without a __setitem__ method")
                 self.type = PyrexTypes.error_type
                 self.result_code = "<error>"
                 return self
             self.type = setitem_type.args[1].type
+        self.ensure_base_and_index_locked(env, func_type)
         return self
 
     def analyse_as_c_function(self, env):

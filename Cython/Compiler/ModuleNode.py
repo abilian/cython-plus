@@ -677,7 +677,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             definition = module is env
             code.putln("")
             code.putln("/* Deferred definitions for cypclasses */")
-            self.generate_cyp_class_deferred_definitions(env, code, definition)
+            self.generate_cyp_class_deferred_definitions(module, code, definition)
 
     def generate_declarations_for_modules(self, env, modules, globalstate):
         typecode = globalstate['type_declarations']

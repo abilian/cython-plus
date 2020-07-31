@@ -513,6 +513,18 @@ class Scope(object):
             for scope in sorted(self.subscopes, key=operator.attrgetter('scope_prefix')):
                 yield scope
 
+    def iter_cypclass_entries_and_scopes(self):
+        """
+            Recursively iterate over nested cypclasses and their associated scope
+        """
+
+        for entry in self.cypclass_entries:
+            cypclass_scope = entry.type.scope
+            yield entry, cypclass_scope
+            if cypclass_scope:
+                for e, s in cypclass_scope.iter_cypclass_entries_and_scopes():
+                    yield e, s
+
     def declare_tracked(self, entry):
         # Keying only with the name is wrong: if we have multiple attributes
         # with the same name in different cypclass, this will conflict.

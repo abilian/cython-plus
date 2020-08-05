@@ -1634,7 +1634,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     code.put("virtual ")
                     has_virtual_methods = True
                     if 'operator ' in attr.name:
-                        code.putln("%s();" % attr.cname)
+                        code.putln("%s;" % attr.type.declarator_code(attr.cname))
                         continue
                 elif attr.type.is_cyp_class:
                     cname = "%s = NULL" % cname

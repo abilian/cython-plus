@@ -3829,7 +3829,7 @@ class IndexNode(_IndexingBaseNode):
 
     def analyse_target_types(self, env):
         node = self.analyse_base_and_index_types(env, setting=True)
-        if node.type.is_const:
+        if node.type.is_const and not node.base.type.is_cyp_class:
             error(self.pos, "Assignment to const dereference")
         if node is self and not node.is_lvalue():
             error(self.pos, "Assignment to non-lvalue of type '%s'" % node.type)

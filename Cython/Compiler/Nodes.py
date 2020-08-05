@@ -3454,7 +3454,7 @@ class DefNode(FuncDefNode):
             if not arg.name:
                 error(arg.pos, "Missing argument name")
             if arg.needs_conversion:
-                arg.entry = env.declare_var(arg.name, arg.type, arg.pos, is_converted_arg = 1)
+                arg.entry = env.declare_var(arg.name, arg.type, arg.pos)
                 if arg.type.is_pyobject:
                     arg.entry.init = "0"
             else:

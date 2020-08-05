@@ -2141,8 +2141,7 @@ class LocalScope(Scope):
 
     def declare_var(self, name, type, pos,
                     cname = None, visibility = 'private',
-                    api = 0, in_pxd = 0, is_cdef = 0,
-                    is_converted_arg = 0):
+                    api = 0, in_pxd = 0, is_cdef = 0):
         name = self.mangle_class_private_name(name)
         # Add an entry for a local variable.
         if visibility in ('public', 'readonly'):
@@ -2156,13 +2155,6 @@ class LocalScope(Scope):
 
         entry.in_with_gil_block = self._in_with_gil_block
         self.var_entries.append(entry)
-
-        # arguments converted as variables should still be locked as arguments
-        if is_converted_arg and type.is_cyp_class and type.lock_mode != "nolock":
-            arg_lock_state = self.declare_tracked(entry)
-            arg_lock_state.is_rlocked = type.is_const
-            arg_lock_state.is_wlocked = not type.is_const
-
         return entry
 
     def declare_global(self, name, pos):

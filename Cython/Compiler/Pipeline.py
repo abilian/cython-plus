@@ -141,7 +141,7 @@ def inject_utility_code_stage_factory(context):
 def create_pipeline(context, mode, exclude_classes=()):
     assert mode in ('pyx', 'py', 'pxd')
     from .Visitor import PrintTree
-    from .CypclassTransforms import CypclassWrapperInjection
+    from .CypclassTransforms import CypclassWrapperInjection, CypclassLockTransform
     from .ParseTreeTransforms import WithTransform, NormalizeTree, PostParse, PxdPostParse
     from .ParseTreeTransforms import ForwardDeclareTypes, InjectGilHandling, AnalyseDeclarationsTransform
     from .ParseTreeTransforms import AnalyseExpressionsTransform, FindInvalidUseOfFusedTypes
@@ -212,6 +212,7 @@ def create_pipeline(context, mode, exclude_classes=()):
         _check_c_declarations,
         InlineDefNodeCalls(context),
         AnalyseExpressionsTransform(context),
+        CypclassLockTransform(context),
         FindInvalidUseOfFusedTypes(context),
         ExpandInplaceOperators(context),
         IterationTransform(context),

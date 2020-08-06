@@ -320,7 +320,6 @@ class ExprNode(Node):
     use_managed_ref = True  # can be set by optimisation transforms
     result_is_used = True
     is_numpy_attribute = False
-    tracked_state = None
 
     #  The Analyse Expressions phase for expressions is split
     #  into two sub-phases:
@@ -723,89 +722,6 @@ class ExprNode(Node):
 
     def addr_not_const(self):
         error(self.pos, "Address is not constant")
-
-    def set_autorlock(self, env):
-        self.tracked_state.is_rlocked = True
-        self.tracked_state.needs_rlock = True
-
-    def set_autowlock(self, env):
-        self.tracked_state.is_wlocked = True
-        self.tracked_state.needs_wlock = True
-
-    def needs_rlock(self):
-        if self.tracked_state is None:
-            return False
-        return self.tracked_state.needs_rlock
-
-    def needs_wlock(self):
-        if self.tracked_state is None:
-            return False
-        return self.tracked_state.needs_wlock
-
-    def is_autolock(self):
-        return self.type is not None and self.type.is_cyp_class and self.type.lock_mode == "autolock"
-
-    def is_checklock(self):
-        return self.type is not None and self.type.is_cyp_class and self.type.lock_mode == "checklock"
-
-    def get_tracked_state(self, env):
-        if not hasattr(self, 'entry') or not self.entry or not self.entry.type.is_cyp_class:
-            return
-        self.tracked_state = env.lookup_tracked(self.entry)
-        if self.tracked_state is None:
-            self.tracked_state = env.declare_tracked(self.entry)
-            if self.is_autolock() and self.entry.is_variable:
-                env.declare_autolocked(self)
-
-    def is_rhs_locked(self, env):
-        if not hasattr(self, 'entry') or self.entry.type is None or not self.entry.type.is_cyp_class:
-            # These nodes couldn't be tracked (because it is for example a constant),
-            # so we let them pass silently
-            return True
-        return self.tracked_state.is_rlocked or self.tracked_state.is_wlocked
-
-    def is_lhs_locked(self, env):
-        if not hasattr(self, 'entry') or self.entry.type is None or not self.entry.type.is_cyp_class:
-            # These nodes couldn't be tracked (because it is for example a constant),
-            # so we let them pass silently
-            return True
-        return self.tracked_state.is_wlocked
-
-    def ensure_subexpr_rhs_locked(self, env):
-        for node in self.subexpr_nodes():
-            node.ensure_rhs_locked(env)
-
-    def ensure_subexpr_lhs_locked(self, env):
-        for node in self.subexpr_nodes():
-            node.ensure_lhs_locked(env)
-
-    def ensure_rhs_locked(self, env, is_dereferenced = False):
-        self.ensure_subexpr_rhs_locked(env)
-        if not self.tracked_state:
-            self.get_tracked_state(env)
-        if is_dereferenced and self.tracked_state:
-            if not self.is_rhs_locked(env):
-                if self.is_checklock():
-                    error(self.pos, "This expression is not correctly locked (read lock needed)")
-                elif self.is_autolock():
-                    self.set_autorlock(env)
-
-    def ensure_lhs_locked(self, env, is_dereferenced = False, is_top_lhs = False):
-        if not is_dereferenced:
-            self.ensure_subexpr_lhs_locked(env)
-        else:
-            self.ensure_subexpr_rhs_locked(env)
-        if not self.tracked_state:
-            self.get_tracked_state(env)
-            if self.is_autolock() and is_top_lhs:
-                #env.declare_autolocked(self)
-                self.tracked_as_lhs = True
-        if is_dereferenced and self.tracked_state:
-            if not self.is_lhs_locked(env):
-                if self.is_checklock():
-                    error(self.pos, "This expression is not correctly locked (write lock needed)")
-                elif self.is_autolock():
-                    self.set_autowlock(env)
 
     # ----------------- Result Allocation -----------------
 
@@ -2438,16 +2354,12 @@ class NameNode(AtomicExprNode):
             exception_check=None, exception_value=None):
         #print "NameNode.generate_assignment_code:", self.name ###
         entry = self.entry
-        tracked_state = self.tracked_state
         if entry is None:
             return  # There was an error earlier
 
         if (self.entry.type.is_ptr and isinstance(rhs, ListNode)
                 and not self.lhs_of_first_assignment and not rhs.in_module_scope):
             error(self.pos, "Literal list must be assigned to pointer at time of declaration")
-
-        if self.is_autolock() and tracked_state and (tracked_state.needs_wlock or tracked_state.needs_rlock):
-            code.putln("Cy_UNLOCK(%s);" % self.result())
 
         # is_pyglobal seems to be True for module level-globals only.
         # We use this to access class->tp_dict if necessary.
@@ -2546,11 +2458,6 @@ class NameNode(AtomicExprNode):
                             code.putln('new (&%s) decltype(%s){%s};' % (self.result(), self.result(), result))
                         elif result != self.result():
                             code.putln('%s = %s;' % (self.result(), result))
-                    if self.is_autolock():
-                        if tracked_state.needs_wlock:
-                            code.putln("Cy_WLOCK(%s);" % self.result())
-                        elif tracked_state.needs_rlock:
-                            code.putln("Cy_RLOCK(%s);" % self.result())
                 if debug_disposal_code:
                     print("NameNode.generate_assignment_code:")
                     print("...generating post-assignment code for %s" % rhs)
@@ -3981,16 +3888,6 @@ class IndexNode(_IndexingBaseNode):
             error(self.pos, "Invalid index type '%s'" % self.index.type)
         return self
 
-    def ensure_base_and_index_locked(self, env, func_type):
-        if func_type.is_const_method:
-            self.base.ensure_rhs_locked(env, is_dereferenced=True)
-        else:
-            self.base.ensure_lhs_locked(env, is_dereferenced=True)
-        if func_type.args[0].type.is_const:
-            self.index.ensure_rhs_locked(env, is_dereferenced=True)
-        else:
-            self.index.ensure_lhs_locked(env, is_dereferenced=True)
-
     def analyse_as_cpp(self, env, setting):
         base_type = self.base.type
         function = env.lookup_operator("[]", [self.base, self.index])
@@ -4009,7 +3906,6 @@ class IndexNode(_IndexingBaseNode):
                 self.is_temp = True
             if self.exception_value is None:
                 env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
-        self.ensure_base_and_index_locked(env, func_type)
         self.index = self.index.coerce_to(func_type.args[0].type, env)
         self.type = func_type.return_type
         if setting and not func_type.return_type.is_reference:
@@ -4065,7 +3961,6 @@ class IndexNode(_IndexingBaseNode):
                 self.result_code = "<error>"
                 return self
             self.type = setitem_type.args[1].type
-        self.ensure_base_and_index_locked(env, func_type)
         return self
 
     def analyse_as_c_function(self, env):
@@ -5164,13 +5059,6 @@ class SliceIndexNode(ExprNode):
                 index = not_a_constant
         return self.base.inferable_item_node(index)
 
-    def ensure_subexpr_lhs_locked(self, env):
-        self.base.ensure_lhs_locked(env)
-        if self.start:
-            self.start.ensure_rhs_locked(env)
-        elif self.stop:
-            self.stop.ensure_rhs_locked(env)
-
     def may_be_none(self):
         base_type = self.base.type
         if base_type:
@@ -5926,9 +5814,6 @@ class SimpleCallNode(CallNode):
     #  analysed       bool                 used internally
     #  overflowcheck  bool                 used internally
     #  explicit_cpp_self   bool            used internally
-    #  rlocked        bool                 used internally
-    #  wlocked        bool                 used internally
-    #  tracked_state  bool                 used internally
     #  needs_deref    bool                 used internally
 
     subexprs = ['self', 'coerced_self', 'function', 'args', 'arg_tuple']
@@ -5942,9 +5827,6 @@ class SimpleCallNode(CallNode):
     analysed = False
     overflowcheck = False
     explicit_cpp_self = None
-    rlocked = False
-    wlocked = False
-    tracked_state = True  # Something random, anything that is not None
     needs_deref = False
 
     def compile_time_value(self, denv):
@@ -6276,58 +6158,6 @@ class SimpleCallNode(CallNode):
 
         self.overflowcheck = env.directives['overflowcheck']
 
-    def ensure_subexpr_rhs_locked(self, env):
-        func_type = self.function_type()
-        if func_type.is_pyobject:
-            self.arg_tuple.ensure_rhs_locked(env)
-        elif func_type.is_cfunction:
-            max_nargs = len(func_type.args)
-            actual_nargs = len(self.args)
-
-            # Check for args locks: read-lock for const args, write-locks for other
-            for i in range(min(max_nargs, actual_nargs)):
-                formal_arg = func_type.args[i]
-                actual_arg = self.args[i]
-                deref_flag = formal_arg.type.is_cyp_class
-                wlock_flag = deref_flag and not formal_arg.type.is_const
-                if wlock_flag:
-                    actual_arg.ensure_lhs_locked(env, is_dereferenced = True)
-                else:
-                    actual_arg.ensure_rhs_locked(env, is_dereferenced = deref_flag)
-            # XXX - Should we do something in a pyfunc case ?
-            if func_type.is_static_method:
-                pass # no need to lock the object on which a static method is called
-            elif func_type.is_const_method:
-                self.function.ensure_rhs_locked(env)
-            else:
-                self.function.ensure_lhs_locked(env)
-
-    def ensure_subexpr_lhs_locked(self, env):
-        # This may be seen a bit weird
-        # In fact, the only thing that changes between lhs & rhs analysis for function
-        # calls is that the result should be locked, but the subexpr analysis is
-        # exactly the same, because the result is not explicitely tied to args
-        # and base object (in case of a method call).
-        self.ensure_subexpr_rhs_locked(env)
-
-    def is_lhs_locked(self, env):
-        return self.wlocked
-
-    def is_rhs_locked(self, env):
-        return self.rlocked
-
-    def set_autorlock(self, env):
-        self.rlocked = True
-
-    def set_autowlock(self, env):
-        self.wlocked = True
-
-    def needs_rlock(self):
-        return self.rlocked
-
-    def needs_wlock(self):
-        return self.wlocked
-
     def calculate_result_code(self):
         return self.c_call_code()
 
@@ -6505,10 +6335,6 @@ class SimpleCallNode(CallNode):
                     else:
                         goto_error = ""
                     code.putln("%s%s; %s" % (lhs, rhs, goto_error))
-                    if self.wlocked:
-                        code.putln("Cy_WLOCK(%s);" % self.result())
-                    elif self.rlocked:
-                        code.putln("Cy_RLOCK(%s);" % self.result())
                 if self.type.is_pyobject and self.result():
                     self.generate_gotref(code)
                 elif self.type.is_cyp_class and self.result():
@@ -6516,10 +6342,6 @@ class SimpleCallNode(CallNode):
             if self.has_optional_args:
                 code.funcstate.release_temp(self.opt_arg_struct)
 
-    def generate_disposal_code(self, code):
-        if self.wlocked or self.rlocked:
-            code.putln("Cy_UNLOCK(%s);" % self.result())
-        ExprNode.generate_disposal_code(self, code)
 
 class NumPyMethodCallNode(ExprNode):
     # Pythran call to a NumPy function or method.
@@ -7648,22 +7470,6 @@ class AttributeNode(ExprNode):
 
     gil_message = "Accessing Python attribute"
 
-    def ensure_subexpr_rhs_locked(self, env):
-        if not self.entry:
-            self.obj.ensure_lhs_locked(env, is_dereferenced = True)
-        elif self.entry.is_cfunction:
-            if self.entry.type.is_static_method:
-                pass
-            elif self.entry.type.is_const_method:
-                self.obj.ensure_rhs_locked(env, is_dereferenced = True)
-            else:
-                self.obj.ensure_lhs_locked(env, is_dereferenced = True)
-        else:
-            self.obj.ensure_rhs_locked(env, is_dereferenced = True)
-
-    def ensure_subexpr_lhs_locked(self, env):
-        self.obj.ensure_lhs_locked(env, is_dereferenced = True)
-
     def is_cimported_module_without_shadow(self, env):
         return self.obj.is_cimported_module_without_shadow(env)
 
@@ -7806,10 +7612,6 @@ class AttributeNode(ExprNode):
             rhs.free_temps(code)
         else:
             select_code = self.result()
-            # XXX - Greater to have a getter, right ?
-            tracked_state = self.tracked_state
-            if self.is_autolock() and tracked_state and (tracked_state.needs_rlock or tracked_state.needs_wlock):
-                code.putln("Cy_UNLOCK(%s);" % select_code)
             if self.type.is_pyobject and self.use_managed_ref:
                 rhs.make_owned_reference(code)
                 rhs.generate_giveref(code)
@@ -7831,11 +7633,6 @@ class AttributeNode(ExprNode):
                         select_code,
                         rhs.move_result_rhs_as(self.ctype())))
                         #rhs.result()))
-            if self.is_autolock():
-                if self.needs_wlock():
-                    code.putln("Cy_WLOCK(%s);" % select_code)
-                elif self.needs_rlock():
-                    code.putln("Cy_RLOCK(%s);" % select_code)
 
             rhs.generate_post_assignment_code(code)
             rhs.free_temps(code)
@@ -10552,6 +10349,7 @@ compile_time_unary_operators = {
 class UnopNode(ExprNode):
     #  operator     string
     #  operand      ExprNode
+    #  op_func_type CFuncType or None
     #
     #  Processing during analyse_expressions phase:
     #
@@ -10563,6 +10361,7 @@ class UnopNode(ExprNode):
 
     subexprs = ['operand']
     infix = True
+    op_func_type = None
 
     def calculate_constant_result(self):
         func = compile_time_unary_operators[self.operator]
@@ -10679,6 +10478,7 @@ class UnopNode(ExprNode):
             self.type_error()
             return
         if entry:
+            self.op_func_type = entry.type
             self.exception_check = entry.type.exception_check
             self.exception_value = entry.type.exception_value
             if self.exception_check == '+':
@@ -10934,6 +10734,7 @@ class TypecastNode(ExprNode):
     #  declarator   CDeclaratorNode
     #  typecheck    boolean
     #  overloaded   boolean
+    #  op_func_type CFuncType or None
     #
     #  If used from a transform, one can if wanted specify the attribute
     #  "type" directly and leave base_type and declarator to None
@@ -10941,6 +10742,7 @@ class TypecastNode(ExprNode):
     subexprs = ['operand']
     base_type = declarator = type = None
     overloaded = False
+    op_func_type = None
 
     def type_dependencies(self, env):
         return ()
@@ -11010,6 +10812,8 @@ class TypecastNode(ExprNode):
             operator = 'operator ' + self.type.declaration_code('')
             entry = self.operand.type.scope.lookup_here(operator)
             self.overloaded = entry is not None
+            if entry:
+                self.op_func_type = entry.type
             if self.type.is_cyp_class:
                 self.is_temp = True
         if self.type.is_ptr and self.type.base_type.is_cfunction and self.type.base_type.nogil:
@@ -11584,6 +11388,7 @@ class BinopNode(ExprNode):
     #  operator     string
     #  operand1     ExprNode
     #  operand2     ExprNode
+    #  op_func_type CFuncType or None
     #
     #  Processing during analyse_expressions phase:
     #
@@ -11595,6 +11400,7 @@ class BinopNode(ExprNode):
 
     subexprs = ['operand1', 'operand2']
     inplace = False
+    op_func_type = None
 
     def calculate_constant_result(self):
         func = compile_time_binary_operators[self.operator]
@@ -11704,25 +11510,10 @@ class BinopNode(ExprNode):
                 env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
         if func_type.is_ptr:
             func_type = func_type.base_type
+        self.op_func_type = func_type
         if len(func_type.args) == 1:
-            if func_type.is_const_method:
-                self.operand1.ensure_rhs_locked(env, is_dereferenced = True)
-            else:
-                self.operand1.ensure_lhs_locked(env, is_dereferenced = True)
-            if func_type.args[0].type.is_const:
-                self.operand2.ensure_rhs_locked(env, is_dereferenced = True)
-            else:
-                self.operand2.ensure_lhs_locked(env, is_dereferenced = True)
             self.operand2 = self.operand2.coerce_to(func_type.args[0].type, env)
         else:
-            if func_type.args[0].type.is_const:
-                self.operand1.ensure_rhs_locked(env, is_dereferenced = True)
-            else:
-                self.operand1.ensure_lhs_locked(env, is_dereferenced = True)
-            if func_type.args[1].type.is_const:
-                self.operand2.ensure_rhs_locked(env, is_dereferenced = True)
-            else:
-                self.operand2.ensure_lhs_locked(env, is_dereferenced = True)
             self.operand1 = self.operand1.coerce_to(func_type.args[0].type, env)
             self.operand2 = self.operand2.coerce_to(func_type.args[1].type, env)
         self.type = func_type.return_type
@@ -13200,6 +12991,7 @@ class PrimaryCmpNode(ExprNode, CmpNode):
     #  operand1      ExprNode
     #  operand2      ExprNode
     #  cascade       CascadedCmpNode
+    #  cmp_func_type CFuncType or None
 
     #  We don't use the subexprs mechanism, because
     #  things here are too complicated for it to handle.
@@ -13211,6 +13003,7 @@ class PrimaryCmpNode(ExprNode, CmpNode):
     cascade = None
     coerced_operand2 = None
     is_memslice_nonecheck = False
+    cmp_func_type = None
 
     def infer_type(self, env):
         type1 = self.operand1.infer_type(env)
@@ -13242,12 +13035,6 @@ class PrimaryCmpNode(ExprNode, CmpNode):
     def compile_time_value(self, denv):
         operand1 = self.operand1.compile_time_value(denv)
         return self.cascaded_compile_time_value(operand1, denv)
-
-    #def check_rhs_locked(self, env):
-    #    self.operand1.check_rhs_locked(env)
-    #    self.operand2.check_rhs_locked(env)
-    #    if self.cascade:
-    #        self.cascade.check_rhs_locked(env)
 
     def analyse_types(self, env):
         self.operand1 = self.operand1.analyse_types(env)
@@ -13390,6 +13177,7 @@ class PrimaryCmpNode(ExprNode, CmpNode):
         func_type = entry.type
         if func_type.is_ptr:
             func_type = func_type.base_type
+        self.cmp_func_type = func_type
         self.exception_check = func_type.exception_check
         self.exception_value = func_type.exception_value
         if self.exception_check == '+':
@@ -13397,24 +13185,8 @@ class PrimaryCmpNode(ExprNode, CmpNode):
             if self.exception_value is None:
                 env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
         if len(func_type.args) == 1:
-            if func_type.is_const_method:
-                self.operand1.ensure_rhs_locked(env, is_dereferenced = True)
-            else:
-                self.operand1.ensure_lhs_locked(env, is_dereferenced = True)
-            if func_type.args[0].type.is_const:
-                self.operand2.ensure_rhs_locked(env, is_dereferenced = True)
-            else:
-                self.operand2.ensure_lhs_locked(env, is_dereferenced = True)
             self.operand2 = self.operand2.coerce_to(func_type.args[0].type, env)
         else:
-            if func_type.args[0].type.is_const:
-                self.operand1.ensure_rhs_locked(env, is_dereferenced = True)
-            else:
-                self.operand1.ensure_lhs_locked(env, is_dereferenced = True)
-            if func_type.args[1].type.is_const:
-                self.operand2.ensure_rhs_locked(env, is_dereferenced = True)
-            else:
-                self.operand2.ensure_lhs_locked(env, is_dereferenced = True)
             self.operand1 = self.operand1.coerce_to(func_type.args[0].type, env)
             self.operand2 = self.operand2.coerce_to(func_type.args[1].type, env)
         self.type = func_type.return_type
@@ -13459,12 +13231,6 @@ class PrimaryCmpNode(ExprNode, CmpNode):
             return False
         else:
             return self.operand1.check_const() and self.operand2.check_const()
-
-    def ensure_subexpr_rhs_locked(self, env):
-        self.operand1.ensure_rhs_locked(env)
-        self.operand2.ensure_rhs_locked(env)
-        if self.cascade:
-            self.cascade.ensure_rhs_locked(env)
 
     def calculate_result_code(self):
         operand1, operand2 = self.operand1, self.operand2
@@ -13576,16 +13342,6 @@ class CascadedCmpNode(Node, CmpNode):
     def has_constant_result(self):
         return self.constant_result is not constant_value_not_set and \
                self.constant_result is not not_a_constant
-
-    #def check_rhs_locked(self, env):
-    #    self.operand2.check_rhs_locked(env)
-    #    if self.cascade:
-    #        self.cascade.check_rhs_locked(env)
-
-    def ensure_rhs_locked(self, env):
-        self.operand2.ensure_rhs_locked(env)
-        if self.cascade:
-            self.cascade.ensure_rhs_locked(env)
 
     def analyse_types(self, env):
         self.operand2 = self.operand2.analyse_types(env)
@@ -14190,7 +13946,7 @@ class CoerceToTempNode(CoercionNode):
     #  to be stored in a temporary. It is only used if the
     #  argument node's result is not already in a temporary.
 
-    def __init__(self, arg, env):
+    def __init__(self, arg, env=None):
         CoercionNode.__init__(self, arg)
         self.type = self.arg.type.as_argument_type()
         self.constant_result = self.arg.constant_result
@@ -14206,14 +13962,6 @@ class CoerceToTempNode(CoercionNode):
 
     def may_be_none(self):
         return self.arg.may_be_none()
-
-    def ensure_rhs_locked(self, env, is_dereferenced = False):
-        self.arg.ensure_rhs_locked(env, is_dereferenced)
-        self.tracked_state = self.arg.tracked_state
-
-    def ensure_lhs_locked(self, env, is_dereferenced = False):
-        self.arg.ensure_lhs_locked(env, is_dereferenced)
-        self.tracked_state = self.arg.tracked_state
 
     def coerce_to_boolean(self, env):
         self.arg = self.arg.coerce_to_boolean(env)
@@ -14237,6 +13985,27 @@ class CoerceToTempNode(CoercionNode):
             else:
                 code.put_incref_memoryviewslice(self.result(), self.type,
                                             have_gil=not self.in_nogil_context)
+
+class CoerceToLockedTempNode(CoerceToTempNode):
+    # rlock_only    boolean
+
+    def __init__(self, arg, env=None, rlock_only=False):
+        self.rlock_only = rlock_only
+        if isinstance(arg, CoerceToTempNode):
+            arg = arg.arg
+        super(CoerceToLockedTempNode, self).__init__(arg, env)
+
+    def generate_result_code(self, code):
+        super(CoerceToLockedTempNode, self).generate_result_code(code)
+        if self.rlock_only:
+            code.putln("Cy_RLOCK(%s);" % self.result())
+        else:
+            code.putln("Cy_WLOCK(%s);" % self.result())
+
+    def generate_disposal_code(self, code):
+        code.putln("Cy_UNLOCK(%s);" % self.result())
+        super(CoerceToLockedTempNode, self).generate_disposal_code(code)
+
 
 class ProxyNode(CoercionNode):
     """

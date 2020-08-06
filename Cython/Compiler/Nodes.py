@@ -2136,7 +2136,7 @@ class FuncDefNode(StatNode, BlockNode):
                 code.put_var_incref_memoryviewslice(entry,
                                     have_gil=code.funcstate.gil_owned)
             # We have to Cy_INCREF the nogil classes (ccdef'ed ones)
-            elif entry.type.is_cyp_class and len(entry.cf_assignments) > 1:
+            elif entry.type.is_cyp_class and len(entry.cf_assignments) > 1 and not entry.is_self_arg:
                 code.put_cyincref(entry.cname)
         for entry in lenv.var_entries:
             if entry.is_arg and entry.cf_is_reassigned and not entry.in_closure:
@@ -2160,15 +2160,6 @@ class FuncDefNode(StatNode, BlockNode):
         if acquire_gil_for_var_decls_only:
             code.put_release_ensured_gil()
             code.funcstate.gil_owned = False
-
-        for node in lenv.autolocked_nodes:
-            if node.entry.is_variable and not node.entry.is_local and (node.needs_wlock() or node.needs_rlock()):
-                node_result = node.result()
-                code.putln("if (%s != NULL)" % node_result)
-                if node.needs_wlock():
-                    code.putln("    Cy_WLOCK(%s);" % node_result)
-                elif node.needs_rlock():
-                    code.putln("    Cy_RLOCK(%s);" % node_result)
 
         # -------------------------
         # ----- Function body -----
@@ -2325,23 +2316,6 @@ class FuncDefNode(StatNode, BlockNode):
             align_error_path_gil_to_success_path()
             code.put_label(code.return_from_error_cleanup_label)
 
-        for node in reversed(lenv.autolocked_nodes):
-            # We iterate in the reverse order to properly unlock
-            # nested locked objects (aka most nested first).
-
-            # For example, if we have the following situation:
-            # obj.sub_obj.attr = some_value
-            # If obj and sub_obj are both of autolocked types,
-            # the obj (name)node is declared before the sub_obj (attribute)node.
-            # If we unlock first obj, another thread could immediately acquire
-            # a write lock and change where sub_obj points to.
-            # We would then try to unlock the new sub_obj reference,
-            # which leads to a dangling lock on the previous reference
-            # (and attempt to unlock a non-locked ref).
-
-            if node.needs_wlock() or node.needs_rlock():
-                code.putln("Cy_UNLOCK(%s);" % node.result())
-
         for entry in lenv.var_entries:
             if not entry.used or entry.in_closure:
                 continue
@@ -2371,7 +2345,7 @@ class FuncDefNode(StatNode, BlockNode):
                     continue
                 if entry.type.needs_refcounting:
                     assure_gil('success')
-            if entry.type.is_cyp_class:
+            if entry.type.is_cyp_class and not entry.is_self_arg:
                 # We must check for NULL because it is possible to have
                 # NULL as a valid cypclass (with a typecast)
                 code.put_cyxdecref(entry.cname)
@@ -2741,11 +2715,8 @@ class CFuncDefNode(FuncDefNode):
             _cname = "this"
             entry = self.local_scope.declare(_name, _cname, _type, _pos, 'private')
             entry.is_variable = 1
-            # Even if it is checklock it should be OK to mess with self without locking
-            self_locking_state = self.local_scope.declare_tracked(entry)
-            self_locking_state.is_rlocked = self.is_const_method
-            self_locking_state.is_wlocked = not self.is_const_method
-
+            entry.is_self_arg = 1
+            self.local_scope.arg_entries.append(entry)
 
     def declare_cpdef_wrapper(self, env):
         if self.overridable:
@@ -5787,9 +5758,6 @@ class ExprStatNode(StatNode):
     def analyse_expressions(self, env):
         self.expr.result_is_used = False  # hint that .result() may safely be left empty
         self.expr = self.expr.analyse_expressions(env)
-        from . import ExprNodes
-        if isinstance(self.expr, ExprNodes.ExprNode):
-            self.expr.ensure_rhs_locked(env)
         # Repeat in case of node replacement.
         self.expr.result_is_used = False  # hint that .result() may safely be left empty
         return self
@@ -5861,9 +5829,6 @@ class SingleAssignmentNode(AssignmentNode):
     first = False
     is_overloaded_assignment = False
     declaration_only = False
-    needs_unlock = False
-    needs_rlock = False
-    needs_wlock = False
 
     def analyse_declarations(self, env):
         from . import ExprNodes
@@ -5960,14 +5925,7 @@ class SingleAssignmentNode(AssignmentNode):
 
         self.lhs = self.lhs.analyse_target_types(env)
         self.lhs.gil_assignment_check(env)
-        if self.lhs.is_subscript and self.lhs.base.type.is_cyp_class:
-            if self.lhs.type.is_const: # type of the formal 'value' argument of __setitem__
-                self.rhs.ensure_rhs_locked(env, is_dereferenced = True)
-            else:
-                self.rhs.ensure_lhs_locked(env, is_dereferenced = True)
-        else:
-            self.rhs.ensure_rhs_locked(env)
-        self.lhs.ensure_lhs_locked(env, is_top_lhs = True)
+
         unrolled_assignment = self.unroll_lhs(env)
         if unrolled_assignment:
             return unrolled_assignment
@@ -6191,11 +6149,10 @@ class CascadedAssignmentNode(AssignmentNode):
         for i, lhs in enumerate(self.lhs_list):
             lhs = self.lhs_list[i] = lhs.analyse_target_types(env)
             lhs.gil_assignment_check(env)
-            lhs.ensure_lhs_locked(env, is_top_lhs = True)
             lhs_types.add(lhs.type)
 
         rhs = self.rhs.analyse_types(env)
-        rhs.ensure_rhs_locked(env)
+
         # common special case: only one type needed on the LHS => coerce only once
         if len(lhs_types) == 1:
             # Avoid coercion for overloaded assignment operators.
@@ -6336,9 +6293,7 @@ class InPlaceAssignmentNode(AssignmentNode):
 
     def analyse_types(self, env):
         self.rhs = self.rhs.analyse_types(env)
-        self.rhs.ensure_rhs_locked(env)
         self.lhs = self.lhs.analyse_target_types(env)
-        self.rhs.ensure_lhs_locked(env)
 
         # When assigning to a fully indexed buffer or memoryview, coerce the rhs
         if self.lhs.is_memview_index or self.lhs.is_buffer_access:
@@ -6401,7 +6356,6 @@ class PrintStatNode(StatNode):
             stream = self.stream.analyse_expressions(env)
             self.stream = stream.coerce_to_pyobject(env)
         arg_tuple = self.arg_tuple.analyse_expressions(env)
-        arg_tuple.ensure_rhs_locked(env)
         self.arg_tuple = arg_tuple.coerce_to_pyobject(env)
         env.use_utility_code(printing_utility_code)
         if len(self.arg_tuple.args) == 1 and self.append_newline:
@@ -6503,7 +6457,6 @@ class DelStatNode(StatNode):
 
     child_attrs = ["args"]
     ignore_nonexisting = False
-    was_locked = False
 
     def analyse_declarations(self, env):
         for arg in self.args:
@@ -6515,14 +6468,11 @@ class DelStatNode(StatNode):
                 arg = self.args[i] = arg.analyse_del_expression(env)
             else:
                 arg = self.args[i] = arg.analyse_target_expression(env, None)
-            arg.ensure_lhs_locked(env)
             if arg.type.is_pyobject or (arg.is_name and arg.type.is_memoryviewslice):
                 if arg.is_name and arg.entry.is_cglobal:
                     error(arg.pos, "Deletion of global C variable")
             elif arg.type.is_ptr and arg.type.base_type.is_cpp_class or arg.type.is_cyp_class:
                 self.cpp_check(env)
-                if arg.type.is_cyp_class:
-                    self.was_locked = arg.needs_rlock() or arg.needs_wlock()
             elif arg.type.is_cpp_class:
                 error(arg.pos, "Deletion of non-heap C++ object")
             elif arg.is_subscript and arg.base.type is Builtin.bytearray_type:
@@ -6555,11 +6505,8 @@ class DelStatNode(StatNode):
                 arg.free_temps(code)
             elif arg.type.is_cyp_class:
                 arg.generate_evaluation_code(code)
-                if arg.type.lock_mode == "autolock" and self.was_locked:
-                    code.putln("Cy_UNLOCK(%s);" % arg.result())
-                else:
-                    code.putln("Cy_DECREF(%s);" % arg.result())
-                    code.putln("%s = NULL;" % arg.result())
+                code.putln("Cy_DECREF(%s);" % arg.result())
+                code.putln("%s = NULL;" % arg.result())
                 arg.generate_disposal_code(code)
             # else error reported earlier
 
@@ -6648,7 +6595,6 @@ class ReturnStatNode(StatNode):
             if self.in_async_gen:
                 error(self.pos, "Return with value in async generator")
             self.value = self.value.analyse_types(env)
-            self.value.ensure_rhs_locked(env)
             if return_type.is_void or return_type.is_returncode:
                 error(self.value.pos, "Return with value in void function")
             else:
@@ -6993,7 +6939,6 @@ class IfClauseNode(Node):
 
     def analyse_expressions(self, env):
         self.condition = self.condition.analyse_temp_boolean_expression(env)
-        self.condition.ensure_rhs_locked(env)
         self.body = self.body.analyse_expressions(env)
         return self
 
@@ -7125,7 +7070,6 @@ class WhileStatNode(LoopNode, StatNode):
     def analyse_expressions(self, env):
         if self.condition:
             self.condition = self.condition.analyse_temp_boolean_expression(env)
-            self.condition.ensure_rhs_locked(env)
         self.body = self.body.analyse_expressions(env)
         if self.else_clause:
             self.else_clause = self.else_clause.analyse_expressions(env)
@@ -7357,9 +7301,7 @@ class _ForInStatNode(LoopNode, StatNode):
 
     def analyse_expressions(self, env):
         self.target = self.target.analyse_target_types(env)
-        self.target.ensure_lhs_locked(env)
         self.iterator = self.iterator.analyse_expressions(env)
-        self.iterator.ensure_rhs_locked(env)
         self._create_item_node()  # must rewrap self.item after analysis
         self.item = self.item.analyse_expressions(env)
         if (not self.is_async and
@@ -7501,17 +7443,13 @@ class ForFromStatNode(LoopNode, StatNode):
     def analyse_expressions(self, env):
         from . import ExprNodes
         self.target = self.target.analyse_target_types(env)
-        self.target.ensure_lhs_locked(env)
         self.bound1 = self.bound1.analyse_types(env)
-        self.bound1.ensure_rhs_locked(env)
         self.bound2 = self.bound2.analyse_types(env)
-        self.bound2.ensure_rhs_locked(env)
         if self.step is not None:
             if isinstance(self.step, ExprNodes.UnaryMinusNode):
                 warning(self.step.pos, "Probable infinite loop in for-from-by statement. "
                         "Consider switching the directions of the relations.", 2)
             self.step = self.step.analyse_types(env)
-            self.step.ensure_rhs_locked(env)
 
         self.set_up_loop(env)
         target_type = self.target.type
@@ -8622,54 +8560,7 @@ class LockCypclassNode(StatNode):
 
     def analyse_expressions(self, env):
         self.obj = self.obj.analyse_types(env)
-        self.obj.ensure_rhs_locked(env)
-        if not hasattr(self.obj, 'entry'):
-            error(self.pos, "The (un)locking target has no entry")
-            return
-        if not self.obj.type.is_cyp_class:
-            error(self.pos, "Cannot (un)lock a non-cypclass variable !")
-            return
-
-        # FIXME: this is a bit redundant here
-        self.obj.get_tracked_state(env)
-        is_rlocked = self.obj.is_rhs_locked(env)
-        is_wlocked = self.obj.is_lhs_locked(env)
-
-        if self.obj.type.lock_mode != "nolock":
-            if self.state == "unclocked" and not (is_rlocked or is_wlocked):
-                error(self.pos, "Cannot unlock an already unlocked object !")
-
-            elif self.state == "rlocked" and is_rlocked:
-                error(self.pos, "Double read lock !")
-
-            elif self.state == "wlocked" and is_wlocked:
-                error(self.pos, "Double write lock !")
-
-
-        # We need to save states because in case of 'with unlocked' statement,
-        # we must know which lock has to be restored after the with body.
-        self.was_wlocked = is_wlocked
-        self.was_rlocked = is_rlocked and not is_wlocked
-
-        tracked_state = self.obj.tracked_state
-
-        if self.state == "rlocked":
-            tracked_state.is_rlocked = True
-            tracked_state.is_wlocked = False
-        elif self.state == "wlocked":
-            tracked_state.is_rlocked = False
-            tracked_state.is_wlocked = True
-        else:
-            tracked_state.is_rlocked = False
-            tracked_state.is_wlocked = False
-
         self.body = self.body.analyse_expressions(env)
-
-        #self.obj.entry.is_rlocked = self.was_rlocked
-        #self.obj.entry.is_wlocked = self.was_wlocked
-
-        tracked_state.is_rlocked = self.was_rlocked
-        tracked_state.is_wlocked = self.was_wlocked
         return self
 
     def generate_execution_code(self, code):

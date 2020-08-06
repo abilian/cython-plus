@@ -158,10 +158,6 @@ class Entry(object):
     # is_fused_specialized boolean Whether this entry of a cdef or def function
     #                              is a specialization
     # is_cgetter       boolean    Is a c-level getter function
-    # is_wlocked       boolean    Is locked with a write lock (used for cypclass)
-    # is_rlocked       boolean    Is locked with a read lock (used for cypclass)
-    # needs_rlock      boolean    The entry needs a read lock (used in autolock mode)
-    # needs_wlock      boolean    The entry needs a write lock (used in autolock mode)
     #
     # is_default       boolean    This entry is a compiler-generated default and
     #                             is not user-defined (e.g default contructor)
@@ -173,7 +169,7 @@ class Entry(object):
     # mro_index        integer    The index of the type where this entry was originally
     #                             declared in the mro of the cypclass where it is now
     #
-    # defining_classes   [CypClassType or CppClassType or CStructOrUnionType]
+    # defining_classes [CypClassType or CppClassType or CStructOrUnionType]
     #                             All the base classes that define an entry that this entry
     #                             overrides, if this entry represents a cypclass method
     #
@@ -251,10 +247,6 @@ class Entry(object):
     cf_used = True
     outer_entry = None
     is_cgetter = False
-    is_wlocked = False
-    is_rlocked = False
-    needs_rlock = False
-    needs_wlock = False
     is_default = False
     mro_index = 0
     from_type = None
@@ -335,14 +327,6 @@ class InnerEntry(Entry):
     def all_entries(self):
         return self.defining_entry.all_entries()
 
-class TrackedLockedEntry:
-    def __init__(self, entry, scope):
-        self.entry = entry
-        self.scope = scope
-        self.is_wlocked = False
-        self.is_rlocked = False
-        self.needs_wlock = False
-        self.needs_rlock = False
 
 class Scope(object):
     # name              string             Unqualified name
@@ -357,7 +341,6 @@ class Scope(object):
     # cfunc_entries     [Entry]            C function entries
     # c_class_entries   [Entry]            All extension type entries
     # cypclass_entries  [Entry]            All cypclass entries
-    # autolocked_nodes  [ExprNodes]        All autolocked nodes that needs unlocking
     # cname_to_entry    {string : Entry}   Temp cname to entry mapping
     # return_type       PyrexType or None  Return type of function owning scope
     # is_builtin_scope  boolean            Is the builtin scope of Python/Cython
@@ -420,7 +403,6 @@ class Scope(object):
         self.c_class_entries = []
         self.cypclass_entries = []
         self.defined_c_classes = []
-        self.autolocked_nodes = []
         self.imported_c_classes = {}
         self.cname_to_entry = {}
         self.identifier_to_entry = {}
@@ -429,7 +411,6 @@ class Scope(object):
         self.buffer_entries = []
         self.lambda_defs = []
         self.id_counters = {}
-        self.tracked_entries = {}
 
 
     def __deepcopy__(self, memo):
@@ -524,18 +505,6 @@ class Scope(object):
             if cypclass_scope:
                 for e, s in cypclass_scope.iter_cypclass_entries_and_scopes():
                     yield e, s
-
-    def declare_tracked(self, entry):
-        # Keying only with the name is wrong: if we have multiple attributes
-        # with the same name in different cypclass, this will conflict.
-        key = entry
-        self.tracked_entries[key] = TrackedLockedEntry(entry, self)
-        return self.tracked_entries[key]
-
-    def lookup_tracked(self, entry):
-        # We don't chain up the scopes on purpose: we want to keep things local
-        key = entry
-        return self.tracked_entries.get(key, None)
 
     def declare(self, name, cname, type, pos, visibility, shadow = 0, is_type = 0, create_wrapper = 0, from_type = None):
         # Create new entry, and add to dictionary if
@@ -2093,12 +2062,6 @@ class ModuleScope(Scope):
         from .TypeInference import PyObjectTypeInferer
         PyObjectTypeInferer().infer_types(self)
 
-    def declare_autolocked(self, node):
-        # Add an entry for autolocked cypclass
-        if not (node.type.is_cyp_class and node.type.lock_mode == "autolock"):
-            error(node.pos, "Trying to autolock a non (autolocked) cypclass object !")
-        self.autolocked_nodes.append(node)
-
 
 class LocalScope(Scope):
 
@@ -2125,19 +2088,9 @@ class LocalScope(Scope):
         if type.is_pyobject:
             entry.init = "0"
         entry.is_arg = 1
-        if type.is_cyp_class and type.lock_mode != "nolock":
-            arg_lock_state = self.declare_tracked(entry)
-            arg_lock_state.is_rlocked = type.is_const
-            arg_lock_state.is_wlocked = not type.is_const
         #entry.borrowed = 1 # Not using borrowed arg refs for now
         self.arg_entries.append(entry)
         return entry
-
-    def declare_autolocked(self, node):
-        # Add an entry for autolocked cypclass
-        if not (node.type.is_cyp_class and node.type.lock_mode == "autolock"):
-            error(node.pos, "Trying to autolock a non (autolocked) cypclass object !")
-        self.autolocked_nodes.append(node)
 
     def declare_var(self, name, type, pos,
                     cname = None, visibility = 'private',

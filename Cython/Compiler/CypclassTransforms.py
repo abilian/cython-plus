@@ -6,9 +6,11 @@
 from __future__ import absolute_import
 
 import cython
-cython.declare(Naming=object, PyrexTypes=object, EncodedString=object)
+cython.declare(Naming=object, PyrexTypes=object, EncodedString=object, error=object)
 
 from collections import defaultdict
+from contextlib import ExitStack
+from itertools import chain
 
 from . import Naming
 from . import Nodes
@@ -19,6 +21,7 @@ from . import TreeFragment
 
 from .StringEncoding import EncodedString
 from .ParseTreeTransforms import NormalizeTree, InterpretCompilerDirectives, DecoratorTransform, AnalyseDeclarationsTransform
+from .Errors import error
 
 #
 #   Visitor for wrapper cclass injection
@@ -444,3 +447,347 @@ def NAME(ARGDECLS):
 
         return method_wrapper
 
+
+class CypclassLockTransform(Visitor.EnvTransform):
+
+    class StackLock:
+        def __init__(self, transform, obj_entry, state):
+            self.transform = transform
+            self.state = state
+            self.entry = obj_entry
+
+        def __enter__(self):
+            state = self.state
+            entry = self.entry
+            self.old_rlocked = self.transform.rlocked[entry]
+            self.old_wlocked = self.transform.wlocked[entry]
+            if state == 'rlocked':
+                self.transform.rlocked[entry] += 1
+            elif state == 'wlocked':
+                self.transform.wlocked[entry] += 1
+            elif state == 'unlocked':
+                if self.rlocked > 0:
+                    self.transform.rlocked[entry] -= 1
+                elif self.wlocked > 0:
+                    self.transform.wlocked[entry] -= 1
+
+        def __exit__(self, *args):
+            entry = self.entry
+            self.transform.rlocked[entry] = self.old_rlocked
+            self.transform.wlocked[entry] = self.old_wlocked
+
+    def stacklock(self, obj_entry, state):
+        return self.StackLock(self, obj_entry, state)
+
+    class AccessContext:
+        def __init__(self, collector, reading=False, writing=False, deleting=False):
+            self.collector = collector
+            self.reading = reading
+            self.writing = writing
+            self.deleting = deleting
+
+        def __enter__(self):
+            self.reading, self.collector.reading = self.collector.reading, self.reading
+            self.writing, self.collector.writing = self.collector.writing, self.writing
+            self.deleting, self.collector.deleting = self.collector.deleting, self.deleting
+
+        def __exit__(self, *args):
+            self.collector.reading = self.reading
+            self.collector.writing = self.writing
+            self.collector.deleting = self.deleting
+
+    def accesscontext(self, reading=False, writing=False, deleting=False):
+        return self.AccessContext(self, reading=reading, writing=writing, deleting=deleting)
+
+    def __call__(self, root):
+        self.rlocked = defaultdict(int)
+        self.wlocked = defaultdict(int)
+        self.reading = False
+        self.writing = False
+        self.deleting = False
+        return super(CypclassLockTransform, self).__call__(root)
+
+    def reference_identifier(self, node):
+        while isinstance(node, ExprNodes.CoerceToTempNode): # works for CoerceToLockedTempNode too
+            node = node.arg
+        if node.is_name:
+            return node.entry
+        return None
+
+    def id_to_name(self, id):
+        return id.name
+
+    def lockcheck_on_context(self, node):
+        if self.writing or self.deleting:
+            return self.lockcheck_written(node)
+        elif self.reading:
+            return self.lockcheck_read(node)
+        return node
+
+    def lockcheck_read(self, read_node):
+        lock_mode = read_node.type.lock_mode
+        if lock_mode == "nolock":
+            return read_node
+        ref_id = self.reference_identifier(read_node)
+        if ref_id:
+            if not (self.rlocked[ref_id] > 0 or self.wlocked[ref_id] > 0):
+                if lock_mode == "checklock":
+                    error(read_node.pos, (
+                            "Reference '%s' is not correctly locked in this expression "
+                            "(read lock required)"
+                        ) % self.id_to_name(ref_id) )
+                elif lock_mode == "autolock":
+                    # for now, lock a temporary for each expression
+                    return ExprNodes.CoerceToLockedTempNode(read_node, self.current_env(), rlock_only=True)
+        else:
+            if lock_mode == "checklock":
+                error(read_node.pos, "This expression is not correctly locked (read lock required)")
+            elif lock_mode == "autolock":
+                if not isinstance(read_node, ExprNodes.CoerceToLockedTempNode):
+                    return ExprNodes.CoerceToLockedTempNode(read_node, self.current_env(), rlock_only=True)
+        return read_node
+
+    def lockcheck_written(self, written_node):
+        lock_mode = written_node.type.lock_mode
+        if lock_mode == "nolock":
+            return written_node
+        ref_id = self.reference_identifier(written_node)
+        if ref_id:
+            if not self.wlocked[ref_id] > 0:
+                if lock_mode == "checklock":
+                    error(written_node.pos, (
+                            "Reference '%s' is not correctly locked in this expression "
+                            "(write lock required)"
+                        ) % self.id_to_name(ref_id) )
+                elif lock_mode == "autolock":
+                    # for now, lock a temporary for each expression
+                    return ExprNodes.CoerceToLockedTempNode(written_node, self.current_env(), rlock_only=False)
+        else:
+            if lock_mode == "checklock":
+                error(written_node.pos, "This expression is not correctly locked (write lock required)")
+            elif lock_mode == "autolock":
+                if isinstance(written_node, ExprNodes.CoerceToLockedTempNode):
+                    written_node.rlock_only = False
+                else:
+                    return ExprNodes.CoerceToLockedTempNode(written_node, self.current_env())
+        return written_node
+
+    def lockcheck_written_or_read(self, node, reading=False):
+        if reading:
+            return self.lockcheck_read(node)
+        else:
+            return self.lockcheck_written(node)
+        return node
+
+    def lockcheck_if_subscript_rhs(self, lhs, rhs):
+        if lhs.is_subscript and lhs.base.type.is_cyp_class:
+            setitem = lhs.base.type.scope.lookup("__setitem__")
+            if setitem and len(setitem.type.args) == 2:
+                arg_type = setitem.type.args[1].type
+                if arg_type.is_cyp_class:
+                    return self.lockcheck_written_or_read(rhs, reading=arg_type.is_const)
+            # else: should have caused a previous error
+        return rhs
+
+    def visit_CFuncDefNode(self, node):
+        cyp_class_args = (e for e in node.local_scope.arg_entries if e.type.is_cyp_class)
+        with ExitStack() as locked_args_stack:
+            for arg in cyp_class_args:
+                is_rlocked = arg.type.is_const or arg.is_self_arg and node.entry.type.is_const_method
+                arg_id = arg
+                locked_args_stack.enter_context(self.stacklock(arg_id, "rlocked" if is_rlocked else "wlocked"))
+            self.visit(node.body)
+        return node
+
+    def visit_LockCypclassNode(self, node):
+        obj_ref_id = self.reference_identifier(node.obj)
+        if not obj_ref_id:
+            error(node.obj.pos, "Locking an unnamed reference")
+            return node
+        if not node.obj.type.is_cyp_class:
+            error(node.obj.pos, "Locking non-cypclass reference")
+            return node
+        with self.stacklock(obj_ref_id, node.state):
+            self.visit(node.body)
+        return node
+
+    def visit_Node(self, node):
+        with self.accesscontext(reading=True):
+            self.visitchildren(node)
+        return node
+
+    def visit_DelStatNode(self, node):
+        for arg in node.args:
+            arg_ref_id = self.reference_identifier(arg)
+            if self.rlocked[arg_ref_id] > 0 or self.wlocked[arg_ref_id] > 0:
+                error(arg.pos, "Deleting a locked cypclass reference")
+                return node
+        with self.accesscontext(deleting=True):
+            self.visitchildren(node)
+        return node
+
+    def visit_SingleAssignmentNode(self, node):
+        lhs_ref_id = self.reference_identifier(node.lhs)
+        if self.rlocked[lhs_ref_id] > 0 or self.wlocked[lhs_ref_id] > 0:
+            error(node.lhs.pos, "Assigning to a locked cypclass reference")
+            return node
+        node.rhs = self.lockcheck_if_subscript_rhs(node.lhs, node.rhs)
+        with self.accesscontext(writing=True):
+            self.visit(node.lhs)
+        with self.accesscontext(reading=True):
+            self.visit(node.rhs)
+        return node
+
+    def visit_CascadedAssignmentNode(self, node):
+        for lhs in node.lhs_list:
+            lhs_ref_id = self.reference_identifier(lhs)
+            if self.rlocked[lhs_ref_id] > 0 or self.wlocked[lhs_ref_id] > 0:
+                error(lhs.pos, "Assigning to a locked cypclass reference")
+                return node
+        for lhs in node.lhs_list:
+            node.rhs = self.lockcheck_if_subscript_rhs(lhs, node.rhs)
+        with self.accesscontext(writing=True):
+            for lhs in node.lhs_list:
+                self.visit(lhs)
+        with self.accesscontext(reading=True):
+            self.visit(node.rhs)
+        return node
+
+    def visit_WithTargetAssignmentStatNode(self, node):
+        target_id = self.reference_identifier(node.lhs)
+        if self.rlocked[target_id] > 0 or self.wlocked[target_id] > 0:
+            error(node.lhs.pos, "With expression target is a locked cypclass reference")
+            return node
+        node.rhs = self.lockcheck_if_subscript_rhs(node.lhs, node.rhs)
+        with self.accesscontext(writing=True):
+            self.visit(node.lhs)
+        with self.accesscontext(reading=True):
+            self.visit(node.rhs)
+        return node
+
+    def visit__ForInStatNode(self, node):
+        target_id = self.reference_identifier(node.target)
+        if self.rlocked[target_id] > 0 or self.wlocked[target_id] > 0:
+            error(node.target.pos, "For-Loop target is a locked cypclass reference")
+            return node
+        node.item = self.lockcheck_if_subscript_rhs(node.target, node.item)
+        with self.accesscontext(writing=True):
+            self.visit(node.target)
+        with self.accesscontext(reading=True):
+            self.visit(node.item)
+        self.visit(node.body)
+        self.visit(node.iterator)
+        if node.else_clause:
+            self.visit(node.else_clause)
+        return node
+
+    def visit_ExceptClauseNode(self, node):
+        if not node.target:
+            self.visitchildren(node)
+        else:
+            target_id = self.reference_identifier(node.target)
+            if self.rlocked[target_id] > 0 or self.wlocked[target_id] > 0:
+                error(node.target.pos, "Except clause target is a locked cypclass reference")
+                return node
+            with self.accesscontext(writing=True):
+                self.visit(node.target)
+            for p in node.pattern:
+                self.visit(p)
+            self.visit(node.body)
+        return node
+
+    def visit_AttributeNode(self, node):
+        if node.obj.type and node.obj.type.is_cyp_class:
+            if node.is_called:
+                if not node.type.is_static_method:
+                    node.obj = self.lockcheck_written_or_read(node.obj, reading=node.type.is_const_method)
+            else:
+                node.obj = self.lockcheck_on_context(node.obj)
+        with self.accesscontext(reading=True):
+            self.visitchildren(node)
+        return node
+
+    def visit_SimpleCallNode(self, node):
+        for i, arg in enumerate(node.args or ()): # provide an empty tuple fallback in case node.args is None
+            if arg.type.is_cyp_class:
+                node.args[i] = self.lockcheck_written_or_read(arg, reading=arg.type.is_const)
+        # TODO: lock callable objects
+        with self.accesscontext(reading=True):
+            self.visitchildren(node)
+        return node
+
+    def visit_IndexNode(self, node):
+        if node.base.type.is_cyp_class:
+            func_entry = None
+            if self.deleting:
+                func_entry = node.base.type.scope.lookup("__delitem__")
+            elif self.writing:
+                func_entry = node.base.type.scope.lookup("__setitem__")
+            elif self.reading:
+                func_entry = node.base.type.scope.lookup("__getitem__")
+            if func_entry:
+                func_type = func_entry.type
+                node.base = self.lockcheck_written_or_read(node.base, reading=func_type.is_const_method)
+                if len(func_type.args):
+                    node.index = self.lockcheck_written_or_read(node.index, reading=func_type.args[0].type.is_const)
+        with self.accesscontext(reading=True):
+            self.visitchildren(node)
+        return node
+
+    def _visit_binop(self, node, func_type):
+        if func_type is not None:
+            if node.operand1.type.is_cyp_class and len(func_type.args) == 1:
+                node.operand1 = self.lockcheck_written_or_read(node.operand1, reading=func_type.is_const_method)
+                arg_type = func_type.args[0].type
+                if arg_type.is_cyp_class:
+                    node.operand2 = self.lockcheck_written_or_read(node.operand2, reading=arg_type.is_const)
+            elif len(func_type.args) == 2:
+                arg1_type = func_type.args[0].type
+                if arg1_type.is_cyp_class:
+                    node.operand1 = self.lockcheck_written_or_read(node.operand1, reading=arg1_type.is_const)
+                arg2_type = func_type.args[1].type
+                if arg2_type.is_cyp_class:
+                    node.operand2 = self.lockcheck_written_or_read(node.operand2, reading=arg2_type.is_const)
+
+    def visit_BinopNode(self, node):
+        func_type = node.op_func_type
+        self._visit_binop(node, func_type)
+        with self.accesscontext(reading=True):
+            self.visitchildren(node)
+        return node
+
+    def visit_PrimaryCmpNode(self, node):
+        func_type = node.cmp_func_type
+        self._visit_binop(node, func_type)
+        with self.accesscontext(reading=True):
+            self.visitchildren(node)
+        return node
+
+    def visit_InPlaceAssignmentNode(self, node):
+        # operator = "operator%s="% node.operator
+        # if node.lhs.type.is_cyp_class:
+            # TODO: get operator function type and treat it like a binop with lhs and rhs
+        with self.accesscontext(reading=True, writing=True):
+            self.visit(node.lhs)
+        with self.accesscontext(reading=True):
+            self.visit(node.rhs)
+        return node
+
+    def _visit_unop(self, node, func_type):
+        if func_type is not None:
+            if node.operand.type.is_cyp_class and len(func_type.args) == 0:
+                node.operand = self.lockcheck_written_or_read(node.operand, reading=func_type.is_const_method)
+
+    def visit_UnopNode(self, node):
+        func_type = node.op_func_type
+        self._visit_unop(node, func_type)
+        with self.accesscontext(reading=True):
+            self.visitchildren(node)
+        return node
+
+    def visit_TypecastNode(self, node):
+        func_type = node.op_func_type
+        self._visit_unop(node, func_type)
+        with self.accesscontext(reading=True):
+            self.visitchildren(node)
+        return node

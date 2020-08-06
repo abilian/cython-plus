@@ -69,6 +69,8 @@ def test_lock_traversal(n):
     42
     """
     container = Container()
-    with rlocked container, wlocked container.object:
-        argument_recursivity(container.object, n)
-        print container.object.getter()
+    with rlocked container:
+        contained = container.object
+        with wlocked contained:
+            argument_recursivity(contained, n)
+            print contained.getter()

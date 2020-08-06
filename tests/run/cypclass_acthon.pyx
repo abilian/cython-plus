@@ -46,8 +46,9 @@ cdef cypclass BasicQueue(ActhonQueueInterface) checklock:
     one_message_processed = next_message.activate()
     if one_message_processed:
       if next_message._sync_method is not NULL:
-        with wlocked next_message._sync_method:
-          next_message._sync_method.removeActivity(next_message)
+        next_sync_method = next_message._sync_method
+        with wlocked next_sync_method:
+          next_sync_method.removeActivity(next_message)
     else:
       self._queue.push_back(next_message)
       # Don't forget to incref to avoid premature deallocation
@@ -125,8 +126,9 @@ cdef cypclass ActivityCounterSync(ActhonSyncInterface) checklock:
   bint isActivable(self) const:
     cdef bint res = True
     if self.previous_sync is not NULL:
-      with rlocked self.previous_sync:
-        res = self.previous_sync.isCompleted()
+      prev_sync = self.previous_sync
+      with rlocked prev_sync:
+        res = prev_sync.isCompleted()
     return res
 
 cdef cypclass A checklock activable:

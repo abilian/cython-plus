@@ -26,10 +26,10 @@ def incorrect_locks():
     take_read_locked(obj)
 
 _ERRORS = u"""
-20:4: This expression is not correctly locked (write lock needed)
-21:4: This expression is not correctly locked (read lock needed)
-23:8: This expression is not correctly locked (write lock needed)
-24:26: This expression is not correctly locked (write lock needed)
-25:4: This expression is not correctly locked (read lock needed)
-26:21: This expression is not correctly locked (read lock needed)
+20:4: Reference 'obj' is not correctly locked in this expression (write lock required)
+21:4: Reference 'obj' is not correctly locked in this expression (read lock required)
+23:8: Reference 'obj' is not correctly locked in this expression (write lock required)
+24:26: Reference 'obj' is not correctly locked in this expression (write lock required)
+25:4: Reference 'obj' is not correctly locked in this expression (read lock required)
+26:21: Reference 'obj' is not correctly locked in this expression (write lock required)
 """

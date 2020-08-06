@@ -13130,6 +13130,10 @@ class PrimaryCmpNode(ExprNode, CmpNode):
 
     def analyse_cpp_py_comparison(self, env):
         operator = self.operator
+        if self.operator in ('is', 'is_not'):
+            # non-overridable comparisons, let cpp analysis decide whether this is an error
+            self.analyse_cpp_comparison(env)
+            return self
         if self.operand2.type.is_cyp_class and operator in ("in", "not_in"):
             # swap operands
             self.operand1, self.operand2 = self.operand2, self.operand1

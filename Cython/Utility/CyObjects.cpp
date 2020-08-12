@@ -19,9 +19,18 @@
     #define CyObject_ATOMIC_REFCOUNT_TYPE atomic_int
     #define CyObject_NO_OWNER -1
     #define CyObject_MANY_OWNERS -2
-    #define CyObject_MAX_READERS (1 << 30)
-    #define CyObject_LOCK_ERROR_OTHER_WRITER (1 << 0)
-    #define CyObject_LOCK_ERROR_OTHER_READER (1 << 1)
+
+    #define CyObject_WRITER_OFFSET (16)
+    #define CyObject_FETCH_CONTENDERS_ADD_WRITER(n) n.fetch_add((1 << CyObject_WRITER_OFFSET))
+    #define CyObject_FETCH_CONTENDERS_SUB_WRITER(n) n.fetch_sub((1 << CyObject_WRITER_OFFSET))
+    #define CyObject_FETCH_CONTENDERS_ADD_READER(n) n.fetch_add(1)
+    #define CyObject_FETCH_CONTENDERS_SUB_READER(n) n.fetch_sub(1)
+    #define CyObject_WRITERS_FROM_CONTENDERS(n) (n >> CyObject_WRITER_OFFSET)
+    #define CyObject_READERS_FROM_CONTENDERS(n) (n & ((1 << CyObject_WRITER_OFFSET) -1))
+    #define CyObject_HAS_WRITER_CONTENDERS(n) (n > (1 << CyObject_WRITER_OFFSET) - 1)
+
+    #define CyObject_CONTENDING_WRITER_FLAG (1 << 0)
+    #define CyObject_CONTENDING_READER_FLAG (1 << 1)
 
     #include <pthread.h>
 
@@ -40,6 +49,7 @@
         pthread_cond_t wait_writer_depart;
         atomic<pid_t> owner_id;
         atomic_int32_t readers_nb;
+        atomic_uint32_t contenders;
         uint32_t write_count;
         public:
             RecursiveUpgradeableRWLock() {
@@ -49,6 +59,7 @@
                 this->owner_id = CyObject_NO_OWNER;
                 this->readers_nb = 0;
                 this->write_count = 0;
+                this->contenders = 0;
             }
             void wlock();
             void rlock();
@@ -310,6 +321,8 @@
 void RecursiveUpgradeableRWLock::rlock() {
     pid_t caller_id = syscall(SYS_gettid);
 
+    CyObject_FETCH_CONTENDERS_ADD_READER(this->contenders);
+
     if (this->owner_id == caller_id) {
         ++this->readers_nb;
         return;
@@ -329,9 +342,16 @@ void RecursiveUpgradeableRWLock::rlock() {
 int RecursiveUpgradeableRWLock::tryrlock() {
     pid_t caller_id = syscall(SYS_gettid);
 
+    int contenders = CyObject_FETCH_CONTENDERS_ADD_READER(this->contenders);
+
     if (this->owner_id == caller_id) {
         ++this->readers_nb;
         return 0;
+    }
+
+    if (CyObject_HAS_WRITER_CONTENDERS(contenders)) {
+        CyObject_FETCH_CONTENDERS_SUB_READER(this->contenders);
+        return CyObject_CONTENDING_WRITER_FLAG;
     }
 
     // we must lock here, because a trylock could fail also when another thread is currently read-locking or read-unlocking
@@ -339,8 +359,9 @@ int RecursiveUpgradeableRWLock::tryrlock() {
     pthread_mutex_lock(&this->guard);
 
     if (this->write_count > 0) {
-        return CyObject_LOCK_ERROR_OTHER_WRITER;
         pthread_mutex_unlock(&this->guard);
+        CyObject_FETCH_CONTENDERS_SUB_READER(this->contenders);
+        return CyObject_CONTENDING_WRITER_FLAG;
     }
 
     this->owner_id = this->readers_nb++ ? CyObject_MANY_OWNERS : caller_id;
@@ -364,10 +385,14 @@ void RecursiveUpgradeableRWLock::unrlock() {
     }
 
     pthread_mutex_unlock(&this->guard);
+
+    CyObject_FETCH_CONTENDERS_SUB_READER(this->contenders);
 }
 
 void RecursiveUpgradeableRWLock::wlock() {
     pid_t caller_id = syscall(SYS_gettid);
+
+    CyObject_FETCH_CONTENDERS_ADD_WRITER(this->contenders);
 
     if (this->owner_id == caller_id) {
         if (this->write_count) {
@@ -411,11 +436,22 @@ void RecursiveUpgradeableRWLock::wlock() {
 int RecursiveUpgradeableRWLock::trywlock() {
     pid_t caller_id = syscall(SYS_gettid);
 
+    uint32_t contenders = CyObject_FETCH_CONTENDERS_ADD_WRITER(this->contenders);
+
     if (this->owner_id == caller_id) {
         if (this->write_count) {
             ++this->write_count;
             return 0;
         }
+    }
+
+    if (CyObject_HAS_WRITER_CONTENDERS(contenders) > 0) {
+        CyObject_FETCH_CONTENDERS_SUB_WRITER(this->contenders);
+        return CyObject_CONTENDING_WRITER_FLAG;
+    }
+    if (contenders > 0) {
+        CyObject_FETCH_CONTENDERS_SUB_WRITER(this->contenders);
+        return CyObject_CONTENDING_READER_FLAG;
     }
 
     if (pthread_mutex_trylock(&this->guard) != 0) {
@@ -424,19 +460,21 @@ int RecursiveUpgradeableRWLock::trywlock() {
         // that way we would not detect when an unlock overlaps with this trylock,
         // but also all the contending readers and / or writers could leave while we block,
         // so we wouldn't detect those contentions either.
-        return CyObject_LOCK_ERROR_OTHER_WRITER | CyObject_LOCK_ERROR_OTHER_READER;
+        return CyObject_CONTENDING_WRITER_FLAG | CyObject_CONTENDING_READER_FLAG;
     }
 
     if (this->owner_id != caller_id) {
 
         if (this->readers_nb > 0) {
             pthread_mutex_unlock(&this->guard);
-            return CyObject_LOCK_ERROR_OTHER_READER;
+            CyObject_FETCH_CONTENDERS_SUB_WRITER(this->contenders);
+            return CyObject_CONTENDING_READER_FLAG;
         }
 
         if (this->write_count > 0) {
             pthread_mutex_unlock(&this->guard);
-            return CyObject_LOCK_ERROR_OTHER_WRITER;
+            CyObject_FETCH_CONTENDERS_SUB_WRITER(this->contenders);
+            return CyObject_CONTENDING_WRITER_FLAG;
         }
 
         this->owner_id = caller_id;

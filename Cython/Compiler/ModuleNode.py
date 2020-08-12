@@ -926,7 +926,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
     def generate_cyp_class_deferred_definitions(self, env, code, definition):
         """
-            Generate all cypclass method definitions, deferred till now
+            Generate all cypclass method definitions, deferred till now.
         """
 
         for entry, scope in env.iter_cypclass_entries_and_scopes():
@@ -948,7 +948,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
     def generate_cyp_class_attrs_destructor_definition(self, entry, code):
         """
-            Generate destructor definition for the given cypclass entry
+            Generate destructor definition for the given cypclass entry.
         """
 
         scope = entry.type.scope
@@ -966,7 +966,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
     def generate_cyp_class_activate_function(self, entry, code):
         """
-            Generate activate function for activable cypclass entries
+            Generate activate function for activable cypclass entries.
         """
 
         active_self_entry = entry.type.scope.lookup_here("<active_self>")
@@ -1016,7 +1016,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
     def generate_cyp_class_activated_class(self, entry, code):
         """
-            Generate activated class
+            Generate activated cypclass.
         """
 
         from . import Builtin
@@ -1085,7 +1085,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("if (this->%s != NULL) {" % queue_attr_cname)
             code.putln("Cy_WLOCK(%s);" % queue_attr_cname)
             code.putln("this->%s->push(message);" % queue_attr_cname)
-            code.putln("Cy_UNLOCK(%s);" % queue_attr_cname)
+            code.putln("Cy_UNWLOCK(%s);" % queue_attr_cname)
             code.putln("} else {")
             code.putln("/* We should definitely shout here */")
             code.putln('fprintf(stderr, "Acthon error: No queue to push to for %s remote call !\\n");' % reified_function_entry.name)
@@ -1098,7 +1098,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
     def generate_cyp_class_reifying_entries(self, entry, code):
         """
-            Generate code to reify the cypclass entry ? -> TODO what does this do exactly ?
+            Generate code to reify the cypclass entries.
         """
 
         target_object_type = entry.type
@@ -1217,7 +1217,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("if (this->%s != NULL) {" % sync_attr_cname)
             code.putln("if (!Cy_TRYRLOCK(this->%s)) {" % sync_attr_cname)
             code.putln("%s = this->%s->isActivable();" % (sync_result, sync_attr_cname))
-            code.putln("Cy_UNLOCK(this->%s);" % sync_attr_cname)
+            code.putln("Cy_UNRLOCK(this->%s);" % sync_attr_cname)
             code.putln("}")
             code.putln("if (%s == 0) return 0;" % sync_result)
             code.putln("}")
@@ -1297,19 +1297,22 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 num_unlock = 0
                 # Target object first, then arguments
                 code.putln("if (%s > %s) {" % (trylock_result, num_unlock))
-                code.putln("Cy_UNLOCK(this->%s);" % target_object_cname)
+                unlock_op = "Cy_UNRLOCK" if reified_function_entry.type.is_const_method else "Cy_UNWLOCK"
+                code.putln("%s(this->%s);" % (unlock_op, target_object_cname))
                 num_unlock += 1
                 for i, narg in enumerate(func_type.args[:narg_count]):
                     if narg.type.is_cyp_class:
                         code.putln("if (%s > %s) {" % (trylock_result, num_unlock))
-                        code.putln("Cy_UNLOCK(this->%s);" % narg.cname)
+                        unlock_op = "Cy_UNRLOCK" if narg.type.is_const else "Cy_UNWLOCK"
+                        code.putln("%s(this->%s);" % (unlock_op, narg.cname))
                         num_unlock += 1
                 if opt_arg_count and num_optional_if:
                     code.putln("if (this->%s != NULL) {" % opt_arg_name)
                     for opt_idx, optarg in enumerate(func_type.args[narg_count:]):
                         if optarg.type.is_cyp_class:
                             code.putln("if (%s > %s) {" % (trylock_result, num_unlock))
-                            code.putln("Cy_UNLOCK(this->%s->%s);" % (opt_arg_name, func_type.opt_arg_cname(optarg.name)))
+                            unlock_op = "Cy_UNRLOCK" if optarg.type.is_const else "Cy_UNWLOCK"
+                            code.putln("%s(this->%s->%s);" % (unlock_op, opt_arg_name, func_type.opt_arg_cname(optarg.name)))
                             num_unlock += 1
                     # Note: we do not respect the semantic order of end-blocks here for simplification purpose.
                     # This one is for the "not NULL opt arg" check
@@ -1330,8 +1333,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 ", ".join("this->%s" % arg_cname for arg_cname in reified_call_args_list)
                 )
             )
-            code.putln("Cy_UNLOCK(this->%s);" % target_object_cname)
-            put_cypclass_op_on_narg_optarg(lambda _: "Cy_UNLOCK", reified_function_entry.type, Naming.optional_args_cname, code)
+            unlock_op = "Cy_UNRLOCK" if reified_function_entry.type.is_const_method else "Cy_UNWLOCK"
+            code.putln("%s(this->%s);" % (unlock_op, target_object_cname))
+            arg_unlocker = lambda arg: "Cy_UNRLOCK" if arg.type.is_const else "Cy_UNWLOCK"
+            put_cypclass_op_on_narg_optarg(arg_unlocker, reified_function_entry.type, Naming.optional_args_cname, code)
             code.putln("/* Push result in the result object */")
             if does_return:
                 code.putln("Cy_WLOCK(this->%s);" % result_attr_cname)
@@ -1339,7 +1344,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     code.putln("this->%s->pushIntResult(result);" % result_attr_cname)
                 else:
                     code.putln("this->%s->pushVoidStarResult((void*)result);" % result_attr_cname)
-                code.putln("Cy_UNLOCK(this->%s);" % result_attr_cname)
+                code.putln("Cy_UNWLOCK(this->%s);" % result_attr_cname)
             code.putln("return 1;")
             code.putln("}")
 
@@ -1354,7 +1359,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
     def generate_cyp_class_wrapper_definition(self, type, wrapper_entry, constructor_entry, new_entry, alloc_entry, code):
         """
-            Generate cypclass constructor wrapper ? -> TODO what does this do exactly ?
+            Generate the cypclass constructor wrapper.
         """
 
         if type.templates:

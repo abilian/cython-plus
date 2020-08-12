@@ -676,7 +676,7 @@ def inject_cypclass_refcount_macros():
 
 def inject_cypclass_lock_macros():
     blocking_macro_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)], nogil = 1)
-    for macro in ("Cy_RLOCK", "Cy_WLOCK", "Cy_UNLOCK"):
+    for macro in ("Cy_RLOCK", "Cy_WLOCK", "Cy_UNWLOCK", "Cy_UNRLOCK"):
         builtin_scope.declare_builtin_cfunction(macro, blocking_macro_type, macro)
     nonblocking_macro_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)], nogil = 1)
     for macro in ("Cy_TRYRLOCK", "Cy_TRYWLOCK"):

@@ -465,11 +465,6 @@ class CypclassLockTransform(Visitor.EnvTransform):
                 self.transform.rlocked[entry] += 1
             elif state == 'wlocked':
                 self.transform.wlocked[entry] += 1
-            elif state == 'unlocked':
-                if self.rlocked > 0:
-                    self.transform.rlocked[entry] -= 1
-                elif self.wlocked > 0:
-                    self.transform.wlocked[entry] -= 1
 
         def __exit__(self, *args):
             entry = self.entry

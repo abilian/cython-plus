@@ -8546,7 +8546,7 @@ class EnsureGILNode(GILExitNode):
         code.put_ensure_gil(declare_gilstate=False)
 
 class LockCypclassNode(StatNode):
-    #  'with rlocked / wlocked [cypclass object]' or 'with unlocked [cypclass object]' statement
+    #  'with rlocked / wlocked [cypclass object]
     #
     #   state   string   'rlocked' or 'wlocked' or 'unlocked'
     #   obj     ExprNode the (un)locked object
@@ -8574,13 +8574,10 @@ class LockCypclassNode(StatNode):
 
         self.body.generate_execution_code(code)
 
-        # We must unlock if we held a lock previously, and relock if we unlocked.
-        if self.state != "unlocked":
-            code.putln("Cy_UNLOCK(%s);" % self.obj.result())
-        elif self.was_wlocked:
-            code.putln("Cy_WLOCK(%s);" % self.obj.result())
-        elif self.was_rlocked:
-            code.putln("Cy_RLOCK(%s);" % self.obj.result())
+        if self.state == "rlocked":
+            code.putln("Cy_UNRLOCK(%s);" % self.obj.result())
+        elif self.state == "wlocked":
+            code.putln("Cy_UNWLOCK(%s);" % self.obj.result())
 
 
 def cython_view_utility_code():

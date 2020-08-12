@@ -14007,7 +14007,10 @@ class CoerceToLockedTempNode(CoerceToTempNode):
             code.putln("Cy_WLOCK(%s);" % self.result())
 
     def generate_disposal_code(self, code):
-        code.putln("Cy_UNLOCK(%s);" % self.result())
+        if self.rlock_only:
+            code.putln("Cy_UNRLOCK(%s);" % self.result())
+        else:
+            code.putln("Cy_UNWLOCK(%s);" % self.result())
         super(CoerceToLockedTempNode, self).generate_disposal_code(code)
 
 

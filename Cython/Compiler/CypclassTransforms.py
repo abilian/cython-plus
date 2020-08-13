@@ -730,7 +730,8 @@ class CypclassLockTransform(Visitor.EnvTransform):
                 func_type = func_entry.type
                 node.base = self.lockcheck_written_or_read(node.base, reading=func_type.is_const_method)
                 if len(func_type.args):
-                    node.index = self.lockcheck_written_or_read(node.index, reading=func_type.args[0].type.is_const)
+                    if func_type.args[0].type.is_cyp_class:
+                        node.index = self.lockcheck_written_or_read(node.index, reading=func_type.args[0].type.is_const)
         with self.accesscontext(reading=True):
             self.visitchildren(node)
         return node

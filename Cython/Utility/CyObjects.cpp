@@ -60,10 +60,12 @@
         };
 
         class LogLock : public RecursiveUpgradeableRWLock {
+            static pthread_mutex_t log_guard;
             public:
                 void wlock();
                 void rlock();
         };
+        pthread_mutex_t LogLock::log_guard = PTHREAD_MUTEX_INITIALIZER;
 
         struct CyPyObject {
             PyObject_HEAD
@@ -477,12 +479,14 @@ void LogLock::rlock() {
 
     if (this->write_count > 0) {
         pid_t owner_id = this->owner_id;
+        pthread_mutex_lock(&(LogLock::log_guard));
         printf(
             "Contention with a writer detected while rlocking lock [%p] in thread #%d:\n"
             "  - lock was already wlocked by thread %d\n"
             "\n"
             ,this, caller_id, owner_id
         );
+        pthread_mutex_unlock(&(LogLock::log_guard));
     }
 
     while (this->write_count > 0) {
@@ -513,19 +517,23 @@ void LogLock::wlock() {
 
         if (this->readers_nb > 0) {
             if (owner_id == CyObject_MANY_OWNERS) {
+                pthread_mutex_lock(&(LogLock::log_guard));
                 printf(
                     "Contention with several other reader threads detected while wlocking lock [%p] in thread #%d:\n"
                     "\n"
                     ,this, caller_id
                 );
-                }
+                pthread_mutex_unlock(&(LogLock::log_guard));
+            }
             else  {
+                pthread_mutex_lock(&(LogLock::log_guard));
                 printf(
                     "Contention with a reader thread detected while wlocking lock [%p] in thread #%d:\n"
                     "  - reader thread is %d\n"
                     "\n"
                     ,this, caller_id, owner_id
                 );
+                pthread_mutex_unlock(&(LogLock::log_guard));
             }
         }
 
@@ -534,12 +542,14 @@ void LogLock::wlock() {
         }
 
         if (this->write_count > 0) {
+            pthread_mutex_lock(&(LogLock::log_guard));
             printf(
                 "Contention with another writer detected while wlocking lock [%p] in thread #%d:\n"
-                "  - lock owner is thread %d\n"
+                "  - lock was already wlocked by thread %d\n"
                 "\n"
                 ,this, caller_id, owner_id
             );
+            pthread_mutex_unlock(&(LogLock::log_guard));
         }
 
         while (this->write_count > 0) {

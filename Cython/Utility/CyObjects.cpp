@@ -12,309 +12,308 @@
 #endif /* Has GCC */
 
 #ifdef __cplusplus
-  #if __cplusplus >= 201103L
-    #include <atomic>
-    #include <cstdint>
-    using namespace std;
-    #define CyObject_ATOMIC_REFCOUNT_TYPE atomic_int
-    #define CyObject_NO_OWNER -1
-    #define CyObject_MANY_OWNERS -2
+    #if __cplusplus >= 201103L
+        #include <atomic>
+        #include <cstdint>
+        using namespace std;
+        #define CyObject_ATOMIC_REFCOUNT_TYPE atomic_int
+        #define CyObject_NO_OWNER -1
+        #define CyObject_MANY_OWNERS -2
 
-    #define CyObject_WRITER_OFFSET (16)
-    #define CyObject_FETCH_CONTENDERS_ADD_WRITER(n) n.fetch_add((1 << CyObject_WRITER_OFFSET))
-    #define CyObject_FETCH_CONTENDERS_SUB_WRITER(n) n.fetch_sub((1 << CyObject_WRITER_OFFSET))
-    #define CyObject_FETCH_CONTENDERS_ADD_READER(n) n.fetch_add(1)
-    #define CyObject_FETCH_CONTENDERS_SUB_READER(n) n.fetch_sub(1)
-    #define CyObject_WRITERS_FROM_CONTENDERS(n) (n >> CyObject_WRITER_OFFSET)
-    #define CyObject_READERS_FROM_CONTENDERS(n) (n & ((1 << CyObject_WRITER_OFFSET) -1))
-    #define CyObject_HAS_WRITER_CONTENDERS(n) (n > (1 << CyObject_WRITER_OFFSET) - 1)
+        #define CyObject_WRITER_OFFSET (16)
+        #define CyObject_FETCH_CONTENDERS_ADD_WRITER(n) n.fetch_add((1 << CyObject_WRITER_OFFSET))
+        #define CyObject_FETCH_CONTENDERS_SUB_WRITER(n) n.fetch_sub((1 << CyObject_WRITER_OFFSET))
+        #define CyObject_FETCH_CONTENDERS_ADD_READER(n) n.fetch_add(1)
+        #define CyObject_FETCH_CONTENDERS_SUB_READER(n) n.fetch_sub(1)
+        #define CyObject_WRITERS_FROM_CONTENDERS(n) (n >> CyObject_WRITER_OFFSET)
+        #define CyObject_READERS_FROM_CONTENDERS(n) (n & ((1 << CyObject_WRITER_OFFSET) -1))
+        #define CyObject_HAS_WRITER_CONTENDERS(n) (n > (1 << CyObject_WRITER_OFFSET) - 1)
 
-    #define CyObject_CONTENDING_WRITER_FLAG (1 << 0)
-    #define CyObject_CONTENDING_READER_FLAG (1 << 1)
+        #define CyObject_CONTENDING_WRITER_FLAG (1 << 0)
+        #define CyObject_CONTENDING_READER_FLAG (1 << 1)
 
-    #include <pthread.h>
+        #include <pthread.h>
 
-    #include <sys/types.h>
+        #include <sys/types.h>
 
-    #include <unistd.h>
-    #include <sys/syscall.h>
-    #include <vector>
+        #include <unistd.h>
+        #include <sys/syscall.h>
+        #include <vector>
 
-    #include <type_traits>
-
-
-    class RecursiveUpgradeableRWLock {
-        pthread_mutex_t guard;
-        pthread_cond_t wait_readers_depart;
-        pthread_cond_t wait_writer_depart;
-        atomic<pid_t> owner_id;
-        atomic_int32_t readers_nb;
-        atomic_uint32_t contenders;
-        uint32_t write_count;
-        public:
-            RecursiveUpgradeableRWLock() {
-                pthread_mutex_init(&this->guard, NULL);
-                pthread_cond_init(&this->wait_readers_depart, NULL);
-                pthread_cond_init(&this->wait_writer_depart, NULL);
-                this->owner_id = CyObject_NO_OWNER;
-                this->readers_nb = 0;
-                this->write_count = 0;
-                this->contenders = 0;
-            }
-            void wlock();
-            void rlock();
-            void unwlock();
-            void unrlock();
-            int tryrlock();
-            int trywlock();
-    };
-
-    struct CyPyObject {
-        PyObject_HEAD
-    };
-
-    class CyObject : public CyPyObject {
-        private:
-          CyObject_ATOMIC_REFCOUNT_TYPE nogil_ob_refcnt;
-          RecursiveUpgradeableRWLock ob_lock;
-        public:
-          CyObject(): nogil_ob_refcnt(1) {}
-          virtual ~CyObject() {}
-          void CyObject_INCREF();
-          int CyObject_DECREF();
-          int CyObject_GETREF();
-          void CyObject_RLOCK();
-          void CyObject_WLOCK();
-          void CyObject_UNRLOCK();
-          void CyObject_UNWLOCK();
-          int CyObject_TRYRLOCK();
-          int CyObject_TRYWLOCK();
-    };
-
-    /* All this is made available by member injection inside the module scope */
-
-    struct ActhonResultInterface : public CyObject {
-      virtual void pushVoidStarResult(void* result) = 0;
-      virtual void* getVoidStarResult() const = 0;
-      virtual void pushIntResult(int result) = 0;
-      virtual int getIntResult() const = 0;
-      operator int() { return this->getIntResult(); }
-      operator void*() { return this->getVoidStarResult(); }
-    };
-
-    struct ActhonMessageInterface;
-
-    struct ActhonSyncInterface : public CyObject {
-      virtual int isActivable() const = 0;
-      virtual int isCompleted() const = 0;
-      virtual void insertActivity(ActhonMessageInterface* msg) = 0;
-      virtual void removeActivity(ActhonMessageInterface* msg) = 0;
-    };
-
-    struct ActhonMessageInterface : public CyObject {
-      ActhonSyncInterface* _sync_method;
-      ActhonResultInterface* _result;
-      virtual int activate() = 0;
-      ActhonMessageInterface(ActhonSyncInterface* sync_method,
-        ActhonResultInterface* result_object);
-      virtual ~ActhonMessageInterface();
-    };
-
-    struct ActhonQueueInterface : public CyObject {
-      virtual void push(ActhonMessageInterface* message) = 0;
-      virtual int activate() = 0;
-      virtual int is_empty() const = 0;
-    };
-
-    struct ActhonActivableClass : public CyObject {
-      ActhonQueueInterface *_active_queue_class = NULL;
-      ActhonResultInterface *(*_active_result_class)(void);
-      ActhonActivableClass(){} // Used in Activated classes inheritance chain (base Activated calls this, derived calls the 2 args version below)
-      ActhonActivableClass(ActhonQueueInterface * queue_object, ActhonResultInterface *(*result_constructor)(void));
-      virtual ~ActhonActivableClass();
-    };
+        #include <type_traits>
 
 
-    /*
-     * Let Cy_INCREF, Cy_DECREF and Cy_XDECREF accept any argument type
-     * but only do the work when the argument is actually a CyObject
-     */
-    template <typename T, typename std::enable_if<!std::is_convertible<T, CyObject*>::value, int>::type = 0>
-    static inline void Cy_DECREF(T) {}
+        class RecursiveUpgradeableRWLock {
+            pthread_mutex_t guard;
+            pthread_cond_t wait_readers_depart;
+            pthread_cond_t wait_writer_depart;
+            atomic<pid_t> owner_id;
+            atomic_int32_t readers_nb;
+            atomic_uint32_t contenders;
+            uint32_t write_count;
+            public:
+                RecursiveUpgradeableRWLock() {
+                    pthread_mutex_init(&this->guard, NULL);
+                    pthread_cond_init(&this->wait_readers_depart, NULL);
+                    pthread_cond_init(&this->wait_writer_depart, NULL);
+                    this->owner_id = CyObject_NO_OWNER;
+                    this->readers_nb = 0;
+                    this->write_count = 0;
+                    this->contenders = 0;
+                }
+                void wlock();
+                void rlock();
+                void unwlock();
+                void unrlock();
+                int tryrlock();
+                int trywlock();
+        };
 
-    template <typename T, typename std::enable_if<!std::is_convertible<T, CyObject*>::value, int>::type = 0>
-    static inline void Cy_XDECREF(T) {}
+        struct CyPyObject {
+            PyObject_HEAD
+        };
 
-    template <typename T, typename std::enable_if<!std::is_convertible<T, CyObject*>::value, int>::type = 0>
-    static inline void Cy_INCREF(T) {}
+        class CyObject : public CyPyObject {
+            private:
+                CyObject_ATOMIC_REFCOUNT_TYPE nogil_ob_refcnt;
+                RecursiveUpgradeableRWLock ob_lock;
+            public:
+                CyObject(): nogil_ob_refcnt(1) {}
+                virtual ~CyObject() {}
+                void CyObject_INCREF();
+                int CyObject_DECREF();
+                int CyObject_GETREF();
+                void CyObject_RLOCK();
+                void CyObject_WLOCK();
+                void CyObject_UNRLOCK();
+                void CyObject_UNWLOCK();
+                int CyObject_TRYRLOCK();
+                int CyObject_TRYWLOCK();
+        };
 
-    template <typename T, typename std::enable_if<std::is_convertible<T, CyObject*>::value, int>::type = 0>
-    static inline void Cy_DECREF(T &ob) {
-        if(ob->CyObject_DECREF())
-            ob = NULL;
-    }
+        /* All this is made available by member injection inside the module scope */
 
-    template <typename T, typename std::enable_if<std::is_convertible<T, CyObject*>::value, int>::type = 0>
-    static inline void Cy_XDECREF(T &ob) {
-        if (ob != NULL) {
+        struct ActhonResultInterface : public CyObject {
+            virtual void pushVoidStarResult(void* result) = 0;
+            virtual void* getVoidStarResult() const = 0;
+            virtual void pushIntResult(int result) = 0;
+            virtual int getIntResult() const = 0;
+            operator int() { return this->getIntResult(); }
+            operator void*() { return this->getVoidStarResult(); }
+        };
+
+        struct ActhonMessageInterface;
+
+        struct ActhonSyncInterface : public CyObject {
+            virtual int isActivable() const = 0;
+            virtual int isCompleted() const = 0;
+            virtual void insertActivity(ActhonMessageInterface* msg) = 0;
+            virtual void removeActivity(ActhonMessageInterface* msg) = 0;
+        };
+
+        struct ActhonMessageInterface : public CyObject {
+            ActhonSyncInterface* _sync_method;
+            ActhonResultInterface* _result;
+            virtual int activate() = 0;
+            ActhonMessageInterface(ActhonSyncInterface* sync_method, ActhonResultInterface* result_object);
+            virtual ~ActhonMessageInterface();
+        };
+
+        struct ActhonQueueInterface : public CyObject {
+            virtual void push(ActhonMessageInterface* message) = 0;
+            virtual int activate() = 0;
+            virtual int is_empty() const = 0;
+        };
+
+        struct ActhonActivableClass : public CyObject {
+            ActhonQueueInterface *_active_queue_class = NULL;
+            ActhonResultInterface *(*_active_result_class)(void);
+            ActhonActivableClass(){} // Used in Activated classes inheritance chain (base Activated calls this, derived calls the 2 args version below)
+            ActhonActivableClass(ActhonQueueInterface * queue_object, ActhonResultInterface *(*result_constructor)(void));
+            virtual ~ActhonActivableClass();
+        };
+
+
+        /*
+            * Let Cy_INCREF, Cy_DECREF and Cy_XDECREF accept any argument type
+            * but only do the work when the argument is actually a CyObject
+            */
+        template <typename T, typename std::enable_if<!std::is_convertible<T, CyObject*>::value, int>::type = 0>
+        static inline void Cy_DECREF(T) {}
+
+        template <typename T, typename std::enable_if<!std::is_convertible<T, CyObject*>::value, int>::type = 0>
+        static inline void Cy_XDECREF(T) {}
+
+        template <typename T, typename std::enable_if<!std::is_convertible<T, CyObject*>::value, int>::type = 0>
+        static inline void Cy_INCREF(T) {}
+
+        template <typename T, typename std::enable_if<std::is_convertible<T, CyObject*>::value, int>::type = 0>
+        static inline void Cy_DECREF(T &ob) {
             if(ob->CyObject_DECREF())
-            ob = NULL;
-        }
-    }
-
-    template <typename T, typename std::enable_if<std::is_convertible<T, CyObject*>::value, int>::type = 0>
-    static inline void Cy_INCREF(T ob) {
-        if (ob != NULL)
-            ob->CyObject_INCREF();
-    }
-
-    static inline int _Cy_GETREF(CyObject *ob) {
-        return ob->CyObject_GETREF();
-    }
-
-    static inline void _Cy_RLOCK(CyObject *ob) {
-        if (ob != NULL) {
-            ob->CyObject_RLOCK();
-        }
-        else {
-            fprintf(stderr, "ERROR: trying to read lock NULL !\n");
-        }
-    }
-
-    static inline void _Cy_WLOCK(CyObject *ob) {
-        if (ob != NULL) {
-            ob->CyObject_WLOCK();
-        }
-        else {
-            fprintf(stderr, "ERROR: trying to write lock NULL !\n");
-        }
-    }
-
-    static inline void _Cy_UNRLOCK(CyObject *ob) {
-        if (ob != NULL) {
-            ob->CyObject_UNRLOCK();
-        }
-        else {
-            fprintf(stderr, "ERROR: trying to unrlock NULL !\n");
-        }
-    }
-
-    static inline void _Cy_UNWLOCK(CyObject *ob) {
-        if (ob != NULL) {
-            ob->CyObject_UNWLOCK();
-        }
-        else {
-            fprintf(stderr, "ERROR: trying to unwlock NULL !\n");
-        }
-    }
-
-    static inline int _Cy_TRYRLOCK(CyObject *ob) {
-        return ob->CyObject_TRYRLOCK();
-    }
-
-    static inline int _Cy_TRYWLOCK(CyObject *ob) {
-        return ob->CyObject_TRYWLOCK();
-    }
-
-    /*
-     * Check whether a CyObject is an instance of a given type.
-     * 
-     * template:
-     *  - T: the type
-     */
-    template <typename T, typename O>
-    static inline int isinstanceof(O ob) {
-        static_assert(std::is_convertible<T, CyObject *>::value, "wrong type 'T' for isinstanceof[T]");
-        return dynamic_cast<T>(ob) != NULL;
-    }
-
-    /*
-     * Cast from CyObject to PyObject:
-     *  - borrow an atomic reference
-     *  - return a new Python reference
-     * 
-     * Note: an optimisation could be to steal a reference but only decrement
-     * when Python already has a reference, because calls to this function
-     * are likely (certain even?) to be followed by a Cy_DECREF; stealing the
-     * reference would mean that Cy_DECREF should not be called after this.
-     */
-    static inline PyObject* __Pyx_PyObject_FromCyObject(CyObject * cy) {
-        // convert NULL to None
-        if (cy == NULL) {
-            Py_INCREF(Py_None);
-            return Py_None;
-        }
-        PyObject * ob = reinterpret_cast<PyObject *>(static_cast<CyPyObject *>(cy));
-        // artificial atomic increment the first time Python gets a reference
-        if (Py_REFCNT(ob) == 0)
-            cy->CyObject_INCREF();
-        // return a new Python reference
-        Py_INCREF(ob);
-        return ob;
-    }
-
-    /*
-     * Cast from PyObject to CyObject:
-     *  - borrow an Python reference
-     *  - return a new atomic reference
-     * 
-     * In case of conversion failure:
-     *  - raise an exception
-     *  - return NULL
-     * 
-     * template:
-     *  - U: the type of the underlying cypclass
-     */
-    template <typename U>
-    static inline U* __Pyx_PyObject_AsCyObject(PyObject * ob, PyTypeObject * type) {
-        // the PyObject is not of the expected type
-        if ( !PyType_IsSubtype(Py_TYPE(ob), type) ) {
-            PyErr_Format(PyExc_TypeError, "Cannot convert PyObject %s to CyObject %s", Py_TYPE(ob)->tp_name, type->tp_name);
-            return NULL;
+                ob = NULL;
         }
 
-        CyPyObject * wrapper = (CyPyObject *)ob;
-        U * underlying = dynamic_cast<U *>(static_cast<CyObject *>(wrapper));
-
-        // failed dynamic cast: should not happen
-        if (underlying == NULL) {
-            PyErr_Format(PyExc_TypeError, "Could not convert %s PyObject wrapper to its underlying CyObject", type->tp_name);
-            return NULL;
+        template <typename T, typename std::enable_if<std::is_convertible<T, CyObject*>::value, int>::type = 0>
+        static inline void Cy_XDECREF(T &ob) {
+            if (ob != NULL) {
+                if(ob->CyObject_DECREF())
+                    ob = NULL;
+            }
         }
 
-        // return a new atomic reference
-        underlying->CyObject_INCREF();
-        return underlying;
-    }
+        template <typename T, typename std::enable_if<std::is_convertible<T, CyObject*>::value, int>::type = 0>
+        static inline void Cy_INCREF(T ob) {
+            if (ob != NULL)
+                ob->CyObject_INCREF();
+        }
+
+        static inline int _Cy_GETREF(CyObject *ob) {
+            return ob->CyObject_GETREF();
+        }
+
+        static inline void _Cy_RLOCK(CyObject *ob) {
+            if (ob != NULL) {
+                ob->CyObject_RLOCK();
+            }
+            else {
+                fprintf(stderr, "ERROR: trying to read lock NULL !\n");
+            }
+        }
+
+        static inline void _Cy_WLOCK(CyObject *ob) {
+            if (ob != NULL) {
+                ob->CyObject_WLOCK();
+            }
+            else {
+                fprintf(stderr, "ERROR: trying to write lock NULL !\n");
+            }
+        }
+
+        static inline void _Cy_UNRLOCK(CyObject *ob) {
+            if (ob != NULL) {
+                ob->CyObject_UNRLOCK();
+            }
+            else {
+                fprintf(stderr, "ERROR: trying to unrlock NULL !\n");
+            }
+        }
+
+        static inline void _Cy_UNWLOCK(CyObject *ob) {
+            if (ob != NULL) {
+                ob->CyObject_UNWLOCK();
+            }
+            else {
+                fprintf(stderr, "ERROR: trying to unwlock NULL !\n");
+            }
+        }
+
+        static inline int _Cy_TRYRLOCK(CyObject *ob) {
+            return ob->CyObject_TRYRLOCK();
+        }
+
+        static inline int _Cy_TRYWLOCK(CyObject *ob) {
+            return ob->CyObject_TRYWLOCK();
+        }
+
+        /*
+            * Check whether a CyObject is an instance of a given type.
+            * 
+            * template:
+            *  - T: the type
+            */
+        template <typename T, typename O>
+        static inline int isinstanceof(O ob) {
+            static_assert(std::is_convertible<T, CyObject *>::value, "wrong type 'T' for isinstanceof[T]");
+            return dynamic_cast<T>(ob) != NULL;
+        }
+
+        /*
+            * Cast from CyObject to PyObject:
+            *  - borrow an atomic reference
+            *  - return a new Python reference
+            * 
+            * Note: an optimisation could be to steal a reference but only decrement
+            * when Python already has a reference, because calls to this function
+            * are likely (certain even?) to be followed by a Cy_DECREF; stealing the
+            * reference would mean that Cy_DECREF should not be called after this.
+            */
+        static inline PyObject* __Pyx_PyObject_FromCyObject(CyObject * cy) {
+            // convert NULL to None
+            if (cy == NULL) {
+                Py_INCREF(Py_None);
+                return Py_None;
+            }
+            PyObject * ob = reinterpret_cast<PyObject *>(static_cast<CyPyObject *>(cy));
+            // artificial atomic increment the first time Python gets a reference
+            if (Py_REFCNT(ob) == 0)
+                cy->CyObject_INCREF();
+            // return a new Python reference
+            Py_INCREF(ob);
+            return ob;
+        }
+
+        /*
+            * Cast from PyObject to CyObject:
+            *  - borrow an Python reference
+            *  - return a new atomic reference
+            * 
+            * In case of conversion failure:
+            *  - raise an exception
+            *  - return NULL
+            * 
+            * template:
+            *  - U: the type of the underlying cypclass
+            */
+        template <typename U>
+        static inline U* __Pyx_PyObject_AsCyObject(PyObject * ob, PyTypeObject * type) {
+            // the PyObject is not of the expected type
+            if ( !PyType_IsSubtype(Py_TYPE(ob), type) ) {
+                PyErr_Format(PyExc_TypeError, "Cannot convert PyObject %s to CyObject %s", Py_TYPE(ob)->tp_name, type->tp_name);
+                return NULL;
+            }
+
+            CyPyObject * wrapper = (CyPyObject *)ob;
+            U * underlying = dynamic_cast<U *>(static_cast<CyObject *>(wrapper));
+
+            // failed dynamic cast: should not happen
+            if (underlying == NULL) {
+                PyErr_Format(PyExc_TypeError, "Could not convert %s PyObject wrapper to its underlying CyObject", type->tp_name);
+                return NULL;
+            }
+
+            // return a new atomic reference
+            underlying->CyObject_INCREF();
+            return underlying;
+        }
 
 
-    /* Cast argument to CyObject* type. */
-    #define _CyObject_CAST(ob) ob
+        /* Cast argument to CyObject* type. */
+        #define _CyObject_CAST(ob) ob
 
-    #define Cy_GETREF(ob) (_Cy_GETREF(_CyObject_CAST(ob)))
-    #define Cy_GOTREF(ob)
-    #define Cy_XGOTREF(ob)
-    #define Cy_GIVEREF(ob)
-    #define Cy_XGIVEREF(ob)
-    #define Cy_RLOCK(ob) _Cy_RLOCK(ob)
-    #define Cy_WLOCK(ob) _Cy_WLOCK(ob)
-    #define Cy_UNRLOCK(ob) _Cy_UNRLOCK(ob)
-    #define Cy_UNWLOCK(ob) _Cy_UNWLOCK(ob)
-    #define Cy_TRYRLOCK(ob) _Cy_TRYRLOCK(ob)
-    #define Cy_TRYWLOCK(ob) _Cy_TRYWLOCK(ob)
-  #endif
+        #define Cy_GETREF(ob) (_Cy_GETREF(_CyObject_CAST(ob)))
+        #define Cy_GOTREF(ob)
+        #define Cy_XGOTREF(ob)
+        #define Cy_GIVEREF(ob)
+        #define Cy_XGIVEREF(ob)
+        #define Cy_RLOCK(ob) _Cy_RLOCK(ob)
+        #define Cy_WLOCK(ob) _Cy_WLOCK(ob)
+        #define Cy_UNRLOCK(ob) _Cy_UNRLOCK(ob)
+        #define Cy_UNWLOCK(ob) _Cy_UNWLOCK(ob)
+        #define Cy_TRYRLOCK(ob) _Cy_TRYRLOCK(ob)
+        #define Cy_TRYWLOCK(ob) _Cy_TRYWLOCK(ob)
+    #endif
 #endif
 
 
 /////////////// CyObjects ///////////////
 
 #ifdef __cplusplus
-  #include <cstdlib>
-  #include <cstddef>
+    #include <cstdlib>
+    #include <cstddef>
 // atomic is already included in ModuleSetupCode
 //  #include <atomic>
 #else
-  #error C++ needed for cython+ nogil classes
+    #error C++ needed for cython+ nogil classes
 #endif /* __cplusplus */
 
 
@@ -505,50 +504,50 @@ void RecursiveUpgradeableRWLock::unwlock() {
 
 void CyObject::CyObject_INCREF()
 {
-  atomic_fetch_add(&(this->nogil_ob_refcnt), 1);
+    atomic_fetch_add(&(this->nogil_ob_refcnt), 1);
 }
 
 int CyObject::CyObject_DECREF()
 {
-  if (atomic_fetch_sub(&(this->nogil_ob_refcnt), 1) == 1) {
-    delete this;
-    return 1;
-  }
-  return 0;
+    if (atomic_fetch_sub(&(this->nogil_ob_refcnt), 1) == 1) {
+        delete this;
+        return 1;
+    }
+    return 0;
 }
 
 int CyObject::CyObject_GETREF()
 {
-  return this->nogil_ob_refcnt;
+    return this->nogil_ob_refcnt;
 }
 
 void CyObject::CyObject_RLOCK()
 {
-  this->ob_lock.rlock();
+    this->ob_lock.rlock();
 }
 
 void CyObject::CyObject_WLOCK()
 {
-  this->ob_lock.wlock();
+    this->ob_lock.wlock();
 }
 
 int CyObject::CyObject_TRYRLOCK()
 {
-  return this->ob_lock.tryrlock();
+    return this->ob_lock.tryrlock();
 }
 
 int CyObject::CyObject_TRYWLOCK()
 {
-  return this->ob_lock.trywlock();
+    return this->ob_lock.trywlock();
 }
 void CyObject::CyObject_UNRLOCK()
 {
-  this->ob_lock.unrlock();
+    this->ob_lock.unrlock();
 }
 
 void CyObject::CyObject_UNWLOCK()
 {
-  this->ob_lock.unwlock();
+    this->ob_lock.unwlock();
 }
 
 

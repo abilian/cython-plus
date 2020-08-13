@@ -5962,6 +5962,7 @@ class SimpleCallNode(CallNode):
                 self.type = PyrexTypes.error_type
                 self.result_code = "<error>"
                 return
+            self.function = CoerceFromCallable(self.function)
         elif hasattr(self.function, 'entry'):
             overloaded_entry = self.function.entry
         elif self.function.is_subscript and self.function.is_fused_index:
@@ -13916,6 +13917,37 @@ class CoerceToBooleanNode(CoercionNode):
 
     def analyse_types(self, env):
         return self
+
+
+class CoerceFromCallable(CoercionNode):
+    # This node is used to wrap a callable cpp-typed node when it is called as part of a SimpleCallNode.
+    # The cpp type of the callable is replaced by the type of the operator() method during expression analysis;
+    # this node allows the underlying callable node to keep its original type.
+
+    def __init__(self, arg):
+        CoercionNode.__init__(self, arg)
+        self.type = arg.type
+
+    def generate_result_code(self, code):
+        self.arg.generate_result_code(code)
+
+    def result(self):
+        return self.arg.result()
+
+    def is_simple(self):
+        return self.arg.is_simple()
+
+    def may_be_none(self):
+        return self.arg.may_be_none()
+
+    def generate_evaluation_code(self, code):
+        self.arg.generate_evaluation_code(code)
+
+    def generate_disposal_code(self, code):
+        self.arg.generate_disposal_code(code)
+
+    def free_temps(self, code):
+        self.arg.free_temps(code)
 
 
 class CoerceToComplexNode(CoercionNode):

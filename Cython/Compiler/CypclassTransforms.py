@@ -693,7 +693,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
 
     def visit_AttributeNode(self, node):
         if node.obj.type and node.obj.type.is_cyp_class:
-            if node.is_called:
+            if node.is_called and node.type.is_cfunction:
                 if not node.type.is_static_method:
                     node.obj = self.lockcheck_written_or_read(node.obj, reading=node.type.is_const_method)
             else:
@@ -706,7 +706,13 @@ class CypclassLockTransform(Visitor.EnvTransform):
         for i, arg in enumerate(node.args or ()): # provide an empty tuple fallback in case node.args is None
             if arg.type.is_cyp_class:
                 node.args[i] = self.lockcheck_written_or_read(arg, reading=arg.type.is_const)
-        # TODO: lock callable objects
+        with self.accesscontext(reading=True):
+            self.visitchildren(node)
+        return node
+
+    def visit_CoerceFromCallable(self, node):
+        if node.arg.type.is_cyp_class:
+            node.arg = self.lockcheck_written_or_read(node.arg, reading=node.type.is_const_method)
         with self.accesscontext(reading=True):
             self.visitchildren(node)
         return node

@@ -554,15 +554,19 @@ void LogLock::wlock() {
     pthread_mutex_unlock(&this->guard);
 }
 
-
+/*
+ * Atomic counter increment and decrement implementation based on
+ * @source: https://www.boost.org/doc/libs/1_73_0/doc/html/atomic/usage_examples.html
+ */ 
 void CyObject::CyObject_INCREF()
 {
-    atomic_fetch_add(&(this->nogil_ob_refcnt), 1);
+    this->nogil_ob_refcnt.fetch_add(1, std::memory_order_relaxed);
 }
 
 int CyObject::CyObject_DECREF()
 {
-    if (atomic_fetch_sub(&(this->nogil_ob_refcnt), 1) == 1) {
+    if (this->nogil_ob_refcnt.fetch_sub(1, std::memory_order_release) == 1) {
+        std::atomic_thread_fence(std::memory_order_acquire);
         delete this;
         return 1;
     }

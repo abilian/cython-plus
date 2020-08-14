@@ -965,10 +965,7 @@ class CArgDeclNode(Node):
         default.make_owned_reference(code)
         result = default.result() if overloaded_assignment else default.result_as(self.type)
         code.putln("%s = %s;" % (target, result))
-        if self.type.is_cyp_class:
-            code.put_cygiveref(default.result())
-        else:
-            code.put_giveref(default.result(), self.type)
+        code.put_giveref(default.result(), self.type)
         default.generate_post_assignment_code(code)
         default.free_temps(code)
 
@@ -2127,7 +2124,10 @@ class FuncDefNode(StatNode, BlockNode):
         for entry in lenv.arg_entries:
             if not entry.type.is_memoryviewslice:
                 if (acquire_gil or entry.cf_is_reassigned) and not entry.in_closure:
-                    code.put_var_incref(entry)
+                    if entry.type.is_cyp_class and entry.is_self_arg:
+                        pass
+                    else:
+                        code.put_var_incref(entry)
             # Note: defaults are always incref-ed. For def functions, we
             #       we acquire arguments from object conversion, so we have
             #       new references. If we are a cdef function, we need to
@@ -2135,9 +2135,6 @@ class FuncDefNode(StatNode, BlockNode):
             elif is_cdef and entry.cf_is_reassigned:
                 code.put_var_incref_memoryviewslice(entry,
                                     have_gil=code.funcstate.gil_owned)
-            # We have to Cy_INCREF the nogil classes (ccdef'ed ones)
-            elif entry.type.is_cyp_class and len(entry.cf_assignments) > 1 and not entry.is_self_arg:
-                code.put_cyincref(entry.cname)
         for entry in lenv.var_entries:
             if entry.is_arg and entry.cf_is_reassigned and not entry.in_closure:
                 if entry.xdecref_cleanup:
@@ -2325,11 +2322,8 @@ class FuncDefNode(StatNode, BlockNode):
                     continue
             if entry.type.needs_refcounting:
                 assure_gil('success')
-            if entry.type.is_cyp_class:
-                code.put_cyxdecref(entry.cname)
-            else:
-                # FIXME ideally use entry.xdecref_cleanup but this currently isn't reliable
-                code.put_var_xdecref(entry, have_gil=gil_owned['success'])
+            # FIXME ideally use entry.xdecref_cleanup but this currently isn't reliable
+            code.put_var_xdecref(entry, have_gil=gil_owned['success'])
 
         # Decref any increfed args
         for entry in lenv.arg_entries:
@@ -2345,10 +2339,8 @@ class FuncDefNode(StatNode, BlockNode):
                     continue
                 if entry.type.needs_refcounting:
                     assure_gil('success')
-            if entry.type.is_cyp_class and not entry.is_self_arg:
-                # We must check for NULL because it is possible to have
-                # NULL as a valid cypclass (with a typecast)
-                code.put_cyxdecref(entry.cname)
+            if entry.type.is_cyp_class and entry.is_self_arg:
+                pass
             else:
                 # FIXME use entry.xdecref_cleanup - del arg seems to be the problem
                 code.put_var_xdecref(entry, have_gil=gil_owned['success'])
@@ -2358,15 +2350,13 @@ class FuncDefNode(StatNode, BlockNode):
 
         # ----- Return
         # This code is duplicated in ModuleNode.generate_module_init_func
-        if not lenv.nogil:
+        # We can always return a CythonExtensionType as it is nogil-compliant
+        if not lenv.nogil or self.return_type.is_cyp_class:
             default_retval = return_type.default_value
             err_val = self.error_value()
             if err_val is None and default_retval:
                 err_val = default_retval  # FIXME: why is err_val not used?
             code.put_xgiveref(Naming.retval_cname, return_type)
-        # We can always return a CythonExtensionType as it is nogil-compliant
-        if self.return_type.is_cyp_class:
-            code.put_cyxgiveref(Naming.retval_cname)
 
         if self.entry.is_special and self.entry.name == "__hash__":
             # Returning -1 for __hash__ is supposed to signal an error
@@ -3712,20 +3702,22 @@ class DefNodeWrapper(FuncDefNode):
         # ----- Non-error return cleanup
         code.put_label(code.return_label)
         for entry in lenv.var_entries:
-            if entry.is_arg and entry.type.is_pyobject:
+            if entry.is_arg:
+                # The conversion from PyObject to CyObject always creates a new CyObject reference.
+                # This decrements all arguments-as-variables converted straight from an actual argument.
+                # This includes CyObjects converted directly from a corresponding PyObject argument.
                 if entry.xdecref_cleanup:
                     code.put_var_xdecref(entry)
                 else:
                     code.put_var_decref(entry)
-            elif entry.is_arg and entry.type.is_cyp_class:
-                # The conversion from PyObject to CyObject creates a new CyObject reference.
-                code.put_cyxdecref(entry.cname)
         for entry in lenv.arg_entries:
             if entry.type.is_cyp_class:
-                # The conversion from PyObject to CyObject creates a new CyObject reference.
-                # Such a conversion occurs even when the argument is not explicitly marked
-                # as needing a conversion and declared as a variable in var_entries.
-                code.put_cyxdecref(entry.cname)
+                # The conversion from PyObject to CyObject always creates a new CyObject reference.
+                # This decrements CyObjects converted from generic PyObject args passed via tuple and kw dict.
+                if entry.xdecref_cleanup:
+                    code.put_var_xdecref(entry)
+                else:
+                    code.put_var_decref(entry)
 
         code.put_finish_refcount_context()
         if not self.return_type.is_void:
@@ -6626,7 +6618,7 @@ class ReturnStatNode(StatNode):
                 value = None
 
         if self.return_type.is_cyp_class:
-            code.put_cyxdecref(Naming.retval_cname)
+            code.put_xdecref(Naming.retval_cname, self.return_type)
 
         if value:
             value.generate_evaluation_code(code)

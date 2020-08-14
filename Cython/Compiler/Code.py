@@ -2103,30 +2103,8 @@ class CCodeWriter(object):
             return ''
         return '%s ' % ' '.join([mapper(m,m) for m in modifiers])
 
-    # CyObjects reference counting
 
-    def put_cygotref(self, cname):
-        self.putln("Cy_GOTREF(%s);" % cname)
-
-    def put_cygiveref(self, cname):
-        self.putln("Cy_GIVEREF(%s);" % cname)
-
-    def put_cyxgiveref(self, cname):
-        self.putln("Cy_XGIVEREF(%s);" % cname)
-
-    def put_cyxgotref(self, cname):
-        self.putln("Cy_XGOTREF(%s);" % cname)
-
-    def put_cyincref(self, cname):
-        self.putln("Cy_INCREF(%s);" % cname)
-
-    def put_cydecref(self, cname):
-        self.putln("Cy_DECREF(%s);" % cname)
-
-    def put_cyxdecref(self, cname):
-        self.putln("Cy_XDECREF(%s);" % cname)
-
-    # Python objects and reference counting
+    # Reference counting
 
     def entry_as_pyobject(self, entry):
         type = entry.type

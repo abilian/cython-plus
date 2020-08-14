@@ -4387,6 +4387,43 @@ class CypClassType(CppClassType):
         init_entry.is_cfunction = 1
         return init_entry
 
+    def generate_incref(self, code, cname, **kwds):
+        code.putln("Cy_INCREF(%s);" % cname)
+
+    generate_xincref = generate_incref
+
+    def generate_decref(self, code, cname, **kwds):
+        code.putln("Cy_DECREF(%s);" % cname)
+
+    def generate_decref_clear(self, code, cname, **kwds):
+        code.putln("Cy_DECREF(%s);" % cname)
+        code.putln("%s = NULL;" % cname)
+
+    def generate_xdecref(self, code, cname, **kwds):
+        code.putln("Cy_XDECREF(%s);" % cname)
+
+    def generate_xdecref_clear(self, code, cname, **kwds):
+        code.putln("Cy_XDECREF(%s);" % cname)
+        code.putln("%s = NULL;" % cname)
+
+    def generate_gotref(self, code, cname):
+        code.putln("Cy_GOTREF(%s);" % cname)
+
+    def generate_xgotref(self, code, cname):
+        code.putln("Cy_XGOTREF(%s);" % cname)
+
+    def generate_giveref(self, code, cname):
+        code.putln("Cy_GIVEREF(%s);" % cname)
+
+    def generate_xgiveref(self, code, cname):
+        code.putln("Cy_XGIVEREF(%s);" % cname)
+
+    def generate_decref_set(self, code, cname, rhs_cname):
+        raise NotImplementedError("Cy_DECREF_SET is not defined for decrementing a group of cyobjects")
+
+    def generate_xdecref_set(self, code, cname, rhs_cname):
+        raise NotImplementedError("Cy_XDECREF_SET is not defined for decrementing a group of cyobjects")
+
 
 class TemplatePlaceholderType(CType):
 

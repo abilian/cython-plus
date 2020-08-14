@@ -201,10 +201,8 @@ class ResultRefNode(AtomicExprNode):
         if self.type.is_pyobject or self.type.is_cyp_class:
             rhs.make_owned_reference(code)
             if not self.lhs_of_first_assignment:
-                if self.type.is_pyobject:
+                if self.type.is_pyobject or self.type.is_cyp_class:
                     code.put_decref(self.result(), self.ctype())
-                elif self.type.is_cyp_class:
-                    code.put_cydecref(self.result())
         code.putln('%s = %s;' % (
             self.result(),
             rhs.result() if overloaded_assignment else rhs.result_as(self.ctype()),
@@ -249,10 +247,8 @@ class LetNodeMixin:
             self.temp_expression.generate_disposal_code(code)
             self.temp_expression.free_temps(code)
         else:
-            if self.temp_type.is_pyobject:
+            if self.temp_type.is_pyobject or self.temp_type.is_cyp_class:
                 code.put_decref_clear(self.temp, self.temp_type)
-            elif self.temp_type.is_cyp_class:
-                code.put_cyxdecref(self.temp)
             code.funcstate.release_temp(self.temp)
 
 

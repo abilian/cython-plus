@@ -34,19 +34,20 @@
         #include <type_traits>
 
 
-        class RecursiveUpgradeableRWLock {
+        class CyLock {
+            static pthread_mutex_t log_guard;
             protected:
                 pthread_mutex_t guard;
-                pthread_cond_t wait_readers_depart;
-                pthread_cond_t wait_writer_depart;
+                pthread_cond_t readers_have_left;
+                pthread_cond_t writer_has_left;
                 atomic<pid_t> owner_id;
                 atomic_int32_t readers_nb;
                 uint32_t write_count;
             public:
-                RecursiveUpgradeableRWLock() {
+                CyLock() {
                     pthread_mutex_init(&this->guard, NULL);
-                    pthread_cond_init(&this->wait_readers_depart, NULL);
-                    pthread_cond_init(&this->wait_writer_depart, NULL);
+                    pthread_cond_init(&this->readers_have_left, NULL);
+                    pthread_cond_init(&this->writer_has_left, NULL);
                     this->owner_id = CyObject_NO_OWNER;
                     this->readers_nb = 0;
                     this->write_count = 0;
@@ -58,14 +59,7 @@
                 int tryrlock();
                 int trywlock();
         };
-
-        class LogLock : public RecursiveUpgradeableRWLock {
-            static pthread_mutex_t log_guard;
-            public:
-                void wlock();
-                void rlock();
-        };
-        pthread_mutex_t LogLock::log_guard = PTHREAD_MUTEX_INITIALIZER;
+        pthread_mutex_t CyLock::log_guard = PTHREAD_MUTEX_INITIALIZER;
 
         struct CyPyObject {
             PyObject_HEAD
@@ -74,7 +68,7 @@
         class CyObject : public CyPyObject {
             private:
                 CyObject_ATOMIC_REFCOUNT_TYPE nogil_ob_refcnt;
-                LogLock ob_lock;
+                CyLock ob_lock;
             public:
                 CyObject(): nogil_ob_refcnt(1) {}
                 virtual ~CyObject() {}
@@ -315,7 +309,7 @@
 #endif /* __cplusplus */
 
 
-void RecursiveUpgradeableRWLock::rlock() {
+void CyLock::rlock() {
     pid_t caller_id = syscall(SYS_gettid);
 
     if (this->owner_id == caller_id) {
@@ -325,8 +319,20 @@ void RecursiveUpgradeableRWLock::rlock() {
 
     pthread_mutex_lock(&this->guard);
 
+    if (this->write_count > 0) {
+        pid_t owner_id = this->owner_id;
+        pthread_mutex_lock(&(CyLock::log_guard));
+        printf(
+            "Contention with a writer detected while rlocking lock [%p] in thread #%d:\n"
+            "  - lock was already wlocked by thread %d\n"
+            "\n"
+            ,this, caller_id, owner_id
+        );
+        pthread_mutex_unlock(&(CyLock::log_guard));
+    }
+
     while (this->write_count > 0) {
-        pthread_cond_wait(&this->wait_writer_depart, &this->guard);
+        pthread_cond_wait(&this->writer_has_left, &this->guard);
     }
 
     this->owner_id = this->readers_nb++ ? CyObject_MANY_OWNERS : caller_id;
@@ -334,7 +340,7 @@ void RecursiveUpgradeableRWLock::rlock() {
     pthread_mutex_unlock(&this->guard);
 }
 
-int RecursiveUpgradeableRWLock::tryrlock() {
+int CyLock::tryrlock() {
     pid_t caller_id = syscall(SYS_gettid);
 
     if (this->owner_id == caller_id) {
@@ -358,8 +364,7 @@ int RecursiveUpgradeableRWLock::tryrlock() {
     return 0;
 }
 
-void RecursiveUpgradeableRWLock::unrlock() {
-
+void CyLock::unrlock() {
     pthread_mutex_lock(&this->guard);
 
     if (--this->readers_nb == 0) {
@@ -368,13 +373,13 @@ void RecursiveUpgradeableRWLock::unrlock() {
         }
 
         // broadcast to wake up all the waiting writers
-        pthread_cond_broadcast(&this->wait_readers_depart);
+        pthread_cond_broadcast(&this->readers_have_left);
     }
 
     pthread_mutex_unlock(&this->guard);
 }
 
-void RecursiveUpgradeableRWLock::wlock() {
+void CyLock::wlock() {
     pid_t caller_id = syscall(SYS_gettid);
 
     if (this->owner_id == caller_id) {
@@ -386,26 +391,52 @@ void RecursiveUpgradeableRWLock::wlock() {
 
     pthread_mutex_lock(&this->guard);
 
-    if (this->owner_id != caller_id) {
+    pid_t owner_id = this->owner_id;
 
-        // we wait for readers first and bottleneck the writers after
-        // this works for a readers preferring approach
+    if (owner_id != caller_id) {
 
-        // because the other way around would require setting write_count to 1 before waiting on the readers
-        // in order to ensure only one writer at a times goes beyound waiting for the other writers to leave
+        // Since we use a reader-preferring approach, we wait first for all readers to leave, and then all writers.
+        // The other way around could result in several writers acquiring the lock.
 
-        // this would be more in line with a writers preferring approach, but that can deadlock when a thread recurses on a readlock
-        // this also means that we must broadcast when the readers leave in order to give all the waiting writers a chance to wake up
-
-        // new readers might still pass before some of the waiting writers, but then they'll just wait some more
-        // OTOH, if the new readers come, not broadcasting would let some writers wait forever
+        if (this->readers_nb > 0) {
+            if (owner_id == CyObject_MANY_OWNERS) {
+                pthread_mutex_lock(&(CyLock::log_guard));
+                printf(
+                    "Contention with several other reader threads detected while wlocking lock [%p] in thread #%d:\n"
+                    "\n"
+                    ,this, caller_id
+                );
+                pthread_mutex_unlock(&(CyLock::log_guard));
+            }
+            else  {
+                pthread_mutex_lock(&(CyLock::log_guard));
+                printf(
+                    "Contention with a reader thread detected while wlocking lock [%p] in thread #%d:\n"
+                    "  - reader thread is %d\n"
+                    "\n"
+                    ,this, caller_id, owner_id
+                );
+                pthread_mutex_unlock(&(CyLock::log_guard));
+            }
+        }
 
         while (this->readers_nb > 0) {
-            pthread_cond_wait(&this->wait_readers_depart, &this->guard);
+            pthread_cond_wait(&this->readers_have_left, &this->guard);
+        }
+
+        if (this->write_count > 0) {
+            pthread_mutex_lock(&(CyLock::log_guard));
+            printf(
+                "Contention with another writer detected while wlocking lock [%p] in thread #%d:\n"
+                "  - lock was already wlocked by thread %d\n"
+                "\n"
+                ,this, caller_id, owner_id
+            );
+            pthread_mutex_unlock(&(CyLock::log_guard));
         }
 
         while (this->write_count > 0) {
-            pthread_cond_wait(&this->wait_writer_depart, &this->guard);
+            pthread_cond_wait(&this->writer_has_left, &this->guard);
         }
 
         this->owner_id = caller_id;
@@ -416,7 +447,7 @@ void RecursiveUpgradeableRWLock::wlock() {
     pthread_mutex_unlock(&this->guard);
 }
 
-int RecursiveUpgradeableRWLock::trywlock() {
+int CyLock::trywlock() {
     pid_t caller_id = syscall(SYS_gettid);
 
     if (this->owner_id == caller_id) {
@@ -450,8 +481,7 @@ int RecursiveUpgradeableRWLock::trywlock() {
     return 0;
 }
 
-void RecursiveUpgradeableRWLock::unwlock() {
-
+void CyLock::unwlock() {
     pthread_mutex_lock(&this->guard);
     if (--this->write_count == 0) {
         if (this->readers_nb == 0) {
@@ -460,109 +490,11 @@ void RecursiveUpgradeableRWLock::unwlock() {
 
         // broadcast to wake up all the waiting readers, + maybe one waiting writer
         // more efficient to count r waiting readers and w waiting writers and signal n + (w > 0) times
-        pthread_cond_broadcast(&this->wait_writer_depart);
+        pthread_cond_broadcast(&this->writer_has_left);
     }
-    pthread_mutex_unlock(&this->guard);
-
-}
-
-
-void LogLock::rlock() {
-    pid_t caller_id = syscall(SYS_gettid);
-
-    if (this->owner_id == caller_id) {
-        ++this->readers_nb;
-        return;
-    }
-
-    pthread_mutex_lock(&this->guard);
-
-    if (this->write_count > 0) {
-        pid_t owner_id = this->owner_id;
-        pthread_mutex_lock(&(LogLock::log_guard));
-        printf(
-            "Contention with a writer detected while rlocking lock [%p] in thread #%d:\n"
-            "  - lock was already wlocked by thread %d\n"
-            "\n"
-            ,this, caller_id, owner_id
-        );
-        pthread_mutex_unlock(&(LogLock::log_guard));
-    }
-
-    while (this->write_count > 0) {
-        pthread_cond_wait(&this->wait_writer_depart, &this->guard);
-    }
-
-    this->owner_id = this->readers_nb++ ? CyObject_MANY_OWNERS : caller_id;
-
     pthread_mutex_unlock(&this->guard);
 }
 
-void LogLock::wlock() {
-
-    pid_t caller_id = syscall(SYS_gettid);
-
-    if (this->owner_id == caller_id) {
-        if (this->write_count) {
-            ++this->write_count;
-            return;
-        }
-    }
-
-    pthread_mutex_lock(&this->guard);
-
-    pid_t owner_id = this->owner_id;
-
-    if (owner_id != caller_id) {
-
-        if (this->readers_nb > 0) {
-            if (owner_id == CyObject_MANY_OWNERS) {
-                pthread_mutex_lock(&(LogLock::log_guard));
-                printf(
-                    "Contention with several other reader threads detected while wlocking lock [%p] in thread #%d:\n"
-                    "\n"
-                    ,this, caller_id
-                );
-                pthread_mutex_unlock(&(LogLock::log_guard));
-            }
-            else  {
-                pthread_mutex_lock(&(LogLock::log_guard));
-                printf(
-                    "Contention with a reader thread detected while wlocking lock [%p] in thread #%d:\n"
-                    "  - reader thread is %d\n"
-                    "\n"
-                    ,this, caller_id, owner_id
-                );
-                pthread_mutex_unlock(&(LogLock::log_guard));
-            }
-        }
-
-        while (this->readers_nb > 0) {
-            pthread_cond_wait(&this->wait_readers_depart, &this->guard);
-        }
-
-        if (this->write_count > 0) {
-            pthread_mutex_lock(&(LogLock::log_guard));
-            printf(
-                "Contention with another writer detected while wlocking lock [%p] in thread #%d:\n"
-                "  - lock was already wlocked by thread %d\n"
-                "\n"
-                ,this, caller_id, owner_id
-            );
-            pthread_mutex_unlock(&(LogLock::log_guard));
-        }
-
-        while (this->write_count > 0) {
-            pthread_cond_wait(&this->wait_writer_depart, &this->guard);
-        }
-
-        this->owner_id = caller_id;
-    }
-
-    this->write_count = 1;
-
-    pthread_mutex_unlock(&this->guard);
-}
 
 /*
  * Atomic counter increment and decrement implementation based on

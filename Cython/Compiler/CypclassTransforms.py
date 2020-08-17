@@ -62,44 +62,16 @@ property NAME:
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     # method wrapper templates
-    unlocked_method = TreeFragment.TreeFragment(u"""
+    method_template = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
     OBJ = <TYPE> self
     return OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
-    unlocked_method_no_return = TreeFragment.TreeFragment(u"""
+    method_no_return_template = TreeFragment.TreeFragment(u"""
 def NAME(self, ARGDECLS):
     OBJ = <TYPE> self
     OBJ.NAME(ARGS)
-    """, level='c_class', pipeline=[NormalizeTree(None)])
-
-    rlocked_method = TreeFragment.TreeFragment(u"""
-def NAME(self, ARGDECLS):
-    OBJ = <TYPE> self
-    with rlocked OBJ:
-        return OBJ.NAME(ARGS)
-    """, level='c_class', pipeline=[NormalizeTree(None)])
-
-    rlocked_method_no_return = TreeFragment.TreeFragment(u"""
-def NAME(self, ARGDECLS):
-    OBJ = <TYPE> self
-    with rlocked OBJ:
-        OBJ.NAME(ARGS)
-    """, level='c_class', pipeline=[NormalizeTree(None)])
-
-    wlocked_method = TreeFragment.TreeFragment(u"""
-def NAME(self, ARGDECLS):
-    OBJ = <TYPE> self
-    with wlocked OBJ:
-        return OBJ.NAME(ARGS)
-    """, level='c_class', pipeline=[NormalizeTree(None)])
-
-    wlocked_method_no_return = TreeFragment.TreeFragment(u"""
-def NAME(self, ARGDECLS):
-    OBJ = <TYPE> self
-    with wlocked OBJ:
-        OBJ.NAME(ARGS)
     """, level='c_class', pipeline=[NormalizeTree(None)])
 
     # static method wrapper templates
@@ -344,6 +316,15 @@ def NAME(ARGDECLS):
 
         method_type = method_entry.type
 
+        if not method_type.is_static_method and node.entry.type.lock_mode == "checklock":
+            # skip non-static methods with "checklock" self
+            return
+
+        for argtype in method_type.args:
+            if argtype.type.is_cyp_class and argtype.type.lock_mode == "checklock":
+                # skip methods with "checklock" cypclass arguments
+                return
+
         if method_type.optional_arg_count:
             # for now skip methods with optional arguments
             return
@@ -422,14 +403,7 @@ def NAME(ARGDECLS):
             }).stats[0]
 
         else:
-            if node.lock_mode == 'checklock':
-                need_wlock = not method_type.is_const_method
-                if need_wlock:
-                    template = self.wlocked_method if need_return else self.wlocked_method_no_return
-                else:
-                    template = self.rlocked_method if need_return else self.rlocked_method_no_return
-            else:
-                template = self.unlocked_method if need_return else self.unlocked_method_no_return
+            template = self.method_template if need_return else self.method_no_return_template
 
             # > derive a unique name that doesn't collide with the arguments
             underlying_name = self.create_unique_name("o", entries=[arg.name for arg in arg_objs])

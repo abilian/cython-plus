@@ -9,8 +9,6 @@ import cython
 cython.declare(Naming=object, PyrexTypes=object, EncodedString=object, error=object)
 
 from collections import defaultdict
-from contextlib import ExitStack
-from itertools import chain
 
 from . import Naming
 from . import Nodes
@@ -456,6 +454,16 @@ class CypclassLockTransform(Visitor.EnvTransform):
         return self.StackLock(self, obj_entry, state)
 
 
+    def with_nested_stacklocks(self, stacklocks_iterator, body_callback):
+        # Poor mans's nested context managers
+        try:
+            stacklock = next(stacklocks_iterator)
+        except StopIteration:
+            return body_callback()
+        with stacklock:
+            return self.with_nested_stacklocks(stacklocks_iterator, body_callback)
+
+
     class AccessContext:
         """
             Context manager to track the kind of access (reading, writing ...).
@@ -571,13 +579,14 @@ class CypclassLockTransform(Visitor.EnvTransform):
 
     def visit_CFuncDefNode(self, node):
         cyp_class_args = (e for e in node.local_scope.arg_entries if e.type.is_cyp_class)
-        with ExitStack() as locked_args_stack:
-            for arg in cyp_class_args:
-                is_rlocked = arg.type.is_const or arg.is_self_arg and node.entry.type.is_const_method
-                arg_id = arg
-                # Mark each cypclass arguments as locked within the function body
-                locked_args_stack.enter_context(self.stacklock(arg_id, "rlocked" if is_rlocked else "wlocked"))
-            self.visit(node.body)
+        arg_locks = []
+        for arg in cyp_class_args:
+            is_rlocked = arg.type.is_const or arg.is_self_arg and node.entry.type.is_const_method
+            arg_id = arg
+            # Mark each cypclass arguments as locked within the function body
+            arg_locks.append(self.stacklock(arg_id, "rlocked" if is_rlocked else "wlocked"))
+        with_body = lambda: self.visit(node.body)
+        self.with_nested_stacklocks(iter(arg_locks), with_body)
         return node
 
     def visit_LockCypclassNode(self, node):

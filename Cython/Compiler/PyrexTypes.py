@@ -4309,13 +4309,13 @@ class CypClassType(CppClassType):
         self._mro = mro_C3_merge(inputs)
         return self._mro
 
-    # allow conversion to Python only when there is a wrapper type
+    # allow conversion to Python only when there is a wrapper type, or will be one
     def can_coerce_to_pyobject(self, env):
-        return self.wrapper_type is not None
+        return self.wrapper_type is not None or self.support_wrapper
 
-    # allow conversion from Python only when there is a wrapper type
+    # allow conversion from Python only when there is a wrapper type, or will be one
     def can_coerce_from_pyobject(self, env):
-        return self.wrapper_type is not None
+        return self.wrapper_type is not None or self.support_wrapper
 
     def create_to_py_utility_code(self, env):
         if not self.wrapper_type:

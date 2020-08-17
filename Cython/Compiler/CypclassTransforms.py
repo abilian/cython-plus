@@ -281,7 +281,7 @@ def NAME(ARGDECLS):
                 if py_method_wrapper:
                     stats.append(py_method_wrapper)
 
-            elif not attr.is_type:
+            elif attr.is_variable and attr.name != "this":
                 property = self.synthesize_property(attr, node.entry)
                 if property:
                     stats.append(property)

@@ -449,8 +449,15 @@ def NAME(ARGDECLS):
 
 
 class CypclassLockTransform(Visitor.EnvTransform):
+    """
+        Check that cypclass objects are properly locked and insert locks if required.
+    """
 
     class StackLock:
+        """
+            Context manager for tracking nested locks.
+        """
+
         def __init__(self, transform, obj_entry, state):
             self.transform = transform
             self.state = state
@@ -474,7 +481,12 @@ class CypclassLockTransform(Visitor.EnvTransform):
     def stacklock(self, obj_entry, state):
         return self.StackLock(self, obj_entry, state)
 
+
     class AccessContext:
+        """
+            Context manager to track the kind of access (reading, writing ...).
+        """
+
         def __init__(self, collector, reading=False, writing=False, deleting=False):
             self.collector = collector
             self.reading = reading
@@ -494,6 +506,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
     def accesscontext(self, reading=False, writing=False, deleting=False):
         return self.AccessContext(self, reading=reading, writing=writing, deleting=deleting)
 
+
     def __call__(self, root):
         self.rlocked = defaultdict(int)
         self.wlocked = defaultdict(int)
@@ -503,7 +516,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
         return super(CypclassLockTransform, self).__call__(root)
 
     def reference_identifier(self, node):
-        while isinstance(node, ExprNodes.CoerceToTempNode): # works for CoerceToLockedTempNode too
+        while isinstance(node, ExprNodes.CoerceToTempNode):  # works for CoerceToLockedTempNode as well
             node = node.arg
         if node.is_name:
             return node.entry
@@ -528,8 +541,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
             if not (self.rlocked[ref_id] > 0 or self.wlocked[ref_id] > 0):
                 if lock_mode == "checklock":
                     error(read_node.pos, (
-                            "Reference '%s' is not correctly locked in this expression "
-                            "(read lock required)"
+                            "Reference '%s' is not correctly locked in this expression (read lock required)"
                         ) % self.id_to_name(ref_id) )
                 elif lock_mode == "autolock":
                     # for now, lock a temporary for each expression
@@ -551,8 +563,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
             if not self.wlocked[ref_id] > 0:
                 if lock_mode == "checklock":
                     error(written_node.pos, (
-                            "Reference '%s' is not correctly locked in this expression "
-                            "(write lock required)"
+                            "Reference '%s' is not correctly locked in this expression (write lock required)"
                         ) % self.id_to_name(ref_id) )
                 elif lock_mode == "autolock":
                     # for now, lock a temporary for each expression
@@ -590,6 +601,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
             for arg in cyp_class_args:
                 is_rlocked = arg.type.is_const or arg.is_self_arg and node.entry.type.is_const_method
                 arg_id = arg
+                # Mark each cypclass arguments as locked within the function body
                 locked_args_stack.enter_context(self.stacklock(arg_id, "rlocked" if is_rlocked else "wlocked"))
             self.visit(node.body)
         return node
@@ -615,6 +627,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
         for arg in node.args:
             arg_ref_id = self.reference_identifier(arg)
             if self.rlocked[arg_ref_id] > 0 or self.wlocked[arg_ref_id] > 0:
+                # Disallow unbinding a locked name
                 error(arg.pos, "Deleting a locked cypclass reference")
                 return node
         with self.accesscontext(deleting=True):
@@ -624,6 +637,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
     def visit_SingleAssignmentNode(self, node):
         lhs_ref_id = self.reference_identifier(node.lhs)
         if self.rlocked[lhs_ref_id] > 0 or self.wlocked[lhs_ref_id] > 0:
+            # Disallow re-binding a locked name
             error(node.lhs.pos, "Assigning to a locked cypclass reference")
             return node
         node.rhs = self.lockcheck_if_subscript_rhs(node.lhs, node.rhs)
@@ -637,6 +651,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
         for lhs in node.lhs_list:
             lhs_ref_id = self.reference_identifier(lhs)
             if self.rlocked[lhs_ref_id] > 0 or self.wlocked[lhs_ref_id] > 0:
+                # Disallow re-binding a locked name
                 error(lhs.pos, "Assigning to a locked cypclass reference")
                 return node
         for lhs in node.lhs_list:
@@ -651,6 +666,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
     def visit_WithTargetAssignmentStatNode(self, node):
         target_id = self.reference_identifier(node.lhs)
         if self.rlocked[target_id] > 0 or self.wlocked[target_id] > 0:
+            # Disallow re-binding a locked name
             error(node.lhs.pos, "With expression target is a locked cypclass reference")
             return node
         node.rhs = self.lockcheck_if_subscript_rhs(node.lhs, node.rhs)
@@ -663,6 +679,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
     def visit__ForInStatNode(self, node):
         target_id = self.reference_identifier(node.target)
         if self.rlocked[target_id] > 0 or self.wlocked[target_id] > 0:
+            # Disallow re-binding a locked name
             error(node.target.pos, "For-Loop target is a locked cypclass reference")
             return node
         node.item = self.lockcheck_if_subscript_rhs(node.target, node.item)
@@ -682,6 +699,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
         else:
             target_id = self.reference_identifier(node.target)
             if self.rlocked[target_id] > 0 or self.wlocked[target_id] > 0:
+                # Disallow re-binding a locked name
                 error(node.target.pos, "Except clause target is a locked cypclass reference")
                 return node
             with self.accesscontext(writing=True):

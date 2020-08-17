@@ -2792,7 +2792,7 @@ class CppClassScope(Scope):
         reified_type = PyrexTypes.CypClassType(reified_name, scope, reified_cname, None, templates = None, lock_mode="nolock")
         reified_type.namespace = self.type
         #reify_base_classes = ()
-        reifying_entry = self.declare(reified_name, reified_cname, reified_type, entry.pos, 'extern') # FIXME: visibility
+        reifying_entry = self.declare(reified_name, reified_cname, reified_type, entry.pos, 'extern')  # FIXME: visibility
         #reified_entry.is_cpp_class = 1
         reifying_entry.reified_entry = entry
         self.reifying_entries.append(reifying_entry)
@@ -2841,7 +2841,7 @@ class CppClassScope(Scope):
             else:
                 ctypename = '_'.join(exploded_name[index:])
                 break
-        
+
         known_type = PyrexTypes.simple_c_type(signed, longness, ctypename)
         if not known_type:
             if stripped_name == "bool":

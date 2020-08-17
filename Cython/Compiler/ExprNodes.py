@@ -950,7 +950,7 @@ class ExprNode(Node):
             self.generate_subexpr_disposal_code(code)
 
     def generate_assignment_code(self, rhs, code, overloaded_assignment=False,
-        exception_check=None, exception_value=None):
+            exception_check=None, exception_value=None):
         #  Stub method for nodes which are not legal as
         #  the LHS of an assignment. An error will have
         #  been reported earlier.
@@ -2430,7 +2430,7 @@ class NameNode(AtomicExprNode):
                 code.put_error_if_unbound(self.pos, entry, self.in_nogil_context)
 
     def generate_assignment_code(self, rhs, code, overloaded_assignment=False,
-        exception_check=None, exception_value=None):
+            exception_check=None, exception_value=None):
         #print "NameNode.generate_assignment_code:", self.name ###
         entry = self.entry
         tracked_state = self.tracked_state
@@ -5038,11 +5038,11 @@ class SliceIndexNode(ExprNode):
         return self.base.inferable_item_node(index)
 
     def ensure_subexpr_lhs_locked(self, env):
-      self.base.ensure_lhs_locked(env)
-      if self.start:
-        self.start.ensure_rhs_locked(env)
-      elif self.stop:
-        self.stop.ensure_rhs_locked(env)
+        self.base.ensure_lhs_locked(env)
+        if self.start:
+            self.start.ensure_rhs_locked(env)
+        elif self.stop:
+            self.stop.ensure_rhs_locked(env)
 
     def may_be_none(self):
         base_type = self.base.type
@@ -5816,7 +5816,7 @@ class SimpleCallNode(CallNode):
     explicit_cpp_self = None
     rlocked = False
     wlocked = False
-    tracked_state = True # Something random, anything that is not None
+    tracked_state = True  # Something random, anything that is not None
 
     def compile_time_value(self, denv):
         function = self.function.compile_time_value(denv)
@@ -6571,7 +6571,7 @@ class InlinedDefNodeCallNode(CallNode):
                         some_args_in_temps = True
                     arg = arg.coerce_to_temp(env)
             elif arg.type.is_cyp_class:
-                if i > 0: # first argument doesn't matter
+                if i > 0:  # first argument doesn't matter
                     some_args_in_temps = True
                 arg = arg.coerce_to_temp(env)
             self.args[i] = arg
@@ -7640,7 +7640,7 @@ class AttributeNode(ExprNode):
             ExprNode.generate_disposal_code(self, code)
 
     def generate_assignment_code(self, rhs, code, overloaded_assignment=False,
-        exception_check=None, exception_value=None):
+            exception_check=None, exception_value=None):
         self.obj.generate_evaluation_code(code)
         if self.is_py_attr:
             code.globalstate.use_utility_code(
@@ -11506,7 +11506,7 @@ class BinopNode(ExprNode):
     def is_cpp_operation(self):
         return (self.operand1.type.is_cpp_class
             or self.operand2.type.is_cpp_class)
-        
+
     def analyse_cpp_py_operation(self, env):
         operator = self.operator if not self.inplace else self.operator+"="
         entry = env.lookup_operator(operator, [self.operand1, self.operand2])
@@ -11514,7 +11514,7 @@ class BinopNode(ExprNode):
             self.analyse_cpp_operation(env)
         else:
             self.analyse_py_operation(env)
-        
+
     def analyse_py_operation(self, env):
         self.coerce_operands_to_pyobjects(env)
         self.type = self.result_type(self.operand1.type,

@@ -2674,11 +2674,10 @@ class CFuncDefNode(FuncDefNode):
                 # An error will be produced in the cdef function
                 self.overridable = False
 
-        if env.is_cpp_class_scope and env.parent_type.is_cyp_class\
-           and not declarator.skipped_self and not self.is_static_method:
-             # It means we have a cypclass method without the self argument
-             # => shout
-             error(self.pos, "Cypclass methods must have a self argument")
+        if env.is_cpp_class_scope and env.parent_type.is_cyp_class and not declarator.skipped_self and not self.is_static_method:
+            # It means we have a cypclass method without the self argument
+            # => shout
+            error(self.pos, "Cypclass methods must have a self argument")
 
         self.declare_cpdef_wrapper(env)
         self.create_local_scope(env)

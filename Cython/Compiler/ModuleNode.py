@@ -1057,7 +1057,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     if py_attrs:
                         code.put_ensure_gil()
                         for attr in py_attrs:
-                            code.put_init_var_to_py_none(attr, nanny=False);
+                            code.put_init_var_to_py_none(attr, nanny=False)
                     if constructor:
                         code.putln("%s(%s);" % (constructor.cname, ", ".join(arg_names)))
                     if py_attrs:
@@ -1171,9 +1171,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             if e.is_cfunction
             and e.from_type
             and e.mro_index > 0
-            and not e.type.is_static_method # avoid dealing with static methods for now
+            and not e.type.is_static_method  # avoid dealing with static methods for now
             and e.name not in ("<init>", "<del>")
-            and not e.type.has_varargs # avoid dealing with varargs for now (is this ever required anyway ?)
+            and not e.type.has_varargs  # avoid dealing with varargs for now (is this ever required anyway ?)
         ]
         if inherited_methods:
             code.putln("")
@@ -1523,7 +1523,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     code.putln("}")
                 if num_optional_if > 0:
                     opt_arg_guard.putln("if (this->%s != NULL) {" % opt_arg_name)
-                    code.putln("}") # The check for optional_args != NULL
+                    code.putln("}")  # The check for optional_args != NULL
                 else:
                     code.decrease_indent()
             for _ in range(num_trylock):

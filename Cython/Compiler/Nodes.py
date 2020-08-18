@@ -1510,9 +1510,11 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
     scope = None
     template_types = None
 
+    cpp_message = "Cypclass"
+
     def declare(self, env):
-        if not env.is_cpp():
-            error(self.pos, "Could not use cppclass in a c-only environment !")
+        if self.cypclass:
+            self.cpp_check(env)
         if self.templates is None:
             template_types = None
         else:

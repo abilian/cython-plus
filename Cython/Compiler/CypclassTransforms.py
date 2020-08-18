@@ -190,7 +190,7 @@ def NAME(ARGDECLS):
         node_type = node.entry.type
 
         for wrapped_base_type in node_type.iter_wrapped_base_types():
-            if not wrapped_base_type in self.synthesized:
+            if wrapped_base_type not in self.synthesized:
                 self.base_type_to_deferred[wrapped_base_type].append(lambda: self.synthesize_wrappers(node))
                 return
 
@@ -704,7 +704,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
         return node
 
     def visit_SimpleCallNode(self, node):
-        for i, arg in enumerate(node.args or ()): # provide an empty tuple fallback in case node.args is None
+        for i, arg in enumerate(node.args or ()):  # provide an empty tuple fallback in case node.args is None
             if arg.type.is_cyp_class:
                 node.args[i] = self.lockcheck_written_or_read(arg, reading=arg.type.is_const)
         with self.accesscontext(reading=True):

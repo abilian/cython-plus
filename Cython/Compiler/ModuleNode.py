@@ -1285,7 +1285,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     code.putln("}")
                 if num_optional_if > 0:
                     opt_arg_guard.putln("if (this->%s != NULL) {" % opt_arg_name)
-                    code.putln("}") # The check for optional_args != NULL
+                    code.putln("}")  # The check for optional_args != NULL
                 else:
                     code.decrease_indent()
             for _ in range(num_trylock):

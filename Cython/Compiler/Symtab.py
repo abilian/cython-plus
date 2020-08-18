@@ -1531,9 +1531,9 @@ class ModuleScope(Scope):
                 ttype = self._cached_tuple_types[components]
             except KeyError:
                 ttype = self._cached_tuple_types[components] = PyrexTypes.c_tuple_type(components)
-            namespace = self # declare the ctuple in the module scope
+            namespace = self  # declare the ctuple in the module scope
         else:
-            namespace = templated_namespace # declare the ctuple in the templated namespace instead
+            namespace = templated_namespace  # declare the ctuple in the templated namespace instead
             ttype = PyrexTypes.c_tuple_type(components)
             ttype.templated_namespace = templated_namespace.parent_type
         cname = ttype.cname
@@ -2772,7 +2772,7 @@ class CppClassScope(Scope):
         '__ge__': '>=',
         '__call__':'()',
         '__getitem__':'[]',
-        "__contains__":"__contains__" # not actually a c++ operator: will generate a normal function named "operator__contains__"
+        "__contains__":"__contains__"  # not actually a c++ operator: will generate a normal function named "operator__contains__"
     }
 
     def __init__(self, name, outer_scope, templates=None):

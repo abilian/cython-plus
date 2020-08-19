@@ -23,6 +23,8 @@
         #define CyObject_CONTENDING_WRITER_FLAG (1 << 0)
         #define CyObject_CONTENDING_READER_FLAG (1 << 1)
 
+        #define CyObject_RAISE_ON_CONTENTION 1
+
         #include <pthread.h>
 
         #include <sys/types.h>
@@ -59,7 +61,9 @@
                 int tryrlock();
                 int trywlock();
         };
+        #if CyObject_RAISE_ON_CONTENTION == 0
         pthread_mutex_t CyLock::log_guard = PTHREAD_MUTEX_INITIALIZER;
+        #endif
 
         struct CyPyObject {
             PyObject_HEAD
@@ -302,6 +306,8 @@
 #ifdef __cplusplus
     #include <cstdlib>
     #include <cstddef>
+    #include <sstream>
+    #include <stdexcept>
 // atomic is already included in ModuleSetupCode
 //  #include <atomic>
 #else
@@ -320,6 +326,12 @@ void CyLock::rlock() {
     pthread_mutex_lock(&this->guard);
 
     if (this->write_count > 0) {
+        #if CyObject_RAISE_ON_CONTENTION
+        pid_t owner_id = this->owner_id;
+        std::ostringstream msg;
+        msg << "Data Race between [this] reader #" <<  caller_id << " and [other] writer #" << owner_id << " on lock " << this;
+        throw std::runtime_error(msg.str());
+        #else
         pid_t owner_id = this->owner_id;
         pthread_mutex_lock(&(CyLock::log_guard));
         printf(
@@ -329,6 +341,7 @@ void CyLock::rlock() {
             ,this, caller_id, owner_id
         );
         pthread_mutex_unlock(&(CyLock::log_guard));
+        #endif
     }
 
     while (this->write_count > 0) {
@@ -399,6 +412,12 @@ void CyLock::wlock() {
         // The other way around could result in several writers acquiring the lock.
 
         if (this->readers_nb > 0) {
+            #if CyObject_RAISE_ON_CONTENTION
+            pid_t owner_id = this->owner_id;
+            std::ostringstream msg;
+            msg << "Data Race between [this] writer #" <<  caller_id << " and [other] reader #" << owner_id << " on lock " << this;
+            throw std::runtime_error(msg.str());
+            #else
             if (owner_id == CyObject_MANY_OWNERS) {
                 pthread_mutex_lock(&(CyLock::log_guard));
                 printf(
@@ -418,6 +437,7 @@ void CyLock::wlock() {
                 );
                 pthread_mutex_unlock(&(CyLock::log_guard));
             }
+            #endif
         }
 
         while (this->readers_nb > 0) {
@@ -425,6 +445,12 @@ void CyLock::wlock() {
         }
 
         if (this->write_count > 0) {
+            #if CyObject_RAISE_ON_CONTENTION
+            pid_t owner_id = this->owner_id;
+            std::ostringstream msg;
+            msg << "Data Race between [this] writer #" <<  caller_id << " and [other] writer #" << owner_id << " on lock " << this;
+            throw std::runtime_error(msg.str());
+            #else
             pthread_mutex_lock(&(CyLock::log_guard));
             printf(
                 "Contention with another writer detected while wlocking lock [%p] in thread #%d:\n"
@@ -433,6 +459,7 @@ void CyLock::wlock() {
                 ,this, caller_id, owner_id
             );
             pthread_mutex_unlock(&(CyLock::log_guard));
+            #endif
         }
 
         while (this->write_count > 0) {

@@ -2944,6 +2944,8 @@ class CppIteratorNode(ExprNode):
                 code.putln("%s = %s%s;" % (self.cpp_sequence_cname,
                                            "&" if temp_type.is_ptr else "",
                                            self.sequence.move_result_rhs()))
+                if sequence_type.is_cyp_class:
+                    code.put_incref(self.cpp_sequence_cname, sequence_type)
                 code.putln("%s = %s%sbegin();" % (self.result(), self.cpp_sequence_cname,
                                                   self.cpp_attribute_op))
 
@@ -2958,6 +2960,11 @@ class CppIteratorNode(ExprNode):
                         result_name,
                         self.result()))
         code.putln("++%s;" % self.result())
+
+    def generate_disposal_code(self, code):
+        if self.cpp_sequence_cname and self.sequence.type.is_cyp_class:
+            code.put_decref(self.cpp_sequence_cname, self.sequence.type)
+        super(CppIteratorNode, self).generate_disposal_code(code)
 
     def free_temps(self, code):
         if self.cpp_sequence_cname:

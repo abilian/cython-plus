@@ -23,7 +23,7 @@
         #define CyObject_CONTENDING_WRITER_FLAG (1 << 0)
         #define CyObject_CONTENDING_READER_FLAG (1 << 1)
 
-        #define CyObject_RAISE_ON_CONTENTION 1
+        #define CyObject_RAISE_ON_CONTENTION 0
 
         #include <pthread.h>
 
@@ -54,8 +54,8 @@
                     this->readers_nb = 0;
                     this->write_count = 0;
                 }
-                void wlock();
-                void rlock();
+                void wlock(const char * context);
+                void rlock(const char * context);
                 void unwlock();
                 void unrlock();
                 int tryrlock();
@@ -79,8 +79,8 @@
                 void CyObject_INCREF();
                 int CyObject_DECREF();
                 int CyObject_GETREF();
-                void CyObject_RLOCK();
-                void CyObject_WLOCK();
+                void CyObject_RLOCK(const char * context);
+                void CyObject_WLOCK(const char * context);
                 void CyObject_UNRLOCK();
                 void CyObject_UNWLOCK();
                 int CyObject_TRYRLOCK();
@@ -167,18 +167,18 @@
             return ob->CyObject_GETREF();
         }
 
-        static inline void _Cy_RLOCK(CyObject *ob) {
+        static inline void _Cy_RLOCK(CyObject *ob, const char *context) {
             if (ob != NULL) {
-                ob->CyObject_RLOCK();
+                ob->CyObject_RLOCK(context);
             }
             else {
                 fprintf(stderr, "ERROR: trying to read lock NULL !\n");
             }
         }
 
-        static inline void _Cy_WLOCK(CyObject *ob) {
+        static inline void _Cy_WLOCK(CyObject *ob, const char *context) {
             if (ob != NULL) {
-                ob->CyObject_WLOCK();
+                ob->CyObject_WLOCK(context);
             }
             else {
                 fprintf(stderr, "ERROR: trying to write lock NULL !\n");
@@ -291,8 +291,10 @@
         #define Cy_XGOTREF(ob)
         #define Cy_GIVEREF(ob)
         #define Cy_XGIVEREF(ob)
-        #define Cy_RLOCK(ob) _Cy_RLOCK(ob)
-        #define Cy_WLOCK(ob) _Cy_WLOCK(ob)
+        #define Cy_RLOCK(ob) _Cy_RLOCK(ob, NULL)
+        #define Cy_WLOCK(ob) _Cy_WLOCK(ob, NULL)
+        #define Cy_RLOCK_CONTEXT(ob, context) _Cy_RLOCK(ob, context)
+        #define Cy_WLOCK_CONTEXT(ob, context) _Cy_WLOCK(ob, context)
         #define Cy_UNRLOCK(ob) _Cy_UNRLOCK(ob)
         #define Cy_UNWLOCK(ob) _Cy_UNWLOCK(ob)
         #define Cy_TRYRLOCK(ob) _Cy_TRYRLOCK(ob)
@@ -307,6 +309,7 @@
     #include <cstdlib>
     #include <cstddef>
     #include <sstream>
+    #include <iostream>
     #include <stdexcept>
 // atomic is already included in ModuleSetupCode
 //  #include <atomic>
@@ -315,7 +318,7 @@
 #endif /* __cplusplus */
 
 
-void CyLock::rlock() {
+void CyLock::rlock(const char *context) {
     pid_t caller_id = syscall(SYS_gettid);
 
     if (this->owner_id == caller_id) {
@@ -329,17 +332,23 @@ void CyLock::rlock() {
         #if CyObject_RAISE_ON_CONTENTION
         pid_t owner_id = this->owner_id;
         std::ostringstream msg;
-        msg << "Data Race between [this] reader #" <<  caller_id << " and [other] writer #" << owner_id << " on lock " << this;
+        msg << "Data Race between [this] reader #" <<  caller_id
+            << " and [other] writer #" << owner_id
+            << " on lock " << this;
+        if (context != NULL) {
+            msg << std::endl << "In: " << context;
+        }
         throw std::runtime_error(msg.str());
         #else
         pid_t owner_id = this->owner_id;
         pthread_mutex_lock(&(CyLock::log_guard));
-        printf(
-            "Contention with a writer detected while rlocking lock [%p] in thread #%d:\n"
-            "  - lock was already wlocked by thread %d\n"
-            "\n"
-            ,this, caller_id, owner_id
-        );
+        std::cout
+            << "Data Race between [this] reader #" <<  caller_id
+            << " and [other] writer #" << owner_id
+            << " on lock " << this << std::endl;
+        if (context != NULL) {
+            std::cout << "In: " << context << std::endl;
+        }
         pthread_mutex_unlock(&(CyLock::log_guard));
         #endif
     }
@@ -392,7 +401,7 @@ void CyLock::unrlock() {
     pthread_mutex_unlock(&this->guard);
 }
 
-void CyLock::wlock() {
+void CyLock::wlock(const char *context) {
     pid_t caller_id = syscall(SYS_gettid);
 
     if (this->owner_id == caller_id) {
@@ -415,27 +424,20 @@ void CyLock::wlock() {
             #if CyObject_RAISE_ON_CONTENTION
             pid_t owner_id = this->owner_id;
             std::ostringstream msg;
-            msg << "Data Race between [this] writer #" <<  caller_id << " and [other] reader #" << owner_id << " on lock " << this;
+            msg << "Data Race between [this] writer #" <<  caller_id
+                << " and [other] reader #" << owner_id
+                << " on lock " << this;
+            if (context != NULL) {
+                msg << std::endl << "In: " << context;
+            }
             throw std::runtime_error(msg.str());
             #else
-            if (owner_id == CyObject_MANY_OWNERS) {
-                pthread_mutex_lock(&(CyLock::log_guard));
-                printf(
-                    "Contention with several other reader threads detected while wlocking lock [%p] in thread #%d:\n"
-                    "\n"
-                    ,this, caller_id
-                );
-                pthread_mutex_unlock(&(CyLock::log_guard));
-            }
-            else  {
-                pthread_mutex_lock(&(CyLock::log_guard));
-                printf(
-                    "Contention with a reader thread detected while wlocking lock [%p] in thread #%d:\n"
-                    "  - reader thread is %d\n"
-                    "\n"
-                    ,this, caller_id, owner_id
-                );
-                pthread_mutex_unlock(&(CyLock::log_guard));
+            std::cout
+                << "Data Race between [this] writer #" <<  caller_id
+                << " and [other] reader #" << owner_id
+                << " on lock " << this << std::endl;
+            if (context != NULL) {
+                std::cout << "In: " << context << std::endl;
             }
             #endif
         }
@@ -448,16 +450,22 @@ void CyLock::wlock() {
             #if CyObject_RAISE_ON_CONTENTION
             pid_t owner_id = this->owner_id;
             std::ostringstream msg;
-            msg << "Data Race between [this] writer #" <<  caller_id << " and [other] writer #" << owner_id << " on lock " << this;
+            msg << "Data Race between [this] writer #" <<  caller_id
+                << " and [other] writer #" << owner_id
+                << " on lock " << this;
+            if (context != NULL) {
+                msg << std::endl << "In: " << context;
+            }
             throw std::runtime_error(msg.str());
             #else
             pthread_mutex_lock(&(CyLock::log_guard));
-            printf(
-                "Contention with another writer detected while wlocking lock [%p] in thread #%d:\n"
-                "  - lock was already wlocked by thread %d\n"
-                "\n"
-                ,this, caller_id, owner_id
-            );
+            std::cout
+                << "Data Race between [this] writer #" <<  caller_id
+                << " and [other] writer #" << owner_id
+                << " on lock " << this << std::endl;
+            if (context != NULL) {
+                std::cout << "In: " << context << std::endl;
+            }
             pthread_mutex_unlock(&(CyLock::log_guard));
             #endif
         }
@@ -547,14 +555,14 @@ int CyObject::CyObject_GETREF()
     return this->nogil_ob_refcnt;
 }
 
-void CyObject::CyObject_RLOCK()
+void CyObject::CyObject_RLOCK(const char *context)
 {
-    this->ob_lock.rlock();
+    this->ob_lock.rlock(context);
 }
 
-void CyObject::CyObject_WLOCK()
+void CyObject::CyObject_WLOCK(const char *context)
 {
-    this->ob_lock.wlock();
+    this->ob_lock.wlock(context);
 }
 
 int CyObject::CyObject_TRYRLOCK()

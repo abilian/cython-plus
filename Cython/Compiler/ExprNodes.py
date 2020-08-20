@@ -14010,10 +14010,22 @@ class CoerceToLockedTempNode(CoerceToTempNode):
 
     def generate_result_code(self, code):
         super(CoerceToLockedTempNode, self).generate_result_code(code)
-        if self.rlock_only:
-            code.putln("Cy_RLOCK(%s);" % self.result())
+
+        #XXX Code duplicated from Nodes.LockCypclassNode
+        if self.arg.pos:
+            source_descr, lineno, colno = self.arg.pos
+            source_str = source_descr.get_description()
+            source_lines = source_descr.get_lines()
+            line_str = source_lines[lineno - 1]
+            col_str = "%s%s" % (' ' * colno, '^')
+            context = "%s:%d:%d\n%s%s" % (source_str, lineno, colno, line_str, col_str)
+            context = code.get_string_const(StringEncoding.EncodedString(context))
         else:
-            code.putln("Cy_WLOCK(%s);" % self.result())
+            context = "NULL"
+        if self.rlock_only:
+            code.putln("Cy_RLOCK_CONTEXT(%s, %s);" % (self.result(), context))
+        else:
+            code.putln("Cy_WLOCK_CONTEXT(%s, %s);" % (self.result(), context))
 
     def generate_disposal_code(self, code):
         if self.rlock_only:

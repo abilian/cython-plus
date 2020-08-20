@@ -8558,10 +8558,17 @@ class LockCypclassNode(StatNode):
     def generate_execution_code(self, code):
         self.obj.generate_evaluation_code(code)
 
-        # As we're relying on a recursive and upgradable lock,
-        # we don't need to care about things like unlocking a read lock
-        # before taking a write lock, so the code is quite brutal here.
-        lock_code = "Cy_%s(%s);" % (self.state[:-2].upper(), self.obj.result())
+        if self.obj.pos:
+            source_descr, lineno, colno = self.obj.pos
+            source_str = source_descr.get_description()
+            source_lines = source_descr.get_lines()
+            line_str = source_lines[lineno - 1]
+            col_str = "%s%s" % (' ' * colno, '^')
+            context = "%s:%d:%d\n%s%s" % (source_str, lineno, colno, line_str, col_str)
+            context = code.get_string_const(EncodedString(context))
+        else:
+            context = "NULL"
+        lock_code = "Cy_%s_CONTEXT(%s, %s);" % (self.state[:-2].upper(), self.obj.result(), context)
         code.putln(lock_code)
 
         self.body.generate_execution_code(code)

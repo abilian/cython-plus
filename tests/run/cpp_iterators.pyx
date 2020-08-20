@@ -11,6 +11,10 @@ cdef extern from "cpp_iterators_simple.h":
         double* begin()
         double* end()
 
+    cdef cppclass HasIterableAttribute:
+        vector[int] vec
+        HasIterableAttribute()
+
 def test_vector(py_v):
     """
     >>> test_vector([1, 2, 3])
@@ -176,4 +180,22 @@ def test_iteration_from_function_call():
     for i in make_vec2():
         print(i)
     for i in make_vec3():
+        print(i)
+
+cdef HasIterableAttribute get_has_iterable_attribute():
+    return HasIterableAttribute()
+
+def test_iteration_from_function_call_attribute():
+    """
+    >>> test_iteration_from_function_call_attribute()
+    1
+    2
+    3
+    1
+    2
+    3
+    """
+    for i in HasIterableAttribute().vec:
+        print(i)
+    for i in get_has_iterable_attribute().vec:
         print(i)

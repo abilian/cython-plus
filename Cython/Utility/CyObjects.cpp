@@ -45,6 +45,7 @@
                 atomic<pid_t> owner_id;
                 atomic_int32_t readers_nb;
                 uint32_t write_count;
+                const char *owner_context;
             public:
                 CyLock() {
                     pthread_mutex_init(&this->guard, NULL);
@@ -336,7 +337,10 @@ void CyLock::rlock(const char *context) {
             << " and [other] writer #" << owner_id
             << " on lock " << this;
         if (context != NULL) {
-            msg << std::endl << "In: " << context;
+            msg << std::endl << "In [this] context: " << context;
+        }
+        if (this->owner_context != NULL) {
+            msg << std::endl << "In [other] context: " << this->owner_context;
         }
         throw std::runtime_error(msg.str());
         #else
@@ -347,7 +351,10 @@ void CyLock::rlock(const char *context) {
             << " and [other] writer #" << owner_id
             << " on lock " << this << std::endl;
         if (context != NULL) {
-            std::cout << "In: " << context << std::endl;
+            std::cout << "In [this] context: " << context << std::endl;
+        }
+        if (this->owner_context != NULL) {
+            std::cout << "In [other] context: " << this->owner_context << std::endl;
         }
         pthread_mutex_unlock(&(CyLock::log_guard));
         #endif
@@ -358,6 +365,8 @@ void CyLock::rlock(const char *context) {
     }
 
     this->owner_id = this->readers_nb++ ? CyObject_MANY_OWNERS : caller_id;
+
+    this->owner_context = context;
 
     pthread_mutex_unlock(&this->guard);
 }
@@ -428,7 +437,10 @@ void CyLock::wlock(const char *context) {
                 << " and [other] reader #" << owner_id
                 << " on lock " << this;
             if (context != NULL) {
-                msg << std::endl << "In: " << context;
+                msg << std::endl << "In [this] context: " << context;
+            }
+            if (this->owner_context != NULL) {
+                msg << std::endl << "In [other] context: " << this->owner_context;
             }
             throw std::runtime_error(msg.str());
             #else
@@ -437,7 +449,10 @@ void CyLock::wlock(const char *context) {
                 << " and [other] reader #" << owner_id
                 << " on lock " << this << std::endl;
             if (context != NULL) {
-                std::cout << "In: " << context << std::endl;
+                std::cout << "In [this] context: " << context << std::endl;
+            }
+            if (this->owner_context != NULL) {
+                std::cout << "In [other] context: " << this->owner_context << std::endl;
             }
             #endif
         }
@@ -454,7 +469,10 @@ void CyLock::wlock(const char *context) {
                 << " and [other] writer #" << owner_id
                 << " on lock " << this;
             if (context != NULL) {
-                msg << std::endl << "In: " << context;
+                msg << std::endl << "In [this] context: " << context;
+            }
+            if (this->owner_context != NULL) {
+                msg << std::endl << "In [other] context: " << this->owner_context;
             }
             throw std::runtime_error(msg.str());
             #else
@@ -464,7 +482,10 @@ void CyLock::wlock(const char *context) {
                 << " and [other] writer #" << owner_id
                 << " on lock " << this << std::endl;
             if (context != NULL) {
-                std::cout << "In: " << context << std::endl;
+                std::cout << "In [this] context: " << context << std::endl;
+            }
+            if (this->owner_context != NULL) {
+                std::cout << "In [other] context: " << this->owner_context << std::endl;
             }
             pthread_mutex_unlock(&(CyLock::log_guard));
             #endif
@@ -478,6 +499,8 @@ void CyLock::wlock(const char *context) {
     }
 
     this->write_count = 1;
+
+    this->owner_context = context;
 
     pthread_mutex_unlock(&this->guard);
 }

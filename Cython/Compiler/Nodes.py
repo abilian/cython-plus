@@ -6458,6 +6458,10 @@ class DelStatNode(StatNode):
         for i, arg in enumerate(self.args):
             if arg.is_subscript:
                 arg = self.args[i] = arg.analyse_del_expression(env)
+                if arg.base.type.is_cyp_class:
+                    # We don't need to know the type of base[index], we'll just call base.__delitem__(index).
+                    self.cpp_check(env)
+                    return self
             else:
                 arg = self.args[i] = arg.analyse_target_expression(env, None)
             if arg.type.is_pyobject or (arg.is_name and arg.type.is_memoryviewslice):

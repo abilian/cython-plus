@@ -3905,7 +3905,7 @@ class IndexNode(_IndexingBaseNode):
             func_type = func_type.base_type
         self.exception_check = func_type.exception_check
         self.exception_value = func_type.exception_value
-        if self.exception_check:
+        if self.exception_check == '+':
             if not setting:
                 self.is_temp = True
             if self.exception_value is None:
@@ -3949,9 +3949,8 @@ class IndexNode(_IndexingBaseNode):
             return self
         self.exception_check = func_type.exception_check
         self.exception_value = func_type.exception_value
-        if self.exception_check:
-            if self.exception_value is None:
-                env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
+        if self.exception_check == '+' and self.exception_value is None:
+            env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
         self.index = self.index.coerce_to(func_type.args[0].type, env)
         if not deleting:
             self.type = func_type.args[1].type
@@ -4265,7 +4264,7 @@ class IndexNode(_IndexingBaseNode):
             function = "__Pyx_GetItemInt_ByteArray"
             error_value = '-1'
             utility_code = UtilityCode.load_cached("GetItemIntByteArray", "StringTools.c")
-        elif not (self.base.type.is_cpp_class and self.exception_check):
+        elif not (self.base.type.is_cpp_class and self.exception_check == '+'):
             assert False, "unexpected type %s and base type %s for indexing" % (
                 self.type, self.base.type)
 
@@ -4277,7 +4276,7 @@ class IndexNode(_IndexingBaseNode):
         else:
             index_code = self.index.py_result()
 
-        if self.base.type.is_cpp_class and self.exception_check:
+        if self.base.type.is_cpp_class and self.exception_check == '+':
             base_result = self.base.result()
             if self.base.type.is_cyp_class:
                 base_result = "(*%s)" % base_result

@@ -701,12 +701,16 @@ class CFuncDeclaratorNode(CDeclaratorNode):
             env.add_include_file('new')         # for std::bad_alloc
             env.add_include_file('stdexcept')
             env.add_include_file('typeinfo')    # for std::bad_cast
+        elif self.exception_check == '~':
+            self.cpp_check(env)
+            env.use_utility_code(UtilityCode.load_cached("CheckedResult", "CppSupport.cpp"))
+            return_type = PyrexTypes.CheckedResultType(self.pos, return_type)
         if (return_type.is_pyobject
                 and (self.exception_value or self.exception_check)
                 and self.exception_check != '+'):
             error(self.pos, "Exception clause not allowed for function returning Python object")
         else:
-            if self.exception_value is None and self.exception_check and self.exception_check != '+':
+            if self.exception_value is None and self.exception_check and self.exception_check not in ('+', '~'):
                 # Use an explicit exception return value to speed up exception checks.
                 # Even if it is not declared, we can use the default exception value of the return type,
                 # unless the function is some kind of external function that we do not control.
@@ -2244,14 +2248,17 @@ class FuncDefNode(StatNode, BlockNode):
                         self.entry.qualified_name, 0)
                 assure_gil('error')
                 code.put_unraisable(self.entry.qualified_name)
-            default_retval = return_type.default_value
-            if err_val is None and default_retval:
-                err_val = default_retval
-            if err_val is not None:
-                if err_val != Naming.retval_cname:
-                    code.putln("%s = %s;" % (Naming.retval_cname, err_val))
-            elif not return_type.is_void:
-                code.putln("__Pyx_pretend_to_initialize(&%s);" % Naming.retval_cname)
+            if return_type.is_checked_result:
+                code.putln(return_type.set_error(Naming.retval_cname))
+            else:
+                default_retval = return_type.default_value
+                if err_val is None and default_retval:
+                    err_val = default_retval
+                if err_val is not None:
+                    if err_val != Naming.retval_cname:
+                        code.putln("%s = %s;" % (Naming.retval_cname, err_val))
+                elif not return_type.is_void:
+                    code.putln("__Pyx_pretend_to_initialize(&%s);" % Naming.retval_cname)
 
             if is_getbuffer_slot:
                 assure_gil('error')

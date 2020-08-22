@@ -264,6 +264,7 @@ class PyrexType(BaseType):
     is_memoryviewslice = 0
     is_pythran_expr = 0
     is_numpy_buffer = 0
+    is_checked_result = 0
     has_attributes = 0
     needs_refcounting = 0
     default_value = ""
@@ -593,6 +594,130 @@ class CTypedefType(BaseType):
 
     def can_coerce_from_pyobject(self, env):
         return self.typedef_base_type.can_coerce_from_pyobject(env)
+
+
+class CheckedResultType(BaseType):
+    # Pseudo-type to wrap the return value of c functions in a "CheckedResult"
+
+    is_checked_result = 1
+    is_void = 0
+
+    to_py_utility_code = None
+    from_py_utility_code = None
+
+    subtypes = ['checked_base_type']
+
+    def __init__(self, pos, base_type):
+        if base_type.is_reference:
+            error(pos, "Cannot use 'except ~' exception signaling with functions that return by reference")
+        elif base_type.is_cpp_class:
+            base_type.check_nullary_constructor(pos)
+        self.checked_base_type = base_type
+
+    def invalid_value(self):
+        return self.checked_base_type.invalid_value()
+
+    def resolve(self):
+        return self.checked_base_type.resolve()
+
+    def declaration_code(self, entity_code,
+            for_display = 0, dll_linkage = None, pyrex = 0):
+        checked_code = "CheckedResult<%s>" % self.checked_base_type.declaration_code('')
+        if pyrex or for_display:
+            base_code = checked_code
+        else:
+            base_code = public_decl(checked_code, dll_linkage)
+        return self.base_declaration_code(base_code, entity_code)
+
+    def as_argument_type(self):
+        return self.checked_base_type.as_argument_type()
+
+    def cast_code(self, expr_code):
+        return self.checked_base_type.cast_code(expr_code)
+
+    def specialize(self, values):
+        return self.checked_base_type.specialize(values)
+
+    def __repr__(self):
+        return "<CheckedResult[%s]>" % repr(self.checked_base_type)
+
+    def __str__(self):
+        return str(self.checked_base_type)
+
+    def create_to_py_utility_code(self, env):
+        return self.checked_base_type.create_to_py_utility_code(env)
+
+    def create_from_py_utility_code(self, env):
+        return self.checked_base_type.create_from_py_utility_code(env)
+
+    def to_py_call_code(self, source_code, result_code, result_type, to_py_function=None):
+        return self.checked_base_type.to_py_call_code(
+            source_code, result_code, result_type, to_py_function)
+
+    def from_py_call_code(self, source_code, result_code, error_pos, code,
+                          from_py_function=None, error_condition=None):
+        return self.checked_base_type.from_py_call_code(
+            source_code, result_code, error_pos, code,
+            from_py_function or self.from_py_function,
+            error_condition or self.error_condition(result_code)
+        )
+
+    def overflow_check_binop(self, binop, env, const_rhs=False):
+        return self.checked_base_type.overflow_check_binop(binop, env, const_rhs)
+
+    def error_condition(self, result_code):
+        return "%s.is_error()" % result_code
+
+    def set_error(self, result_code):
+        return "%s.set_error();" % result_code
+
+    def __getattr__(self, name):
+        return getattr(self.checked_base_type, name)
+
+    def py_type_name(self):
+        return self.checked_base_type.py_type_name()
+
+    def can_coerce_to_pyobject(self, env):
+        return self.checked_base_type.can_coerce_to_pyobject(env)
+
+    def can_coerce_from_pyobject(self, env):
+        return self.checked_base_type.can_coerce_from_pyobject(env)
+
+    def generate_incref(self, code, cname, **kwds):
+        self.checked_base_type.generate_incref(code, "%s.result" % cname, **kwds)
+
+    def generate_xincref(self, code, cname, **kwds):
+        self.checked_base_type.generate_xincref(code, "%s.result" % cname, **kwds)
+
+    def generate_decref(self, code, cname, **kwds):
+        self.checked_base_type.generate_decref(code, "%s.result" % cname, **kwds)
+
+    def generate_decref_clear(self, code, cname, **kwds):
+        self.checked_base_type.generate_decref_clear(code, "%s.result" % cname, **kwds)
+
+    def generate_xdecref(self, code, cname, **kwds):
+        self.checked_base_type.generate_xdecref(code, "%s.result" % cname, **kwds)
+
+    def generate_xdecref_clear(self, code, cname, **kwds):
+        self.checked_base_type.generate_xdecref_clear(code, "%s.result" % cname, **kwds)
+
+    def generate_gotref(self, code, cname):
+        self.checked_base_type.generate_gotref(code, "%s.result" % cname)
+
+    def generate_xgotref(self, code, cname):
+        self.checked_base_type.generate_xgotref(code, "%s.result" % cname)
+
+    def generate_giveref(self, code, cname):
+        self.checked_base_type.generate_giveref(code, "%s.result" % cname)
+
+    def generate_xgiveref(self, code, cname):
+        self.checked_base_type.generate_xgiveref(code, "%s.result" % cname)
+
+    def generate_decref_set(self, code, cname, rhs_cname):
+        self.checked_base_type.generate_decref_set(code, "%s.result" % cname, rhs_cname)
+
+    def generate_xdecref_set(self, code, cname, rhs_cname):
+        self.checked_base_type.generate_xdecref_set(code, "%s.result" % cname, rhs_cname)
 
 
 class MemoryViewSliceType(PyrexType):

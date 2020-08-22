@@ -5933,7 +5933,7 @@ class SimpleCallNode(CallNode):
         else:
             self.args = [ arg.analyse_types(env) for arg in self.args ]
             self.analyse_c_function_call(env)
-            if func_type.exception_check == '+' or self.type.is_cyp_class:
+            if func_type.exception_check in ('+', '~') or self.type.is_cyp_class:
                 self.is_temp = True
 
         return self
@@ -6228,7 +6228,7 @@ class SimpleCallNode(CallNode):
 
     def is_c_result_required(self):
         func_type = self.function_type()
-        if not func_type.exception_value or func_type.exception_check == '+':
+        if not func_type.exception_value or func_type.exception_check in ('+', '~'):
             return False  # skip allocation of unused result temp
         return True
 
@@ -6330,10 +6330,14 @@ class SimpleCallNode(CallNode):
                 if exc_val is not None:
                     exc_checks.append("%s == %s" % (self.result(), func_type.return_type.cast_code(exc_val)))
                 if exc_check:
-                    if self.nogil:
-                        exc_checks.append("__Pyx_ErrOccurredWithGIL()")
+                    if exc_check == '~':
+                        assert self.is_temp
+                        exc_checks.append(self.type.error_condition(self.result()))
                     else:
-                        exc_checks.append("PyErr_Occurred()")
+                        if self.nogil:
+                            exc_checks.append("__Pyx_ErrOccurredWithGIL()")
+                        else:
+                            exc_checks.append("PyErr_Occurred()")
             if self.is_temp or exc_checks:
                 rhs = self.c_call_code()
                 if self.result():

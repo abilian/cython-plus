@@ -532,6 +532,8 @@ def find_spanning_type(type1, type2):
     return result_type
 
 def simply_type(result_type, pos):
+    if result_type.is_checked_result:
+        result_type = result_type.checked_base_type
     if result_type.is_reference:
         result_type = result_type.ref_base_type
     if result_type.is_cv_qualified:

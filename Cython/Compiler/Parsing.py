@@ -2986,6 +2986,9 @@ def p_exception_value_clause(s):
             elif s.sy == '*':
                 exc_val = ExprNodes.CharNode(s.position(), value=u'*')
                 s.next()
+        elif s.sy == '~':
+            exc_check = '~'
+            s.next()
         else:
             if s.sy == '?':
                 exc_check = 1

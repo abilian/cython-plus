@@ -67,3 +67,40 @@ auto __Pyx_pythran_to_python(T &&value) -> decltype(to_python(
 #else
   #define __PYX_STD_MOVE_IF_SUPPORTED(x) x
 #endif
+
+/////////////// CheckedResult.proto ///////////////
+
+#include <type_traits>
+
+template <typename T, bool = std::is_void<T>::value>
+struct CheckedResult {};
+
+template <typename T>
+class CheckedResult<T, false> {
+  enum Status { Ok, Err };
+
+  private:
+    enum Status status;
+
+  public:
+    T result;
+
+    CheckedResult(const T& value) : status(Ok), result(value) {}
+    CheckedResult() : status(Err) {}
+    operator T() { return result; }
+    void set_error() { status = Err; }
+    bool is_error() { return status == Err; }
+};
+
+template <typename T>
+class CheckedResult<T, true> {
+  enum Status { Ok, Err };
+
+  public:
+    CheckedResult() : status(Ok) {}
+    void set_error() { status = Err; }
+    bool is_error() { return status == Err; }
+
+  private:
+    enum Status status;
+};

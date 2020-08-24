@@ -684,41 +684,15 @@ class CheckedResultType(BaseType):
     def can_coerce_from_pyobject(self, env):
         return self.checked_base_type.can_coerce_from_pyobject(env)
 
-    def generate_incref(self, code, cname, **kwds):
-        self.checked_base_type.generate_incref(code, "%s.result" % cname, **kwds)
+    def generate_dummy_refcount(self, code, *args, **kwargs):
+        pass
 
-    def generate_xincref(self, code, cname, **kwds):
-        self.checked_base_type.generate_xincref(code, "%s.result" % cname, **kwds)
-
-    def generate_decref(self, code, cname, **kwds):
-        self.checked_base_type.generate_decref(code, "%s.result" % cname, **kwds)
-
-    def generate_decref_clear(self, code, cname, **kwds):
-        self.checked_base_type.generate_decref_clear(code, "%s.result" % cname, **kwds)
-
-    def generate_xdecref(self, code, cname, **kwds):
-        self.checked_base_type.generate_xdecref(code, "%s.result" % cname, **kwds)
-
-    def generate_xdecref_clear(self, code, cname, **kwds):
-        self.checked_base_type.generate_xdecref_clear(code, "%s.result" % cname, **kwds)
-
-    def generate_gotref(self, code, cname):
-        self.checked_base_type.generate_gotref(code, "%s.result" % cname)
-
-    def generate_xgotref(self, code, cname):
-        self.checked_base_type.generate_xgotref(code, "%s.result" % cname)
-
-    def generate_giveref(self, code, cname):
-        self.checked_base_type.generate_giveref(code, "%s.result" % cname)
-
-    def generate_xgiveref(self, code, cname):
-        self.checked_base_type.generate_xgiveref(code, "%s.result" % cname)
-
-    def generate_decref_set(self, code, cname, rhs_cname):
-        self.checked_base_type.generate_decref_set(code, "%s.result" % cname, rhs_cname)
-
-    def generate_xdecref_set(self, code, cname, rhs_cname):
-        self.checked_base_type.generate_xdecref_set(code, "%s.result" % cname, rhs_cname)
+    generate_incref = generate_xincref = generate_dummy_refcount
+    generate_decref = generate_decref_clear = generate_dummy_refcount
+    generate_xdecref = generate_xdecref_clear = generate_dummy_refcount
+    generate_gotref = generate_xgotref = generate_dummy_refcount
+    generate_giveref = generate_xgiveref = generate_dummy_refcount
+    generate_decref_set = generate_xdecref_set = generate_dummy_refcount
 
 
 class MemoryViewSliceType(PyrexType):

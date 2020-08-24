@@ -2957,7 +2957,7 @@ class CppIteratorNode(ExprNode):
                     self.cpp_attribute_op = "->"
                 # 3) (otherwise) sequence comes from a function call or similar, so we must
                 #    create a temp to store it in
-                self.cpp_sequence_cname = code.funcstate.allocate_temp(temp_type, manage_ref=False)
+                self.cpp_sequence_cname = code.funcstate.allocate_temp(temp_type, manage_ref=temp_type.is_cyp_class)
                 code.putln("%s = %s%s;" % (self.cpp_sequence_cname,
                                            "&" if temp_type.is_ptr else "",
                                            self.sequence.move_result_rhs()))

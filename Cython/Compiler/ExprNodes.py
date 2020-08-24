@@ -3913,6 +3913,8 @@ class IndexNode(_IndexingBaseNode):
                 self.is_temp = True
             if self.exception_value is None:
                 env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
+        elif self.exception_check == '~':
+            self.is_temp = True
         self.index = self.index.coerce_to(func_type.args[0].type, env)
         self.type = func_type.return_type
         if setting and not func_type.return_type.is_reference:
@@ -3944,6 +3946,8 @@ class IndexNode(_IndexingBaseNode):
             self.is_temp = True
             if self.exception_value is None:
                 env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
+        elif self.exception_check == '~':
+            self.is_temp = True
 
         self.index = self.index.coerce_to(function.type.args[0].type, env)
         self.type = func_type.return_type
@@ -4287,7 +4291,7 @@ class IndexNode(_IndexingBaseNode):
             function = "__Pyx_GetItemInt_ByteArray"
             error_value = '-1'
             utility_code = UtilityCode.load_cached("GetItemIntByteArray", "StringTools.c")
-        elif not (self.base.type.is_cpp_class and self.exception_check == '+'):
+        elif not (self.base.type.is_cpp_class and self.exception_check in ('+', '~')):
             assert False, "unexpected type %s and base type %s for indexing" % (
                 self.type, self.base.type)
 
@@ -4299,15 +4303,20 @@ class IndexNode(_IndexingBaseNode):
         else:
             index_code = self.index.py_result()
 
-        if self.base.type.is_cpp_class and self.exception_check == '+':
+        if self.base.type.is_cpp_class:
             base_result = self.base.result()
             if self.base.type.is_cyp_class:
                 base_result = "(*%s)" % base_result
-            translate_cpp_exception(code, self.pos,
-                "%s = %s[%s];" % (self.result(), base_result,
-                                  self.index.result()),
-                self.result() if self.type.is_pyobject else None,
-                self.exception_value, self.in_nogil_context)
+            evaluation_code = "%s = %s[%s];" % (self.result(), base_result, self.index.result())
+            if self.exception_check == '+':
+                translate_cpp_exception(code, self.pos,
+                    evaluation_code,
+                    self.result() if self.type.is_pyobject else None,
+                    self.exception_value, self.in_nogil_context)
+            elif self.exception_check == '~':
+                exc_check_code = self.type.error_condition(self.result())
+                goto_error = code.error_goto_if(exc_check_code, self.pos)
+                code.putln("%s %s" % (evaluation_code, goto_error))
         else:
             error_check = '!%s' if error_value == 'NULL' else '%%s == %s' % error_value
             code.putln(
@@ -4364,11 +4373,18 @@ class IndexNode(_IndexingBaseNode):
                         function_code,
                         self.index.result(),
                         value_code)
-        if self.exception_check and self.exception_check == "+":
+        if self.exception_check == "+":
             translate_cpp_exception(code, self.pos,
                     setitem_code,
                     None,
                     self.exception_value, self.in_nogil_context)
+        elif self.exception_check == "~":
+            checked_result_type = function.type.return_type
+            temp_code = code.funcstate.allocate_temp(checked_result_type, manage_ref=False)
+            exc_check_code = checked_result_type.error_condition(temp_code)
+            goto_error = code.error_goto_if(exc_check_code, self.pos)
+            code.putln("%s = %s %s" % (temp_code, setitem_code, goto_error))
+            code.funcstate.release_temp(temp_code)
         else:
             code.putln(setitem_code)
 
@@ -4450,11 +4466,17 @@ class IndexNode(_IndexingBaseNode):
                         self.base.result(),
                         function_code,
                         self.index.result())
-        if self.exception_check and self.exception_check == "+":
+        if self.exception_check == "+":
             translate_cpp_exception(code, self.pos,
                     setitem_code,
                     None,
                     self.exception_value, self.in_nogil_context)
+        elif self.exception_check == "~":
+            temp_code = code.funcstate.allocate_temp(self.type, manage_ref=False)
+            exc_check_code = self.type.error_condition(temp_code)
+            goto_error = code.error_goto_if(exc_check_code, self.pos)
+            code.putln("%s = %s %s" % (temp_code, setitem_code, goto_error))
+            code.funcstate.release_temp(temp_code)
         else:
             code.putln(setitem_code)
 

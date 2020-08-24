@@ -6228,7 +6228,9 @@ class SimpleCallNode(CallNode):
 
     def is_c_result_required(self):
         func_type = self.function_type()
-        if not func_type.exception_value or func_type.exception_check in ('+', '~'):
+        if func_type.exception_check == '~':
+            return True
+        if not func_type.exception_value or func_type.exception_check == '+':
             return False  # skip allocation of unused result temp
         return True
 

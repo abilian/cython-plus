@@ -6169,7 +6169,7 @@ class SimpleCallNode(CallNode):
         self.nogil = env.nogil
         if (self.nogil and
                 func_type.exception_check and
-                func_type.exception_check != '+'):
+                func_type.exception_check not in ('+', '~')):
             env.use_utility_code(pyerr_occurred_withgil_utility_code)
         # C++ exception handler
         if func_type.exception_check == '+':

@@ -612,6 +612,7 @@ class CheckedResultType(BaseType):
             error(pos, "Cannot use 'except ~' exception signaling with functions that return by reference")
         elif base_type.is_cpp_class:
             base_type.check_nullary_constructor(pos)
+        self.pos = pos
         self.checked_base_type = base_type
 
     def invalid_value(self):
@@ -636,7 +637,7 @@ class CheckedResultType(BaseType):
         return self.checked_base_type.cast_code(expr_code)
 
     def specialize(self, values):
-        return self.checked_base_type.specialize(values)
+        return CheckedResultType(self.pos, self.checked_base_type.specialize(values))
 
     def __repr__(self):
         return "<CheckedResult[%s]>" % repr(self.checked_base_type)

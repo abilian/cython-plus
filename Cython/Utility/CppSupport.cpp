@@ -69,6 +69,7 @@ auto __Pyx_pythran_to_python(T &&value) -> decltype(to_python(
 #endif
 
 /////////////// CheckedResult.proto ///////////////
+//@proto_block: utility_code_proto_before_types
 
 #include <type_traits>
 

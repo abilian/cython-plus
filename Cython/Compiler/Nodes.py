@@ -8579,15 +8579,21 @@ class LockCypclassNode(StatNode):
             context = code.get_string_const(EncodedString(context))
         else:
             context = "NULL"
-        lock_code = "Cy_%s_CONTEXT(%s, %s);" % (self.state[:-2].upper(), self.obj.result(), context)
-        code.putln(lock_code)
+
+        # Create a scope to use scope bound resource management (RAII).
+        code.putln("{")
+
+        # Each lock guard has its onw scope, so a prefix is enough to prevent name collisions
+        guard_code = "%sguard" % Naming.cypclass_lock_guard_prefix
+        if self.state == "rlocked":
+            code.putln("Cy_rlock_guard  %s(%s, %s);" % (guard_code, self.obj.result(), context))
+        elif self.state == "wlocked":
+            code.putln("Cy_wlock_guard  %s(%s ,%s);" % (guard_code, self.obj.result(), context))
 
         self.body.generate_execution_code(code)
 
-        if self.state == "rlocked":
-            code.putln("Cy_UNRLOCK(%s);" % self.obj.result())
-        elif self.state == "wlocked":
-            code.putln("Cy_UNWLOCK(%s);" % self.obj.result())
+        # Close the scope to release the lock.
+        code.putln("}")
 
 
 def cython_view_utility_code():

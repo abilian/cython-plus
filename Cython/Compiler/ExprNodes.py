@@ -14068,6 +14068,7 @@ class CoerceToTempNode(CoercionNode):
 
 class CoerceToLockedTempNode(CoerceToTempNode):
     # rlock_only    boolean
+    # guard_code    used internally
 
     def __init__(self, arg, env=None, rlock_only=False):
         self.rlock_only = rlock_only
@@ -14089,16 +14090,20 @@ class CoerceToLockedTempNode(CoerceToTempNode):
             context = code.get_string_const(StringEncoding.EncodedString(context))
         else:
             context = "NULL"
+
+        # Create a scope to use scope bound resource management (RAII).
+        code.putln("{")
+
+        # Each lock guard has its onw scope, so a prefix is enough to prevent name collisions
+        guard_code = "%sguard" % Naming.cypclass_lock_guard_prefix
         if self.rlock_only:
-            code.putln("Cy_RLOCK_CONTEXT(%s, %s);" % (self.result(), context))
+            code.putln("Cy_rlock_guard %s(%s, %s);" % (guard_code, self.result(), context))
         else:
-            code.putln("Cy_WLOCK_CONTEXT(%s, %s);" % (self.result(), context))
+            code.putln("Cy_wlock_guard %s(%s, %s);" % (guard_code, self.result(), context))
 
     def generate_disposal_code(self, code):
-        if self.rlock_only:
-            code.putln("Cy_UNRLOCK(%s);" % self.result())
-        else:
-            code.putln("Cy_UNWLOCK(%s);" % self.result())
+        # Close the scope to release the lock.
+        code.putln("}")
         super(CoerceToLockedTempNode, self).generate_disposal_code(code)
 
 

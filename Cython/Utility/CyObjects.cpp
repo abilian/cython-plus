@@ -88,6 +88,48 @@
                 int CyObject_TRYWLOCK();
         };
 
+        class Cy_rlock_guard {
+            CyObject* o;
+            public:
+                Cy_rlock_guard(CyObject* o, const char * context) : o(o) {
+                    if (o != NULL) {
+                        o->CyObject_RLOCK(context);
+                    }
+                    else {
+                        fprintf(stderr, "ERROR: trying to rlock NULL !\n");
+                    }
+                }
+                ~Cy_rlock_guard() {
+                    if (this->o != NULL) {
+                        this->o->CyObject_UNRLOCK();
+                    }
+                    else {
+                        fprintf(stderr, "ERROR: trying to unrlock NULL !\n");
+                    }
+                }
+        };
+
+        class Cy_wlock_guard {
+            CyObject* o;
+            public:
+                Cy_wlock_guard(CyObject* o, const char * context) : o(o) {
+                    if (o != NULL) {
+                        o->CyObject_WLOCK(context);
+                    }
+                    else {
+                        fprintf(stderr, "ERROR: trying to wlock NULL !\n");
+                    }
+                }
+                ~Cy_wlock_guard() {
+                    if (this->o != NULL) {
+                        this->o->CyObject_UNWLOCK();
+                    }
+                    else {
+                        fprintf(stderr, "ERROR: trying to unwlock NULL !\n");
+                    }
+                }
+        };
+
         /* All this is made available by member injection inside the module scope */
 
         struct ActhonResultInterface : public CyObject {

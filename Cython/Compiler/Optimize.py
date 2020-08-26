@@ -221,6 +221,10 @@ class IterationTransform(Visitor.EnvTransform):
                 return node
             return self._transform_set_iteration(node, iterable)
 
+        # C++ iteration?
+        if iterable.type.is_cpp_class:
+            return node
+
         # C array (slice) iteration?
         if iterable.type.is_ptr or iterable.type.is_array:
             return self._transform_carray_iteration(node, iterable, reversed=reversed)

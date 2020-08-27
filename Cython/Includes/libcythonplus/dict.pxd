@@ -1,25 +1,72 @@
 from libcpp.unordered_map cimport unordered_map
 from libcpp.pair cimport pair
 from libcpp.vector cimport vector
+from libcpp.atomic cimport atomic
 from cython.operator cimport dereference
 
 cdef extern from * nogil:
     """
-    template<typename base_iterator_t, typename reference_t>
-    struct key_iterator_t : base_iterator_t
+    template<typename dict_t, typename base_iterator_t, typename reference_t, reference_t (*getter_t)(base_iterator_t)>
+    struct dict_iterator_t : base_iterator_t
     {
         using base = base_iterator_t;
         using reference = reference_t;
 
-        key_iterator_t() = default;
-        key_iterator_t(base const & b) : base{b} {}
+        dict_t urange = NULL;
 
-        key_iterator_t operator++(int)
+        friend void swap(dict_iterator_t & first, dict_iterator_t & second)
+        {
+            using std::swap;
+            swap(first.urange, second.urange);
+            swap(static_cast<base&>(first), static_cast<base&>(second));
+        }
+
+        dict_iterator_t() = default;
+        dict_iterator_t(dict_iterator_t const & rhs) : urange(rhs.urange)
+        {
+            if (urange != NULL)
+            {
+                urange->CyObject_INCREF();
+                urange->_active_iterators++;
+            }
+        }
+
+        dict_iterator_t(dict_iterator_t && rhs) : dict_iterator_t()
+        {
+            std::swap(*this, rhs);
+        }
+
+        dict_iterator_t & operator=(dict_iterator_t rhs)
+        {
+            swap(*this, rhs);
+            return *this;
+        }
+
+        ~dict_iterator_t()
+        {
+            if (urange != NULL) {
+                urange->_active_iterators--;
+                urange->CyObject_DECREF();
+                urange = NULL;
+            }
+        }
+
+        dict_iterator_t(base const & b) : base{b} {}
+
+        dict_iterator_t(base const & b, dict_t urange) : base{b}, urange{urange}
+        {
+            if (urange != NULL) {
+                urange->CyObject_INCREF();
+                urange->_active_iterators++;
+            }
+        }
+
+        dict_iterator_t operator++(int)
         {
             return static_cast<base&>(*this)++;
         }
 
-        key_iterator_t & operator++()
+        dict_iterator_t & operator++()
         {
             ++static_cast<base&>(*this);
             return (*this);
@@ -27,61 +74,37 @@ cdef extern from * nogil:
 
         reference operator*() const
         {
-            return static_cast<base>(*this)->first;
+            return getter_t(static_cast<base>(*this));
         }
     };
 
     template<typename base_iterator_t, typename reference_t>
-    struct value_iterator_t : base_iterator_t
+    constexpr reference_t key_getter_t(base_iterator_t iter)
     {
-        using base = base_iterator_t;
-        using reference = reference_t;
-
-        value_iterator_t() = default;
-        value_iterator_t(base const & b) : base{b} {}
-
-        value_iterator_t operator++(int)
-        {
-            return static_cast<base&>(*this)++;
-        }
-
-        value_iterator_t & operator++()
-        {
-            ++static_cast<base&>(*this);
-            return (*this);
-        }
-
-        reference operator*() const
-        {
-            return static_cast<base>(*this)->second;
-        }
-    };
+        return iter->first;
+    }
 
     template<typename base_iterator_t, typename reference_t>
-    struct item_iterator_t : base_iterator_t
+    constexpr reference_t value_getter_t(base_iterator_t iter)
     {
-        using base = base_iterator_t;
-        using reference = reference_t;
+        return iter->second;
+    }
 
-        item_iterator_t() = default;
-        item_iterator_t(base const & b) : base{b} {}
+    template<typename base_iterator_t, typename reference_t>
+    constexpr reference_t item_getter_t(base_iterator_t iter)
+    {
+        return *iter;
+    }
 
-        item_iterator_t operator++(int)
-        {
-            return static_cast<base&>(*this)++;
-        }
+    template<typename dict_t, typename base_iterator_t, typename reference_t>
+    using key_iterator_t = dict_iterator_t<dict_t, base_iterator_t, reference_t, key_getter_t<base_iterator_t, reference_t>>;
 
-        item_iterator_t & operator++()
-        {
-            ++static_cast<base&>(*this);
-            return (*this);
-        }
+    template<typename dict_t, typename base_iterator_t, typename reference_t>
+    using value_iterator_t = dict_iterator_t<dict_t, base_iterator_t, reference_t, value_getter_t<base_iterator_t, reference_t>>;
 
-        reference operator*() const
-        {
-            return *static_cast<base>(*this);
-        }
-    };
+    template<typename dict_t, typename base_iterator_t, typename reference_t>
+    using item_iterator_t = dict_iterator_t<dict_t, base_iterator_t, reference_t, item_getter_t<base_iterator_t, reference_t>>;
+
 
     template <typename dict_t, typename iterator_t>
     class view_dict
@@ -137,7 +160,7 @@ cdef extern from * nogil:
 
         iterator begin() const
         {
-            return std::begin(*urange);
+            return iterator(std::begin(*urange), urange);
         }
 
         iterator end() const
@@ -147,31 +170,34 @@ cdef extern from * nogil:
     };
 
     template<typename dict_t, typename base_iterator_t, typename reference_t>
-    using view_dict_keys = view_dict<dict_t, key_iterator_t<base_iterator_t, reference_t>>;
+    using view_dict_keys = view_dict<dict_t, key_iterator_t<dict_t, base_iterator_t, reference_t>>;
 
     template<typename dict_t, typename base_iterator_t, typename reference_t>
-    using view_dict_values = view_dict<dict_t, value_iterator_t<base_iterator_t, reference_t>>;
+    using view_dict_values = view_dict<dict_t, value_iterator_t<dict_t, base_iterator_t, reference_t>>;
 
     template<typename dict_t, typename base_iterator_t, typename reference_t>
-    using view_dict_items = view_dict<dict_t, item_iterator_t<base_iterator_t, reference_t>>;
+    using view_dict_items = view_dict<dict_t, item_iterator_t<dict_t, base_iterator_t, reference_t>>;
     """
-    cdef cppclass key_iterator_t[base_iterator_t, reference_t]:
+    cdef cppclass key_iterator_t[dict_t, base_iterator_t, reference_t]:
         key_iterator_t()
         key_iterator_t(base_iterator_t)
+        key_iterator_t(base_iterator_t, dict_t)
         reference_t operator*()
         key_iterator_t operator++()
         bint operator!=(key_iterator_t)
 
-    cdef cppclass value_iterator_t[base_iterator_t, reference_t]:
+    cdef cppclass value_iterator_t[dict_t, base_iterator_t, reference_t]:
         value_iterator_t()
         value_iterator_t(base_iterator_t)
+        value_iterator_t(base_iterator_t, dict_t)
         reference_t operator*()
         value_iterator_t operator++()
         bint operator!=(value_iterator_t)
 
-    cdef cppclass item_iterator_t[base_iterator_t, reference_t]:
+    cdef cppclass item_iterator_t[dict_t, base_iterator_t, reference_t]:
         item_iterator_t()
         item_iterator_t(base_iterator_t)
+        item_iterator_t(base_iterator_t, dict_t)
         reference_t operator*()
         item_iterator_t operator++()
         bint operator!=(item_iterator_t)
@@ -179,20 +205,20 @@ cdef extern from * nogil:
     cdef cppclass view_dict_keys[dict_t, base_iterator_t, reference_t]:
         view_dict_keys()
         view_dict_keys(dict_t)
-        key_iterator_t[base_iterator_t, reference_t] begin()
-        key_iterator_t[base_iterator_t, reference_t] end()
+        key_iterator_t[dict_t, base_iterator_t, reference_t] begin()
+        key_iterator_t[dict_t, base_iterator_t, reference_t] end()
 
     cdef cppclass view_dict_values[dict_t, base_iterator_t, reference_t]:
         view_dict_values()
         view_dict_values(dict_t)
-        value_iterator_t[base_iterator_t, reference_t] begin()
-        value_iterator_t[base_iterator_t, reference_t] end()
+        value_iterator_t[dict_t, base_iterator_t, reference_t] begin()
+        value_iterator_t[dict_t, base_iterator_t, reference_t] end()
 
     cdef cppclass view_dict_items[dict_t, base_iterator_t, reference_t]:
         view_dict_items()
         view_dict_items(dict_t)
-        item_iterator_t[base_iterator_t, reference_t] begin()
-        item_iterator_t[base_iterator_t, reference_t] end()
+        item_iterator_t[dict_t, base_iterator_t, reference_t] begin()
+        item_iterator_t[dict_t, base_iterator_t, reference_t] end()
 
 
 cdef cypclass cypdict[K, V]:
@@ -203,6 +229,10 @@ cdef cypclass cypdict[K, V]:
 
     vector[item_type] _items
     unordered_map[key_type, size_type] _indices
+    atomic[int] _active_iterators
+
+    __init__(self):
+        self._active_iterators.store(0)
 
     V __getitem__(self, const key_type key) except ~:
         it = self._indices.find(key)
@@ -213,19 +243,24 @@ cdef cypclass cypdict[K, V]:
             with gil:
                 raise KeyError("Getting nonexistent item")
 
-    void __setitem__(self, key_type key, value_type value):
-        Cy_INCREF(key)
-        Cy_INCREF(value)
+    void __setitem__(self, key_type key, value_type value) except ~:
         it = self._indices.find(key)
         end = self._indices.end()
         if it != end:
+            Cy_INCREF(key)
+            Cy_INCREF(value)
             index = dereference(it).second
             Cy_DECREF(self._items[index].first)
             Cy_DECREF(self._items[index].second)
             self._items[index].second = value
-        else:
+        elif self._active_iterators == 0:
+            Cy_INCREF(key)
+            Cy_INCREF(value)
             self._indices[key] = self._items.size()
             self._items.push_back(item_type(key, value))
+        else:
+            with gil:
+                raise RuntimeError("Modifying a dictionary with active iterators")
 
     void __delitem__(self, key_type key) except ~:
         it = self._indices.find(key)
@@ -242,11 +277,11 @@ cdef cypclass cypdict[K, V]:
             with gil:
                 raise KeyError("Deleting nonexistent item")
 
-    key_iterator_t[vector[item_type].iterator, key_type] begin(self):
-        return key_iterator_t[vector[item_type].iterator, key_type](self._items.begin())
+    key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type] begin(self):
+        return key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type](self._items.begin(), self)
 
-    key_iterator_t[vector[item_type].iterator, key_type] end(self):
-        return key_iterator_t[vector[item_type].iterator, key_type](self._items.end())
+    key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type] end(self):
+        return key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type](self._items.end())
 
     size_type __len__(self):
         return self._items.size()

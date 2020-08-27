@@ -136,8 +136,8 @@ def test_getitem_exception():
     'Getting nonexistent item'
     1
     """
+    d = cypdict[Index, Value]()
     try:
-        d = cypdict[Index, Value]()
         with nogil:
             v = d[Index()]
             with gil:
@@ -152,8 +152,8 @@ def test_delitem_exception():
     'Deleting nonexistent item'
     1
     """
+    d = cypdict[Index, Value]()
     try:
-        d = cypdict[Index, Value]()
         with nogil:
             del d[Index()]
             with gil:
@@ -162,3 +162,138 @@ def test_delitem_exception():
         print(e)
         return 1
 
+def test_setitem_exception_dict_iterator():
+    """
+    >>> test_setitem_exception_dict_iterator()
+    Modifying a dictionary with active iterators
+    1
+    """
+    d = cypdict[Index, Value]()
+    iterator = d.begin()
+    try:
+        with nogil:
+            d[Index()] = Value()
+            with gil:
+                return 0
+    except RuntimeError as e:
+        print(e)
+        return 1
+
+def test_setitem_exception_dict_keys_iterator():
+    """
+    >>> test_setitem_exception_dict_keys_iterator()
+    Modifying a dictionary with active iterators
+    1
+    """
+    d = cypdict[Index, Value]()
+    iterator = d.keys().begin()
+    try:
+        with nogil:
+            d[Index()] = Value()
+            with gil:
+                return 0
+    except RuntimeError as e:
+        print(e)
+        return 1
+
+def test_setitem_exception_dict_values_iterator():
+    """
+    >>> test_setitem_exception_dict_values_iterator()
+    Modifying a dictionary with active iterators
+    1
+    """
+    d = cypdict[Index, Value]()
+    iterator = d.values().begin()
+    try:
+        with nogil:
+            d[Index()] = Value()
+            with gil:
+                return 0
+    except RuntimeError as e:
+        print(e)
+        return 1
+
+def test_setitem_exception_dict_items_iterator():
+    """
+    >>> test_setitem_exception_dict_items_iterator()
+    Modifying a dictionary with active iterators
+    1
+    """
+    d = cypdict[Index, Value]()
+    iterator = d.items().begin()
+    try:
+        with nogil:
+            d[Index()] = Value()
+            with gil:
+                return 0
+    except RuntimeError as e:
+        print(e)
+        return 1
+
+def test_setitem_after_dict_iterator():
+    """
+    >>> test_setitem_after_dict_iterator()
+    1
+    """
+    d = cypdict[Index, Value]()
+    for key in d:
+        pass
+    try:
+        with nogil:
+            d[Index()] = Value()
+            with gil:
+                return 1
+    except RuntimeError as e:
+        print(e)
+        return 0
+
+def test_setitem_after_dict_keys_iterator():
+    """
+    >>> test_setitem_after_dict_keys_iterator()
+    1
+    """
+    d = cypdict[Index, Value]()
+    for key in d.keys():
+        pass
+    try:
+        with nogil:
+            d[Index()] = Value()
+            with gil:
+                return 1
+    except RuntimeError as e:
+        print(e)
+        return 0
+
+def test_setitem_after_dict_values_iterator():
+    """
+    >>> test_setitem_after_dict_values_iterator()
+    1
+    """
+    d = cypdict[Index, Value]()
+    for value in d.values():
+        pass
+    try:
+        with nogil:
+            d[Index()] = Value()
+            with gil:
+                return 1
+    except RuntimeError as e:
+        print(e)
+        return 0
+
+def test_setitem_after_dict_items_iterator():
+    """
+    >>> test_setitem_after_dict_items_iterator()
+    1
+    """
+    d = cypdict[Index, Value]()
+    for item in d.items():
+        pass
+    try:
+        with nogil:
+            d[Index()] = Value()
+            with gil:
+                return 1
+    except RuntimeError as e:
+        print(e)
+        return 0

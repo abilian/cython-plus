@@ -2979,6 +2979,12 @@ class CppIteratorNode(ExprNode):
         code.putln("++%s;" % self.result())
 
     def generate_disposal_code(self, code):
+        # clean-up the iterator by assigning end to it
+        # this is only required if the iterator holds resources that must be released once iteration is complete
+        code.putln("%s = %s%send();" % (
+                        self.result(),
+                        self.cpp_sequence_cname or self.sequence.result(),
+                        self.cpp_attribute_op))
         if self.cpp_sequence_cname and self.sequence.type.is_cyp_class:
             code.put_decref(self.cpp_sequence_cname, self.sequence.type)
         super(CppIteratorNode, self).generate_disposal_code(code)

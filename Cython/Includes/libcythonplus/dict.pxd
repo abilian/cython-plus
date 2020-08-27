@@ -87,19 +87,53 @@ cdef extern from * nogil:
     class view_dict
     {
     private:
-        dict_t urange;
+        dict_t urange = NULL;
 
     public:
         using iterator = iterator_t;
 
-        view_dict() = default;
-        view_dict(view_dict const & rhs) = default;
-        view_dict(view_dict && rhs) = default;
-        view_dict & operator=(view_dict const & rhs) = default;
-        view_dict & operator=(view_dict && rhs) = default;
-        ~view_dict() = default;
+        friend void swap(view_dict & first, view_dict & second)
+        {
+            using std::swap;
+            swap(first.urange, second.urange);
+        }
 
-        view_dict(dict_t urange) : urange(urange) {}
+        view_dict() = default;
+        view_dict(view_dict const & rhs) : urange(rhs.urange)
+        {
+            if (urange != NULL)
+            {
+                urange->CyObject_INCREF();
+            }
+        }
+
+        view_dict(view_dict && rhs) : view_dict()
+        {
+            swap(*this, rhs);
+        }
+
+        view_dict & operator=(view_dict rhs)
+        {
+            swap(*this, rhs);
+            return *this;
+        }
+
+        ~view_dict()
+        {
+            if (urange != NULL)
+            {
+                urange->CyObject_DECREF();
+                urange = NULL;
+            }
+        }
+
+        view_dict(dict_t urange) : urange(urange)
+        {
+            if (urange != NULL)
+            {
+                urange->CyObject_INCREF();
+            }
+        }
 
         iterator begin() const
         {

@@ -2680,6 +2680,7 @@ class CFuncDefNode(FuncDefNode):
 
         typ.is_const_method = self.is_const_method
         typ.is_static_method = self.is_static_method
+        typ.is_cyp_class_method = self.is_cyp_class_method
 
         self.entry = env.declare_cfunction(
             name, typ, self.pos,

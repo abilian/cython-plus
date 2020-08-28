@@ -297,3 +297,52 @@ def test_setitem_after_dict_items_iterator():
     except RuntimeError as e:
         print(e)
         return 0
+
+def test_len():
+    """
+    >>> test_len()
+    1
+    """
+    d = cypdict[Index, Value]()
+    cdef int nb_elements = 0
+    for i in range(10):
+        d[Index(i)] = Value(i)
+    for k in d:
+        nb_elements += 1
+    if d.__len__() != nb_elements:
+        return 0
+    if nb_elements != 10:
+        return 0
+    return 1
+
+def test_clear():
+    """
+    >>> test_clear()
+    1
+    """
+    d = cypdict[Index, Value]()
+    for i in range(10):
+        d[Index(i)] = Value(i)
+    if d.__len__() != 10:
+        return -1
+    d.clear()
+    if d.__len__() != 0:
+        return 0
+    return 1
+
+def test_clear_exception_dict_iterator():
+    """
+    >>> test_clear_exception_dict_iterator()
+    Modifying a dictionary with active iterators
+    1
+    """
+    d = cypdict[Index, Value]()
+    iterator = d.begin()
+    try:
+        with nogil:
+            d.clear()
+            with gil:
+                return 0
+    except RuntimeError as e:
+        print(e)
+        return 1

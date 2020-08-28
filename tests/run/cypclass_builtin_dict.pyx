@@ -358,3 +358,83 @@ def test_scalar_types_dict():
         d[index] = i
 
     return [(key, value) for (key, value) in d.items()]
+
+cdef cypclass DestroyCheckIndex(Index):
+    __dealloc__(self) with gil:
+        print("destroyed index", self.index)
+
+cdef cypclass DestroyCheckValue(Value):
+    __dealloc__(self) with gil:
+        print("destroyed value", self.value)
+
+def test_items_destroyed():
+    """
+    >>> test_items_destroyed()
+    ('destroyed index', 0)
+    ('destroyed value', 0)
+    ('destroyed index', 1)
+    ('destroyed value', 1)
+    ('destroyed index', 2)
+    ('destroyed value', 2)
+    ('destroyed index', 3)
+    ('destroyed value', 3)
+    ('destroyed index', 4)
+    ('destroyed value', 4)
+    ('destroyed index', 5)
+    ('destroyed value', 5)
+    ('destroyed index', 6)
+    ('destroyed value', 6)
+    ('destroyed index', 7)
+    ('destroyed value', 7)
+    ('destroyed index', 8)
+    ('destroyed value', 8)
+    ('destroyed index', 9)
+    ('destroyed value', 9)
+    """
+    d = cypdict[DestroyCheckIndex, DestroyCheckValue]()
+    for i in range(10):
+        d[DestroyCheckIndex(i)] = DestroyCheckValue(i)
+
+def test_items_refcount():
+    """
+    >>> test_items_refcount()
+    1
+    """
+    d = cypdict[Index, Value]()
+    index = Index()
+    value = Value()
+    if Cy_GETREF(index) != 2:
+        return 0
+    if Cy_GETREF(value) != 2:
+        return 0
+    d[index] = value
+    if Cy_GETREF(index) != 3:
+        return 0
+    if Cy_GETREF(value) != 3:
+        return 0
+    del d[index]
+    if Cy_GETREF(index) != 2:
+        return 0
+    if Cy_GETREF(value) != 2:
+        return 0
+    d[index] = value
+    if Cy_GETREF(index) != 3:
+        return 0
+    if Cy_GETREF(value) != 3:
+        return 0
+    d.clear()
+    if Cy_GETREF(index) != 2:
+        return 0
+    if Cy_GETREF(value) != 2:
+        return 0
+    d[index] = value
+    if Cy_GETREF(index) != 3:
+        return 0
+    if Cy_GETREF(value) != 3:
+        return 0
+    d = cypdict[Index, Value]()
+    if Cy_GETREF(index) != 2:
+        return 0
+    if Cy_GETREF(value) != 2:
+        return 0
+    return 1

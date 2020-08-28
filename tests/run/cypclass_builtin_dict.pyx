@@ -346,3 +346,15 @@ def test_clear_exception_dict_iterator():
     except RuntimeError as e:
         print(e)
         return 1
+
+def test_scalar_types_dict():
+    """
+    >>> test_scalar_types_dict()
+    [(0.0, 0), (1.0, 1), (2.0, 2), (3.0, 3), (4.0, 4), (5.0, 5), (6.0, 6), (7.0, 7), (8.0, 8), (9.0, 9)]
+    """
+    d = cypdict[double, int]()
+    for i in range(10):
+        index = <double> i
+        d[index] = i
+
+    return [(key, value) for (key, value) in d.items()]

@@ -203,18 +203,21 @@ cdef extern from * nogil:
         bint operator!=(item_iterator_t)
 
     cdef cppclass view_dict_keys[dict_t, base_iterator_t, reference_t]:
+        ctypedef key_iterator_t[dict_t, base_iterator_t, reference_t] iterator
         view_dict_keys()
         view_dict_keys(dict_t)
         key_iterator_t[dict_t, base_iterator_t, reference_t] begin()
         key_iterator_t[dict_t, base_iterator_t, reference_t] end()
 
     cdef cppclass view_dict_values[dict_t, base_iterator_t, reference_t]:
+        ctypedef value_iterator_t[dict_t, base_iterator_t, reference_t] iterator
         view_dict_values()
         view_dict_values(dict_t)
         value_iterator_t[dict_t, base_iterator_t, reference_t] begin()
         value_iterator_t[dict_t, base_iterator_t, reference_t] end()
 
     cdef cppclass view_dict_items[dict_t, base_iterator_t, reference_t]:
+        ctypedef item_iterator_t[dict_t, base_iterator_t, reference_t] iterator
         view_dict_items()
         view_dict_items(dict_t)
         item_iterator_t[dict_t, base_iterator_t, reference_t] begin()
@@ -226,6 +229,7 @@ cdef cypclass cypdict[K, V]:
     ctypedef V value_type
     ctypedef pair[key_type, value_type] item_type
     ctypedef vector[item_type].size_type size_type
+    ctypedef key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type] iterator
 
     vector[item_type] _items
     unordered_map[key_type, size_type] _indices

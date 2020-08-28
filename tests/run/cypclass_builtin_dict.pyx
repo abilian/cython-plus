@@ -304,7 +304,7 @@ def test_len():
     1
     """
     d = cypdict[Index, Value]()
-    cdef int nb_elements = 0
+    cdef long unsigned int nb_elements = 0
     for i in range(10):
         d[Index(i)] = Value(i)
     for k in d:

@@ -42,6 +42,17 @@ cdef extern from * nogil:
             return *this;
         }
 
+        dict_iterator_t & operator=(base_iterator_t rhs)
+        {
+            swap(static_cast<base&>(*this), rhs);
+            if (urange != NULL) {
+                urange->_active_iterators--;
+                urange->CyObject_DECREF();
+                urange = NULL;
+            }
+            return *this;
+        }
+
         ~dict_iterator_t()
         {
             if (urange != NULL) {
@@ -160,12 +171,12 @@ cdef extern from * nogil:
 
         iterator begin() const
         {
-            return iterator(std::begin(*urange), urange);
+            return iterator(std::begin(urange->_items), urange);
         }
 
-        iterator end() const
+        typename iterator::base end() const
         {
-            return std::end(*urange);
+            return std::end(urange->_items);
         }
     };
 
@@ -207,21 +218,21 @@ cdef extern from * nogil:
         view_dict_keys()
         view_dict_keys(dict_t)
         key_iterator_t[dict_t, base_iterator_t, reference_t] begin()
-        key_iterator_t[dict_t, base_iterator_t, reference_t] end()
+        base_iterator_t end()
 
     cdef cppclass view_dict_values[dict_t, base_iterator_t, reference_t]:
         ctypedef value_iterator_t[dict_t, base_iterator_t, reference_t] iterator
         view_dict_values()
         view_dict_values(dict_t)
         value_iterator_t[dict_t, base_iterator_t, reference_t] begin()
-        value_iterator_t[dict_t, base_iterator_t, reference_t] end()
+        base_iterator_t end()
 
     cdef cppclass view_dict_items[dict_t, base_iterator_t, reference_t]:
         ctypedef item_iterator_t[dict_t, base_iterator_t, reference_t] iterator
         view_dict_items()
         view_dict_items(dict_t)
         item_iterator_t[dict_t, base_iterator_t, reference_t] begin()
-        item_iterator_t[dict_t, base_iterator_t, reference_t] end()
+        base_iterator_t end()
 
 
 cdef cypclass cypdict[K, V]:
@@ -295,8 +306,8 @@ cdef cypclass cypdict[K, V]:
     key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type] begin(self):
         return key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type](self._items.begin(), self)
 
-    key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type] end(self):
-        return key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type](self._items.end())
+    vector[item_type].iterator end(self):
+        return self._items.end()
 
     size_type __len__(self):
         return self._items.size()

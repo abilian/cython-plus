@@ -277,6 +277,17 @@ cdef cypclass cypdict[K, V]:
             with gil:
                 raise KeyError("Deleting nonexistent item")
 
+    void clear(self) except ~:
+        if self._active_iterators == 0:
+            for item in self._items:
+                Cy_DECREF(item.first)
+                Cy_DECREF(item.second)
+            self._items.clear()
+            self._indices.clear()
+        else:
+            with gil:
+                raise RuntimeError("Modifying a dictionary with active iterators")
+
     key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type] begin(self):
         return key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type](self._items.begin(), self)
 

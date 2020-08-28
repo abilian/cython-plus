@@ -249,6 +249,11 @@ cdef cypclass cypdict[K, V]:
     __init__(self):
         self._active_iterators.store(0)
 
+    __dealloc__(self):
+        for item in self._items:
+            Cy_DECREF(item.first)
+            Cy_DECREF(item.second)
+
     V __getitem__(self, const key_type key) except ~:
         it = self._indices.find(key)
         end = self._indices.end()

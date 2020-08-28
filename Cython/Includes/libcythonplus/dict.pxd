@@ -192,7 +192,7 @@ cdef extern from * nogil:
     cdef cppclass key_iterator_t[dict_t, base_iterator_t, reference_t]:
         key_iterator_t()
         key_iterator_t(base_iterator_t)
-        key_iterator_t(base_iterator_t, dict_t)
+        key_iterator_t(base_iterator_t, const dict_t)
         reference_t operator*()
         key_iterator_t operator++()
         bint operator!=(key_iterator_t)
@@ -200,7 +200,7 @@ cdef extern from * nogil:
     cdef cppclass value_iterator_t[dict_t, base_iterator_t, reference_t]:
         value_iterator_t()
         value_iterator_t(base_iterator_t)
-        value_iterator_t(base_iterator_t, dict_t)
+        value_iterator_t(base_iterator_t, const dict_t)
         reference_t operator*()
         value_iterator_t operator++()
         bint operator!=(value_iterator_t)
@@ -208,7 +208,7 @@ cdef extern from * nogil:
     cdef cppclass item_iterator_t[dict_t, base_iterator_t, reference_t]:
         item_iterator_t()
         item_iterator_t(base_iterator_t)
-        item_iterator_t(base_iterator_t, dict_t)
+        item_iterator_t(base_iterator_t, const dict_t)
         reference_t operator*()
         item_iterator_t operator++()
         bint operator!=(item_iterator_t)
@@ -216,21 +216,21 @@ cdef extern from * nogil:
     cdef cppclass view_dict_keys[dict_t, base_iterator_t, reference_t]:
         ctypedef key_iterator_t[dict_t, base_iterator_t, reference_t] iterator
         view_dict_keys()
-        view_dict_keys(dict_t)
+        view_dict_keys(const dict_t)
         key_iterator_t[dict_t, base_iterator_t, reference_t] begin()
         base_iterator_t end()
 
     cdef cppclass view_dict_values[dict_t, base_iterator_t, reference_t]:
         ctypedef value_iterator_t[dict_t, base_iterator_t, reference_t] iterator
         view_dict_values()
-        view_dict_values(dict_t)
+        view_dict_values(const dict_t)
         value_iterator_t[dict_t, base_iterator_t, reference_t] begin()
         base_iterator_t end()
 
     cdef cppclass view_dict_items[dict_t, base_iterator_t, reference_t]:
         ctypedef item_iterator_t[dict_t, base_iterator_t, reference_t] iterator
         view_dict_items()
-        view_dict_items(dict_t)
+        view_dict_items(const dict_t)
         item_iterator_t[dict_t, base_iterator_t, reference_t] begin()
         base_iterator_t end()
 
@@ -254,7 +254,7 @@ cdef cypclass cypdict[K, V]:
             Cy_DECREF(item.first)
             Cy_DECREF(item.second)
 
-    V __getitem__(self, const key_type key) except ~:
+    V __getitem__(self, const key_type key) except ~ const:
         it = self._indices.find(key)
         end = self._indices.end()
         if it != end:
@@ -263,7 +263,7 @@ cdef cypclass cypdict[K, V]:
             with gil:
                 raise KeyError("Getting nonexistent item")
 
-    void __setitem__(self, key_type key, value_type value) except ~:
+    void __setitem__(self, const key_type key, const value_type value) except ~:
         it = self._indices.find(key)
         end = self._indices.end()
         if it != end:
@@ -282,7 +282,7 @@ cdef cypclass cypdict[K, V]:
             with gil:
                 raise RuntimeError("Modifying a dictionary with active iterators")
 
-    void __delitem__(self, key_type key) except ~:
+    void __delitem__(self, const key_type key) except ~:
         it = self._indices.find(key)
         end = self._indices.end()
         if it != end:
@@ -308,23 +308,23 @@ cdef cypclass cypdict[K, V]:
             with gil:
                 raise RuntimeError("Modifying a dictionary with active iterators")
 
-    key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type] begin(self):
+    key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type] begin(self) const:
         return key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type](self._items.begin(), self)
 
-    vector[item_type].iterator end(self):
+    vector[item_type].iterator end(self) const:
         return self._items.end()
 
-    size_type __len__(self):
+    size_type __len__(self) const:
         return self._items.size()
 
-    bint __contains__(self, key_type key):
+    bint __contains__(self, const key_type key) const:
         return self._indices.count(key)
 
-    view_dict_keys[cypdict[K, V], vector[item_type].iterator, key_type] keys(self):
+    view_dict_keys[cypdict[K, V], vector[item_type].iterator, key_type] keys(self) const:
         return view_dict_keys[cypdict[K, V], vector[item_type].iterator, key_type](self)
 
-    view_dict_values[cypdict[K, V], vector[item_type].iterator, value_type] values(self):
+    view_dict_values[cypdict[K, V], vector[item_type].iterator, value_type] values(self) const:
         return view_dict_values[cypdict[K, V], vector[item_type].iterator, value_type](self)
 
-    view_dict_items[cypdict[K, V], vector[item_type].iterator, item_type] items(self):
+    view_dict_items[cypdict[K, V], vector[item_type].iterator, item_type] items(self) const:
         return view_dict_items[cypdict[K, V], vector[item_type].iterator, item_type](self)

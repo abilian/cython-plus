@@ -719,7 +719,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
         return node
 
     def visit_IndexNode(self, node):
-        if node.base.type.is_cyp_class:
+        if node.base.type and node.base.type.is_cyp_class:
             func_entry = None
             if self.deleting:
                 func_entry = node.base.type.scope.lookup("__delitem__")

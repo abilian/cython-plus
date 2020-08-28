@@ -31,5 +31,5 @@ _ERRORS = u"""
 23:8: Reference 'obj' is not correctly locked in this expression (write lock required)
 24:26: Reference 'obj' is not correctly locked in this expression (write lock required)
 25:4: Reference 'obj' is not correctly locked in this expression (read lock required)
-26:21: Reference 'obj' is not correctly locked in this expression (write lock required)
+26:21: Reference 'obj' is not correctly locked in this expression (read lock required)
 """

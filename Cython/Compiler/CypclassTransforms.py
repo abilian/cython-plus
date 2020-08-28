@@ -704,9 +704,13 @@ class CypclassLockTransform(Visitor.EnvTransform):
         return node
 
     def visit_SimpleCallNode(self, node):
-        for i, arg in enumerate(node.args or ()):  # provide an empty tuple fallback in case node.args is None
-            if arg.type.is_cyp_class:
-                node.args[i] = self.lockcheck_written_or_read(arg, reading=arg.type.is_const)
+        func_type = node.function_type()
+        if func_type.is_cfunction:
+            formal_nargs = len(func_type.args)
+            actual_nargs = len(node.args)
+            for i, formal_arg, actual_arg in zip(range(actual_nargs), func_type.args, node.args):
+                if formal_arg.type.is_cyp_class:
+                    node.args[i] = self.lockcheck_written_or_read(actual_arg, reading=formal_arg.type.is_const)
         with self.accesscontext(reading=True):
             self.visitchildren(node)
         return node

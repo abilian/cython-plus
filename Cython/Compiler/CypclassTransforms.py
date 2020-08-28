@@ -581,10 +581,8 @@ class CypclassLockTransform(Visitor.EnvTransform):
         cyp_class_args = (e for e in node.local_scope.arg_entries if e.type.is_cyp_class)
         arg_locks = []
         for arg in cyp_class_args:
-            is_rlocked = arg.type.is_const or arg.is_self_arg and node.entry.type.is_const_method
-            arg_id = arg
             # Mark each cypclass arguments as locked within the function body
-            arg_locks.append(self.stacklock(arg_id, "rlocked" if is_rlocked else "wlocked"))
+            arg_locks.append(self.stacklock(arg, "rlocked" if arg.type.is_const else "wlocked"))
         with_body = lambda: self.visit(node.body)
         self.with_nested_stacklocks(iter(arg_locks), with_body)
         return node

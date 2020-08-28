@@ -2711,6 +2711,8 @@ class CFuncDefNode(FuncDefNode):
         if declarator.skipped_self:
             _name, _type, _pos, _ = declarator.skipped_self
             _cname = "this"
+            if self.is_const_method:
+                _type = PyrexTypes.CConstType(_type)
             entry = self.local_scope.declare(_name, _cname, _type, _pos, 'private')
             entry.is_variable = 1
             entry.is_self_arg = 1

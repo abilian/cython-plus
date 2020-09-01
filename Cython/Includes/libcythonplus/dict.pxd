@@ -195,7 +195,7 @@ cdef extern from * nogil:
         key_iterator_t(base_iterator_t, const dict_t)
         reference_t operator*()
         key_iterator_t operator++()
-        bint operator!=(key_iterator_t)
+        bint operator!=(base_iterator_t)
 
     cdef cppclass value_iterator_t[dict_t, base_iterator_t, reference_t]:
         value_iterator_t()
@@ -203,7 +203,7 @@ cdef extern from * nogil:
         value_iterator_t(base_iterator_t, const dict_t)
         reference_t operator*()
         value_iterator_t operator++()
-        bint operator!=(value_iterator_t)
+        bint operator!=(base_iterator_t)
 
     cdef cppclass item_iterator_t[dict_t, base_iterator_t, reference_t]:
         item_iterator_t()
@@ -211,7 +211,7 @@ cdef extern from * nogil:
         item_iterator_t(base_iterator_t, const dict_t)
         reference_t operator*()
         item_iterator_t operator++()
-        bint operator!=(item_iterator_t)
+        bint operator!=(base_iterator_t)
 
     cdef cppclass view_dict_keys[dict_t, base_iterator_t, reference_t]:
         ctypedef key_iterator_t[dict_t, base_iterator_t, reference_t] iterator

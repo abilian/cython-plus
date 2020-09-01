@@ -35,29 +35,6 @@ def test_argument_recursivity(n):
         argument_recursivity(obj, n)
         print obj.a
 
-cdef A global_cyobject
-
-cdef init_global_cyobject():
-    global global_cyobject
-    global_cyobject = A()
-
-cdef void recursive_lock_taking(int arg):
-    global global_cyobject
-    if arg > 0:
-        with wlocked global_cyobject:
-            global_cyobject.setter(global_cyobject.getter() + 1)
-            recursive_lock_taking(arg - 1)
-
-def test_recursive_side_effect_locking(n):
-    """
-    >>> test_recursive_side_effect_locking(42)
-    42
-    """
-    init_global_cyobject()
-    recursive_lock_taking(42)
-    with rlocked global_cyobject:
-        print global_cyobject.getter()
-
 cdef cypclass Container:
     A object
     __init__(self):

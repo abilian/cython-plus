@@ -25,6 +25,13 @@ def incorrect_locks():
     obj.a
     take_read_locked(obj)
 
+
+cdef A global_cyobject
+
+cdef void global_lock_taking():
+    with wlocked global_cyobject:
+        global_cyobject.setter(global_cyobject.getter() + 1)
+
 _ERRORS = u"""
 20:4: Reference 'obj' is not correctly locked in this expression (write lock required)
 21:4: Reference 'obj' is not correctly locked in this expression (read lock required)
@@ -32,4 +39,5 @@ _ERRORS = u"""
 24:26: Reference 'obj' is not correctly locked in this expression (write lock required)
 25:4: Reference 'obj' is not correctly locked in this expression (read lock required)
 26:21: Reference 'obj' is not correctly locked in this expression (read lock required)
+32:17: Can only lock local variables or arguments
 """

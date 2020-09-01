@@ -542,6 +542,9 @@ class CypclassLockTransform(Visitor.EnvTransform):
             return written_node
         ref_id = self.reference_identifier(written_node)
         if ref_id:
+            if ref_id.type.is_const:
+                error(written_node.pos, "Reference '%s' is const but requires a write lock" % self.id_to_name(ref_id))
+                return written_node
             if not self.wlocked[ref_id] > 0:
                 if lock_mode == "checklock":
                     error(written_node.pos, (

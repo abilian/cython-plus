@@ -32,6 +32,13 @@ cdef void global_lock_taking():
     with wlocked global_cyobject:
         global_cyobject.setter(global_cyobject.getter() + 1)
 
+
+cdef take_non_const(A a):
+    pass
+
+cdef take_const(const A a):
+    take_non_const(a)
+
 _ERRORS = u"""
 20:4: Reference 'obj' is not correctly locked in this expression (write lock required)
 21:4: Reference 'obj' is not correctly locked in this expression (read lock required)
@@ -40,4 +47,5 @@ _ERRORS = u"""
 25:4: Reference 'obj' is not correctly locked in this expression (read lock required)
 26:21: Reference 'obj' is not correctly locked in this expression (read lock required)
 32:17: Can only lock local variables or arguments
+40:19: Reference 'a' is const but requires a write lock
 """

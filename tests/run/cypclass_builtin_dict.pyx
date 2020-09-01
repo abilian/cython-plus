@@ -14,9 +14,9 @@ cdef cypclass Index:
     __init__(self, int i):
         self.index = i
 
-def test_comp_iteration():
+def test_setitem_and_iteration():
     """
-    >>> test_comp_iteration()
+    >>> test_setitem_and_iteration()
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     """
     d = cypdict[Index, Value]()
@@ -25,9 +25,9 @@ def test_comp_iteration():
 
     return [key.index for key in d]
 
-def test_nogil_iteration():
+def test_nogil_setitem_and_iteration():
     """
-    >>> test_nogil_iteration()
+    >>> test_nogil_setitem_and_iteration()
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     """
     indices = []
@@ -43,9 +43,9 @@ def test_nogil_iteration():
 
     return indices
 
-def test_comp_keys_iteration():
+def test_setitem_and_keys_iteration():
     """
-    >>> test_comp_keys_iteration()
+    >>> test_setitem_and_keys_iteration()
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     """
     d = cypdict[Index, Value]()
@@ -54,9 +54,9 @@ def test_comp_keys_iteration():
 
     return [key.index for key in d.keys()]
 
-def test_nogil_keys_iteration():
+def test_nogil_setitem_and_keys_iteration():
     """
-    >>> test_nogil_keys_iteration()
+    >>> test_nogil_setitem_and_keys_iteration()
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     """
     indices = []
@@ -72,9 +72,9 @@ def test_nogil_keys_iteration():
 
     return indices
 
-def test_comp_values_iteration():
+def test_setitem_and_values_iteration():
     """
-    >>> test_comp_values_iteration()
+    >>> test_setitem_and_values_iteration()
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     """
     d = cypdict[Index, Value]()
@@ -83,9 +83,9 @@ def test_comp_values_iteration():
 
     return [value.value for value in d.values()]
 
-def test_nogil_values_iteration():
+def test_nogil_setitem_and_values_iteration():
     """
-    >>> test_nogil_values_iteration()
+    >>> test_nogil_setitem_and_values_iteration()
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     """
     values = []
@@ -101,9 +101,9 @@ def test_nogil_values_iteration():
 
     return values
 
-def test_comp_items_iteration():
+def test_setitem_and_items_iteration():
     """
-    >>> test_comp_items_iteration()
+    >>> test_setitem_and_items_iteration()
     [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9)]
     """
     d = cypdict[Index, Value]()
@@ -112,9 +112,9 @@ def test_comp_items_iteration():
 
     return [(key.index, value.value) for (key, value) in d.items()]
 
-def test_nogil_items_iteration():
+def test_nogil_setitem_and_items_iteration():
     """
-    >>> test_nogil_items_iteration()
+    >>> test_nogil_setitem_and_items_iteration()
     [(0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9)]
     """
     items = []
@@ -129,174 +129,6 @@ def test_nogil_items_iteration():
                 items.append((item.first.index, item.second.value))
 
     return items
-
-def test_getitem_exception():
-    """
-    >>> test_getitem_exception()
-    'Getting nonexistent item'
-    1
-    """
-    d = cypdict[Index, Value]()
-    try:
-        with nogil:
-            v = d[Index()]
-            with gil:
-                return 0
-    except KeyError as e:
-        print(e)
-        return 1
-
-def test_delitem_exception():
-    """
-    >>> test_delitem_exception()
-    'Deleting nonexistent item'
-    1
-    """
-    d = cypdict[Index, Value]()
-    try:
-        with nogil:
-            del d[Index()]
-            with gil:
-                return 0
-    except KeyError as e:
-        print(e)
-        return 1
-
-def test_setitem_exception_dict_iterator():
-    """
-    >>> test_setitem_exception_dict_iterator()
-    Modifying a dictionary with active iterators
-    1
-    """
-    d = cypdict[Index, Value]()
-    iterator = d.begin()
-    try:
-        with nogil:
-            d[Index()] = Value()
-            with gil:
-                return 0
-    except RuntimeError as e:
-        print(e)
-        return 1
-
-def test_setitem_exception_dict_keys_iterator():
-    """
-    >>> test_setitem_exception_dict_keys_iterator()
-    Modifying a dictionary with active iterators
-    1
-    """
-    d = cypdict[Index, Value]()
-    iterator = d.keys().begin()
-    try:
-        with nogil:
-            d[Index()] = Value()
-            with gil:
-                return 0
-    except RuntimeError as e:
-        print(e)
-        return 1
-
-def test_setitem_exception_dict_values_iterator():
-    """
-    >>> test_setitem_exception_dict_values_iterator()
-    Modifying a dictionary with active iterators
-    1
-    """
-    d = cypdict[Index, Value]()
-    iterator = d.values().begin()
-    try:
-        with nogil:
-            d[Index()] = Value()
-            with gil:
-                return 0
-    except RuntimeError as e:
-        print(e)
-        return 1
-
-def test_setitem_exception_dict_items_iterator():
-    """
-    >>> test_setitem_exception_dict_items_iterator()
-    Modifying a dictionary with active iterators
-    1
-    """
-    d = cypdict[Index, Value]()
-    iterator = d.items().begin()
-    try:
-        with nogil:
-            d[Index()] = Value()
-            with gil:
-                return 0
-    except RuntimeError as e:
-        print(e)
-        return 1
-
-def test_setitem_after_dict_iterator():
-    """
-    >>> test_setitem_after_dict_iterator()
-    1
-    """
-    d = cypdict[Index, Value]()
-    for key in d:
-        pass
-    try:
-        with nogil:
-            d[Index()] = Value()
-            with gil:
-                return 1
-    except RuntimeError as e:
-        print(e)
-        return 0
-
-def test_setitem_after_dict_keys_iterator():
-    """
-    >>> test_setitem_after_dict_keys_iterator()
-    1
-    """
-    d = cypdict[Index, Value]()
-    for key in d.keys():
-        pass
-    try:
-        with nogil:
-            d[Index()] = Value()
-            with gil:
-                return 1
-    except RuntimeError as e:
-        print(e)
-        return 0
-
-def test_setitem_after_dict_values_iterator():
-    """
-    >>> test_setitem_after_dict_values_iterator()
-    1
-    """
-    d = cypdict[Index, Value]()
-    for value in d.values():
-        pass
-    try:
-        with nogil:
-            d[Index()] = Value()
-            with gil:
-                return 1
-    except RuntimeError as e:
-        print(e)
-        return 0
-
-def test_setitem_after_dict_items_iterator():
-    """
-    >>> test_setitem_after_dict_items_iterator()
-    1
-    """
-    d = cypdict[Index, Value]()
-    for item in d.items():
-        pass
-    try:
-        with nogil:
-            d[Index()] = Value()
-            with gil:
-                return 1
-    except RuntimeError as e:
-        print(e)
-        return 0
 
 def test_len():
     """
@@ -330,9 +162,130 @@ def test_clear():
         return 0
     return 1
 
-def test_clear_exception_dict_iterator():
+def test_update():
     """
-    >>> test_clear_exception_dict_iterator()
+    >>> test_update()
+    1
+    """
+    d1 = cypdict[Index, Value]()
+    d2 = cypdict[Index, Value]()
+    d1[Index(1)] = Value(10)
+    d1[Index(3)] = Value(30)
+    d2[Index(4)] = Value(40)
+    d2[Index(2)] = Value(20)
+    d1.update(d2)
+    if d1.__len__() != 4:
+        return 0
+    for key in d2:
+        if not key in d1:
+            return 0
+        if d2[key] is not d1[key]:
+            return 0
+    return 1
+
+def test_nonexistent_getitem_exception():
+    """
+    >>> test_nonexistent_getitem_exception()
+    'Getting nonexistent item'
+    1
+    """
+    d = cypdict[Index, Value]()
+    try:
+        with nogil:
+            v = d[Index()]
+            with gil:
+                return 0
+    except KeyError as e:
+        print(e)
+        return 1
+
+def test_nonexistent_delitem_exception():
+    """
+    >>> test_nonexistent_delitem_exception()
+    'Deleting nonexistent item'
+    1
+    """
+    d = cypdict[Index, Value]()
+    try:
+        with nogil:
+            del d[Index()]
+            with gil:
+                return 0
+    except KeyError as e:
+        print(e)
+        return 1
+
+def test_setitem_iterator_invalidation():
+    """
+    >>> test_setitem_iterator_invalidation()
+    Modifying a dictionary with active iterators
+    1
+    """
+    d = cypdict[Index, Value]()
+    iterator = d.begin()
+    try:
+        with nogil:
+            d[Index()] = Value()
+            with gil:
+                return 0
+    except RuntimeError as e:
+        print(e)
+        return 1
+
+def test_setitem_keys_iterator_invalidation():
+    """
+    >>> test_setitem_keys_iterator_invalidation()
+    Modifying a dictionary with active iterators
+    1
+    """
+    d = cypdict[Index, Value]()
+    iterator = d.keys().begin()
+    try:
+        with nogil:
+            d[Index()] = Value()
+            with gil:
+                return 0
+    except RuntimeError as e:
+        print(e)
+        return 1
+
+def test_setitem_values_iterator_invalidation():
+    """
+    >>> test_setitem_values_iterator_invalidation()
+    Modifying a dictionary with active iterators
+    1
+    """
+    d = cypdict[Index, Value]()
+    iterator = d.values().begin()
+    try:
+        with nogil:
+            d[Index()] = Value()
+            with gil:
+                return 0
+    except RuntimeError as e:
+        print(e)
+        return 1
+
+def test_setitem_items_iterator_invalidation():
+    """
+    >>> test_setitem_items_iterator_invalidation()
+    Modifying a dictionary with active iterators
+    1
+    """
+    d = cypdict[Index, Value]()
+    iterator = d.items().begin()
+    try:
+        with nogil:
+            d[Index()] = Value()
+            with gil:
+                return 0
+    except RuntimeError as e:
+        print(e)
+        return 1
+
+def test_clear_iterator_invalidation():
+    """
+    >>> test_clear_iterator_invalidation()
     Modifying a dictionary with active iterators
     1
     """
@@ -346,6 +299,78 @@ def test_clear_exception_dict_iterator():
     except RuntimeError as e:
         print(e)
         return 1
+
+def test_modification_after_dict_iterator():
+    """
+    >>> test_modification_after_dict_iterator()
+    1
+    """
+    d = cypdict[Index, Value]()
+    for key in d:
+        pass
+    try:
+        with nogil:
+            d[Index()] = Value()
+            d.clear()
+            with gil:
+                return 1
+    except RuntimeError as e:
+        print(e)
+        return 0
+
+def test_modification_after_dict_keys_iterator():
+    """
+    >>> test_modification_after_dict_keys_iterator()
+    1
+    """
+    d = cypdict[Index, Value]()
+    for key in d.keys():
+        pass
+    try:
+        with nogil:
+            d[Index()] = Value()
+            d.clear()
+            with gil:
+                return 1
+    except RuntimeError as e:
+        print(e)
+        return 0
+
+def test_modification_after_dict_values_iterator():
+    """
+    >>> test_modification_after_dict_values_iterator()
+    1
+    """
+    d = cypdict[Index, Value]()
+    for value in d.values():
+        pass
+    try:
+        with nogil:
+            d[Index()] = Value()
+            d.clear()
+            with gil:
+                return 1
+    except RuntimeError as e:
+        print(e)
+        return 0
+
+def test_modification_after_dict_items_iterator():
+    """
+    >>> test_modification_after_dict_items_iterator()
+    1
+    """
+    d = cypdict[Index, Value]()
+    for item in d.items():
+        pass
+    try:
+        with nogil:
+            d[Index()] = Value()
+            d.clear()
+            with gil:
+                return 1
+    except RuntimeError as e:
+        print(e)
+        return 0
 
 def test_scalar_types_dict():
     """
@@ -437,27 +462,6 @@ def test_items_refcount():
         return 0
     if Cy_GETREF(value) != 2:
         return 0
-    return 1
-
-def test_update():
-    """
-    >>> test_update()
-    1
-    """
-    d1 = cypdict[Index, Value]()
-    d2 = cypdict[Index, Value]()
-    d1[Index(1)] = Value(10)
-    d1[Index(3)] = Value(30)
-    d2[Index(4)] = Value(40)
-    d2[Index(2)] = Value(20)
-    d1.update(d2)
-    if d1.__len__() != 4:
-        return 0
-    for key in d2:
-        if not key in d1:
-            return 0
-        if d2[key] is not d1[key]:
-            return 0
     return 1
 
 def test_update_refcount():

@@ -59,7 +59,7 @@ def test_nogil_insert_and_iteration():
 def test_len():
     """
     >>> test_len()
-    1
+    0
     """
     l = cyplist[Value]()
     cdef long unsigned int nb_elements = 0
@@ -68,15 +68,15 @@ def test_len():
     for v in l:
         nb_elements += 1
     if l.__len__() != nb_elements:
-        return 0
+        return -1
     if nb_elements != 10:
-        return 0
-    return 1
+        return -2
+    return 0
 
 def test_clear():
     """
     >>> test_clear()
-    1
+    0
     """
     l = cyplist[Value]()
     for i in range(10):
@@ -85,23 +85,23 @@ def test_clear():
         return -1
     l.clear()
     if l.__len__() != 0:
-        return 0
-    return 1
+        return -2
+    return 0
 
 def test_contains():
     """
     >>> test_clear()
-    1
+    0
     """
     l = cyplist[Value]()
     for i in range(10):
         value = Value(i)
         if value in l:
-            return 0
+            return -1
         l.append(value)
         if value not in l:
-            return 0
-    return 1
+            return -2
+    return 0
 
 def test_add():
     """
@@ -157,55 +157,55 @@ def test_getitem_out_of_range():
     """
     >>> test_getitem_out_of_range()
     Getting list index out of range
-    1
+    0
     """
     l = cyplist[Value]()
     try:
         with nogil:
             v = l[0]
             with gil:
-                return 0
+                return -1
     except IndexError as e:
         print(e)
-        return 1
+        return 0
 
 def test_setitem_out_of_range():
     """
     >>> test_setitem_out_of_range()
     Setting list index out of range
-    1
+    0
     """
     l = cyplist[Value]()
     try:
         with nogil:
             l[0] = Value(0)
             with gil:
-                return 0
+                return -1
     except IndexError as e:
         print(e)
-        return 1
+        return 0
 
 def test_delitem_out_of_range():
     """
     >>> test_delitem_out_of_range()
     Deleting list index out of range
-    1
+    0
     """
     l = cyplist[Value]()
     try:
         with nogil:
             del l[0]
             with gil:
-                return 0
+                return -1
     except IndexError as e:
         print(e)
-        return 1
+        return 0
 
 def test_append_iterator_invalidation():
     """
     >>> test_append_iterator_invalidation()
     Modifying a list with active iterators
-    1
+    0
     """
     l = cyplist[Value]()
     iterator = l.begin()
@@ -213,16 +213,16 @@ def test_append_iterator_invalidation():
         with nogil:
             l.append(Value(1))
             with gil:
-                return 0
+                return -1
     except RuntimeError as e:
         print(e)
-        return 1
+        return 0
 
 def test_insert_iterator_invalidation():
     """
     >>> test_insert_iterator_invalidation()
     Modifying a list with active iterators
-    1
+    0
     """
     l = cyplist[Value]()
     iterator = l.begin()
@@ -230,16 +230,16 @@ def test_insert_iterator_invalidation():
         with nogil:
             l.insert(0, Value(1))
             with gil:
-                return 0
+                return -1
     except RuntimeError as e:
         print(e)
-        return 1
+        return 0
 
 def test_del_iterator_invalidation():
     """
     >>> test_del_iterator_invalidation()
     Modifying a list with active iterators
-    1
+    0
     """
     l = cyplist[Value]()
     l.append(Value(0))
@@ -248,16 +248,16 @@ def test_del_iterator_invalidation():
         with nogil:
             del l[0]
             with gil:
-                return 0
+                return -1
     except RuntimeError as e:
         print(e)
-        return 1
+        return 0
 
 def test_clear_iterator_invalidation():
     """
     >>> test_clear_iterator_invalidation()
     Modifying a list with active iterators
-    1
+    0
     """
     l = cyplist[Value]()
     iterator = l.begin()
@@ -265,15 +265,15 @@ def test_clear_iterator_invalidation():
         with nogil:
             l.clear()
             with gil:
-                return 0
+                return -1
     except RuntimeError as e:
         print(e)
-        return 1
+        return 0
 
 def test_modification_after_iteration():
     """
     >>> test_modification_after_iteration()
-    1
+    0
     """
     l = cyplist[Value]()
     for value in l:
@@ -285,10 +285,10 @@ def test_modification_after_iteration():
             del l[0]
             l.clear()
             with gil:
-                return 1
+                return 0
     except RuntimeError as e:
         print(e)
-        return 0
+        return -1
 
 def test_scalar_types_list():
     """
@@ -327,101 +327,101 @@ def test_values_destroyed():
 def test_values_refcount():
     """
     >>> test_values_refcount()
-    1
+    0
     """
     l = cyplist[Value]()
     value = Value()
     if Cy_GETREF(value) != 2:
-        return 0
+        return -1
     l.append(value)
     if Cy_GETREF(value) != 3:
-        return 0
+        return -2
     l.insert(0, value)
     if Cy_GETREF(value) != 4:
-        return 0
+        return -3
     del l[0]
     if Cy_GETREF(value) != 3:
-        return 0
+        return -4
     l.clear()
     if Cy_GETREF(value) != 2:
-        return 0
+        return -5
     l.append(value)
     if Cy_GETREF(value) != 3:
-        return 0
+        return -6
     del l
     if Cy_GETREF(value) != 2:
-        return 0
-    return 1
+        return -7
+    return 0
 
 def test_iterator_refcount():
     """
     >>> test_iterator_refcount()
-    1
+    0
     """
     l = cyplist[Value]()
     if Cy_GETREF(l) != 2:
-        return 0
+        return -1
 
     def begin_iterator():
         it = l.begin()
         if Cy_GETREF(l) != 3:
-            return 0
-        return 1
-
-    if not begin_iterator():
+            return -1
         return 0
+
+    if begin_iterator():
+        return -2
 
     if Cy_GETREF(l) != 2:
-        return 0
+        return -3
 
     def end_iterator():
         it = l.end()
         if Cy_GETREF(l) != 2:
-            return 0
-        return 1
-
-    if not end_iterator():
+            return -1
         return 0
+
+    if end_iterator():
+        return -4
 
     if Cy_GETREF(l) != 2:
-        return 0
+        return -5
 
-    return 1
+    return 0
 
 def test_concatenation_refcount():
     """
     >>> test_concatenation_refcount()
-    1
+    0
     """
     value = Value(1)
     l1 = cyplist[Value]()
 
     if Cy_GETREF(value) != 2:
-        return 0
+        return -1
 
     l1.append(value)
     if Cy_GETREF(value) != 3:
-        return 0
+        return -2
 
     l2 = cyplist[Value]()
     l2.append(value)
     if Cy_GETREF(value) != 4:
-        return 0
+        return -3
 
     l3 = l1 + l2
     if Cy_GETREF(value) != 6:
-        return 0
+        return -4
 
     l3 += l1
     if Cy_GETREF(value) != 7:
-        return 0
+        return -5
 
     l4 = l3 * 3
     if Cy_GETREF(value) != 16:
-        return 0
+        return -6
 
     l4 *= 2
     if Cy_GETREF(value) != 25:
-        return 0
+        return -7
 
-    return 1
+    return 0

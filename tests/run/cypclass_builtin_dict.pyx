@@ -133,7 +133,7 @@ def test_nogil_setitem_and_items_iteration():
 def test_len():
     """
     >>> test_len()
-    1
+    0
     """
     d = cypdict[Index, Value]()
     cdef long unsigned int nb_elements = 0
@@ -142,15 +142,15 @@ def test_len():
     for k in d:
         nb_elements += 1
     if d.__len__() != nb_elements:
-        return 0
+        return -1
     if nb_elements != 10:
-        return 0
-    return 1
+        return -2
+    return 0
 
 def test_clear():
     """
     >>> test_clear()
-    1
+    0
     """
     d = cypdict[Index, Value]()
     for i in range(10):
@@ -159,13 +159,13 @@ def test_clear():
         return -1
     d.clear()
     if d.__len__() != 0:
-        return 0
-    return 1
+        return -2
+    return 0
 
 def test_update():
     """
     >>> test_update()
-    1
+    0
     """
     d1 = cypdict[Index, Value]()
     d2 = cypdict[Index, Value]()
@@ -175,66 +175,66 @@ def test_update():
     d2[Index(2)] = Value(20)
     d1.update(d2)
     if d1.__len__() != 4:
-        return 0
+        return -1
     for key in d2:
         if not key in d1:
-            return 0
+            return -2
         if d2[key] is not d1[key]:
-            return 0
-    return 1
+            return -3
+    return 0
 
 def test_contains():
     """
     >>> test_contains()
-    1
+    0
     """
     d = cypdict[Index, double]()
     for i in range(10):
         index = Index(i)
         if index in d:
-            return 0
+            return -1
         d[index] = <double> i
         if index not in d:
-            return 0
-    return 1
+            return -2
+    return 0
 
 def test_nonexistent_getitem_exception():
     """
     >>> test_nonexistent_getitem_exception()
     'Getting nonexistent item'
-    1
+    0
     """
     d = cypdict[Index, Value]()
     try:
         with nogil:
             v = d[Index()]
             with gil:
-                return 0
+                return -1
     except KeyError as e:
         print(e)
-        return 1
+        return 0
 
 def test_nonexistent_delitem_exception():
     """
     >>> test_nonexistent_delitem_exception()
     'Deleting nonexistent item'
-    1
+    0
     """
     d = cypdict[Index, Value]()
     try:
         with nogil:
             del d[Index()]
             with gil:
-                return 0
+                return -1
     except KeyError as e:
         print(e)
-        return 1
+        return 0
 
 def test_setitem_iterator_invalidation():
     """
     >>> test_setitem_iterator_invalidation()
     Modifying a dictionary with active iterators
-    1
+    0
     """
     d = cypdict[Index, Value]()
     iterator = d.begin()
@@ -242,16 +242,16 @@ def test_setitem_iterator_invalidation():
         with nogil:
             d[Index()] = Value()
             with gil:
-                return 0
+                return -1
     except RuntimeError as e:
         print(e)
-        return 1
+        return 0
 
 def test_setitem_keys_iterator_invalidation():
     """
     >>> test_setitem_keys_iterator_invalidation()
     Modifying a dictionary with active iterators
-    1
+    0
     """
     d = cypdict[Index, Value]()
     iterator = d.keys().begin()
@@ -259,16 +259,16 @@ def test_setitem_keys_iterator_invalidation():
         with nogil:
             d[Index()] = Value()
             with gil:
-                return 0
+                return -1
     except RuntimeError as e:
         print(e)
-        return 1
+        return 0
 
 def test_setitem_values_iterator_invalidation():
     """
     >>> test_setitem_values_iterator_invalidation()
     Modifying a dictionary with active iterators
-    1
+    0
     """
     d = cypdict[Index, Value]()
     iterator = d.values().begin()
@@ -276,16 +276,16 @@ def test_setitem_values_iterator_invalidation():
         with nogil:
             d[Index()] = Value()
             with gil:
-                return 0
+                return -1
     except RuntimeError as e:
         print(e)
-        return 1
+        return 0
 
 def test_setitem_items_iterator_invalidation():
     """
     >>> test_setitem_items_iterator_invalidation()
     Modifying a dictionary with active iterators
-    1
+    0
     """
     d = cypdict[Index, Value]()
     iterator = d.items().begin()
@@ -293,16 +293,16 @@ def test_setitem_items_iterator_invalidation():
         with nogil:
             d[Index()] = Value()
             with gil:
-                return 0
+                return -1
     except RuntimeError as e:
         print(e)
-        return 1
+        return 0
 
 def test_delitem_iterator_invalidation():
     """
     >>> test_delitem_iterator_invalidation()
     Modifying a dictionary with active iterators
-    1
+    0
     """
     d = cypdict[Index, Value]()
     index = Index(0)
@@ -312,16 +312,16 @@ def test_delitem_iterator_invalidation():
         with nogil:
             del d[index]
             with gil:
-                return 0
+                return -1
     except RuntimeError as e:
         print(e)
-        return 1
+        return 0
 
 def test_clear_iterator_invalidation():
     """
     >>> test_clear_iterator_invalidation()
     Modifying a dictionary with active iterators
-    1
+    0
     """
     d = cypdict[Index, Value]()
     iterator = d.begin()
@@ -329,15 +329,15 @@ def test_clear_iterator_invalidation():
         with nogil:
             d.clear()
             with gil:
-                return 0
+                return -1
     except RuntimeError as e:
         print(e)
-        return 1
+        return 0
 
 def test_modification_after_dict_iterator():
     """
     >>> test_modification_after_dict_iterator()
-    1
+    0
     """
     d = cypdict[Index, Value]()
     for key in d:
@@ -349,15 +349,15 @@ def test_modification_after_dict_iterator():
             del d[index]
             d.clear()
             with gil:
-                return 1
+                return 0
     except RuntimeError as e:
         print(e)
-        return 0
+        return -1
 
 def test_modification_after_dict_keys_iterator():
     """
     >>> test_modification_after_dict_keys_iterator()
-    1
+    0
     """
     d = cypdict[Index, Value]()
     for key in d.keys():
@@ -369,15 +369,15 @@ def test_modification_after_dict_keys_iterator():
             del d[index]
             d.clear()
             with gil:
-                return 1
+                return 0
     except RuntimeError as e:
         print(e)
-        return 0
+        return -1
 
 def test_modification_after_dict_values_iterator():
     """
     >>> test_modification_after_dict_values_iterator()
-    1
+    0
     """
     d = cypdict[Index, Value]()
     for value in d.values():
@@ -389,15 +389,15 @@ def test_modification_after_dict_values_iterator():
             del d[index]
             d.clear()
             with gil:
-                return 1
+                return 0
     except RuntimeError as e:
         print(e)
-        return 0
+        return -1
 
 def test_modification_after_dict_items_iterator():
     """
     >>> test_modification_after_dict_items_iterator()
-    1
+    0
     """
     d = cypdict[Index, Value]()
     for item in d.items():
@@ -409,10 +409,10 @@ def test_modification_after_dict_items_iterator():
             del d[index]
             d.clear()
             with gil:
-                return 1
+                return 0
     except RuntimeError as e:
         print(e)
-        return 0
+        return -1
 
 def test_scalar_types_dict():
     """
@@ -465,51 +465,51 @@ def test_items_destroyed():
 def test_items_refcount():
     """
     >>> test_items_refcount()
-    1
+    0
     """
     d = cypdict[Index, Value]()
     index = Index()
     value = Value()
     if Cy_GETREF(index) != 2:
-        return 0
+        return -1
     if Cy_GETREF(value) != 2:
-        return 0
+        return -2
     d[index] = value
     if Cy_GETREF(index) != 3:
-        return 0
+        return -3
     if Cy_GETREF(value) != 3:
-        return 0
+        return -4
     del d[index]
     if Cy_GETREF(index) != 2:
-        return 0
+        return -5
     if Cy_GETREF(value) != 2:
-        return 0
+        return -6
     d[index] = value
     if Cy_GETREF(index) != 3:
-        return 0
+        return -7
     if Cy_GETREF(value) != 3:
-        return 0
+        return -8
     d.clear()
     if Cy_GETREF(index) != 2:
-        return 0
+        return -9
     if Cy_GETREF(value) != 2:
-        return 0
+        return -10
     d[index] = value
     if Cy_GETREF(index) != 3:
-        return 0
+        return -11
     if Cy_GETREF(value) != 3:
-        return 0
+        return -12
     d = cypdict[Index, Value]()
     if Cy_GETREF(index) != 2:
-        return 0
+        return -13
     if Cy_GETREF(value) != 2:
-        return 0
-    return 1
+        return -14
+    return 0
 
 def test_update_refcount():
     """
     >>> test_update_refcount()
-    1
+    0
     """
     d1 = cypdict[Index, Value]()
     d2 = cypdict[Index, Value]()
@@ -523,181 +523,181 @@ def test_update_refcount():
     d2[index2] = value2
     d2[index3] = value3
     if Cy_GETREF(index1) != 3:
-        return 0
+        return -1
     if Cy_GETREF(value1) != 3:
-        return 0
+        return -2
     if Cy_GETREF(index2) != 3:
-        return 0
+        return -3
     if Cy_GETREF(value2) != 3:
-        return 0
+        return -4
     if Cy_GETREF(index3) != 3:
-        return 0
+        return -5
     if Cy_GETREF(value3) != 3:
-        return 0
+        return -6
     d1.update(d2)
     if Cy_GETREF(index1) != 3:
-        return 0
+        return -7
     if Cy_GETREF(value1) != 3:
-        return 0
+        return -8
     if Cy_GETREF(index2) != 4:
-        return 0
+        return -9
     if Cy_GETREF(value2) != 4:
-        return 0
+        return -10
     if Cy_GETREF(index3) != 4:
-        return 0
+        return -11
     if Cy_GETREF(value3) != 4:
-        return 0
+        return -12
     del d2
     if Cy_GETREF(index1) != 3:
-        return 0
+        return -13
     if Cy_GETREF(value1) != 3:
-        return 0
+        return -14
     if Cy_GETREF(index2) != 3:
-        return 0
+        return -15
     if Cy_GETREF(value2) != 3:
-        return 0
+        return -16
     if Cy_GETREF(index3) != 3:
-        return 0
+        return -17
     if Cy_GETREF(value3) != 3:
-        return 0
+        return -18
     del d1
     if Cy_GETREF(index1) != 2:
-        return 0
+        return -19
     if Cy_GETREF(value1) != 2:
-        return 0
+        return -20
     if Cy_GETREF(index2) != 2:
-        return 0
+        return -21
     if Cy_GETREF(value2) != 2:
-        return 0
+        return -22
     if Cy_GETREF(index3) != 2:
-        return 0
+        return -23
     if Cy_GETREF(value3) != 2:
-        return 0
-    return 1
+        return -24
+    return 0
 
 def test_view_dict_refcount():
     """
     >>> test_view_dict_refcount()
-    1
+    0
     """
     d = cypdict[Index, Value]()
     if Cy_GETREF(d) != 2:
-        return 0
+        return -1
 
     def keys_view():
         key_view = d.keys()
         if Cy_GETREF(d) != 3:
-            return 0
-        return 1
-
-    if not keys_view():
+            return -1
         return 0
+
+    if keys_view():
+        return -2
 
     if Cy_GETREF(d) != 2:
-        return 0
+        return -3
 
     def values_view():
         values_view = d.values()
         if Cy_GETREF(d) != 3:
-            return 0
-        return 1
-
-    if not values_view():
+            return -1
         return 0
+
+    if values_view():
+        return -4
 
     if Cy_GETREF(d) != 2:
-        return 0
+        return -5
 
     def items_view():
         items_view = d.items()
         if Cy_GETREF(d) != 3:
-            return 0
-        return 1
-
-    if not items_view():
+            return -1
         return 0
+
+    if items_view():
+        return -6
 
     if Cy_GETREF(d) != 2:
-        return 0
+        return -7
 
-    return 1
+    return 0
 
 def test_iterator_refcount():
     """
     >>> test_iterator_refcount()
-    1
+    0
     """
     d = cypdict[Index, Value]()
     if Cy_GETREF(d) != 2:
-        return 0
+        return -1
 
     def begin_iterator():
         it = d.begin()
         if Cy_GETREF(d) != 3:
-            return 0
-        return 1
-
-    if not begin_iterator():
+            return -1
         return 0
+
+    if begin_iterator():
+        return -2
 
     if Cy_GETREF(d) != 2:
-        return 0
+        return -3
 
     def end_iterator():
         it = d.end()
         if Cy_GETREF(d) != 2:
-            return 0
-        return 1
-
-    if not end_iterator():
+            return -1
         return 0
+
+    if end_iterator():
+        return -4
 
     if Cy_GETREF(d) != 2:
-        return 0
+        return -5
 
     def keys_begin_iterator():
         keys = d.keys()
         if Cy_GETREF(d) != 3:
-            return 0
+            return -1
         it = keys.begin()
         if Cy_GETREF(d) != 4:
-            return 0
-        return 1
-
-    if not keys_begin_iterator():
+            return -2
         return 0
+
+    if keys_begin_iterator():
+        return -6
 
     if Cy_GETREF(d) != 2:
-        return 0
+        return -7
 
     def values_begin_iterator():
         values = d.values()
         if Cy_GETREF(d) != 3:
-            return 0
+            return -1
         it = values.begin()
         if Cy_GETREF(d) != 4:
-            return 0
-        return 1
-
-    if not values_begin_iterator():
+            return -2
         return 0
+
+    if values_begin_iterator():
+        return -8
 
     if Cy_GETREF(d) != 2:
-        return 0
+        return -9
 
     def items_begin_iterator():
         items = d.items()
         if Cy_GETREF(d) != 3:
-            return 0
+            return -1
         it = items.begin()
         if Cy_GETREF(d) != 4:
-            return 0
-        return 1
-
-    if not items_begin_iterator():
+            return -2
         return 0
+
+    if items_begin_iterator():
+        return -10
 
     if Cy_GETREF(d) != 2:
-        return 0
+        return -11
 
-    return 1
+    return 0

@@ -102,7 +102,6 @@ def test_contains():
         if value not in l:
             return 0
     return 1
-    
 
 def test_getitem_out_of_range():
     """
@@ -302,4 +301,39 @@ def test_values_refcount():
     del l
     if Cy_GETREF(value) != 2:
         return 0
+    return 1
+
+def test_iterator_refcount():
+    """
+    >>> test_iterator_refcount()
+    1
+    """
+    l = cyplist[Value]()
+    if Cy_GETREF(l) != 2:
+        return 0
+
+    def begin_iterator():
+        it = l.begin()
+        if Cy_GETREF(l) != 3:
+            return 0
+        return 1
+
+    if not begin_iterator():
+        return 0
+
+    if Cy_GETREF(l) != 2:
+        return 0
+
+    def end_iterator():
+        it = l.end()
+        if Cy_GETREF(l) != 2:
+            return 0
+        return 1
+
+    if not end_iterator():
+        return 0
+
+    if Cy_GETREF(l) != 2:
+        return 0
+
     return 1

@@ -559,3 +559,130 @@ def test_update_refcount():
     if Cy_GETREF(value3) != 2:
         return 0
     return 1
+
+def test_view_dict_refcount():
+    """
+    >>> test_view_dict_refcount()
+    1
+    """
+    d = cypdict[Index, Value]()
+    if Cy_GETREF(d) != 2:
+        return 0
+
+    def keys_view():
+        key_view = d.keys()
+        if Cy_GETREF(d) != 3:
+            return 0
+        return 1
+
+    if not keys_view():
+        return 0
+
+    if Cy_GETREF(d) != 2:
+        return 0
+
+    def values_view():
+        values_view = d.values()
+        if Cy_GETREF(d) != 3:
+            return 0
+        return 1
+
+    if not values_view():
+        return 0
+
+    if Cy_GETREF(d) != 2:
+        return 0
+
+    def items_view():
+        items_view = d.items()
+        if Cy_GETREF(d) != 3:
+            return 0
+        return 1
+
+    if not items_view():
+        return 0
+
+    if Cy_GETREF(d) != 2:
+        return 0
+
+    return 1
+
+def test_iterator_refcount():
+    """
+    >>> test_iterator_refcount()
+    1
+    """
+    d = cypdict[Index, Value]()
+    if Cy_GETREF(d) != 2:
+        return 0
+
+    def begin_iterator():
+        it = d.begin()
+        if Cy_GETREF(d) != 3:
+            return 0
+        return 1
+
+    if not begin_iterator():
+        return 0
+
+    if Cy_GETREF(d) != 2:
+        return 0
+
+    def end_iterator():
+        it = d.end()
+        if Cy_GETREF(d) != 2:
+            return 0
+        return 1
+
+    if not end_iterator():
+        return 0
+
+    if Cy_GETREF(d) != 2:
+        return 0
+
+    def keys_begin_iterator():
+        keys = d.keys()
+        if Cy_GETREF(d) != 3:
+            return 0
+        it = keys.begin()
+        if Cy_GETREF(d) != 4:
+            return 0
+        return 1
+
+    if not keys_begin_iterator():
+        return 0
+
+    if Cy_GETREF(d) != 2:
+        return 0
+
+    def values_begin_iterator():
+        values = d.values()
+        if Cy_GETREF(d) != 3:
+            return 0
+        it = values.begin()
+        if Cy_GETREF(d) != 4:
+            return 0
+        return 1
+
+    if not values_begin_iterator():
+        return 0
+
+    if Cy_GETREF(d) != 2:
+        return 0
+
+    def items_begin_iterator():
+        items = d.items()
+        if Cy_GETREF(d) != 3:
+            return 0
+        it = items.begin()
+        if Cy_GETREF(d) != 4:
+            return 0
+        return 1
+
+    if not items_begin_iterator():
+        return 0
+
+    if Cy_GETREF(d) != 2:
+        return 0
+
+    return 1

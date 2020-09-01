@@ -297,6 +297,10 @@ cdef cypclass cypdict[K, V]:
             with gil:
                 raise KeyError("Deleting nonexistent item")
 
+    void update(self, const cypdict[K, V] other):
+        for item in other.items():
+            self[item.first] = item.second
+
     void clear(self) except ~:
         if self._active_iterators == 0:
             for item in self._items:

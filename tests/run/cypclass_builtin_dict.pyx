@@ -183,6 +183,21 @@ def test_update():
             return 0
     return 1
 
+def test_contains():
+    """
+    >>> test_contains()
+    1
+    """
+    d = cypdict[Index, double]()
+    for i in range(10):
+        index = Index(i)
+        if index in d:
+            return 0
+        d[index] = <double> i
+        if index not in d:
+            return 0
+    return 1
+
 def test_nonexistent_getitem_exception():
     """
     >>> test_nonexistent_getitem_exception()

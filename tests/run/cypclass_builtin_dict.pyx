@@ -438,3 +438,93 @@ def test_items_refcount():
     if Cy_GETREF(value) != 2:
         return 0
     return 1
+
+def test_update():
+    """
+    >>> test_update()
+    1
+    """
+    d1 = cypdict[Index, Value]()
+    d2 = cypdict[Index, Value]()
+    d1[Index(1)] = Value(10)
+    d1[Index(3)] = Value(30)
+    d2[Index(4)] = Value(40)
+    d2[Index(2)] = Value(20)
+    d1.update(d2)
+    if d1.__len__() != 4:
+        return 0
+    for key in d2:
+        if not key in d1:
+            return 0
+        if d2[key] is not d1[key]:
+            return 0
+    return 1
+
+def test_update_refcount():
+    """
+    >>> test_update_refcount()
+    1
+    """
+    d1 = cypdict[Index, Value]()
+    d2 = cypdict[Index, Value]()
+    index1 = Index(1)
+    value1 = Value(10)
+    index2 = Index(2)
+    value2 = Value(20)
+    index3 = Index(3)
+    value3 = Value(30)
+    d1[index1] = value1
+    d2[index2] = value2
+    d2[index3] = value3
+    if Cy_GETREF(index1) != 3:
+        return 0
+    if Cy_GETREF(value1) != 3:
+        return 0
+    if Cy_GETREF(index2) != 3:
+        return 0
+    if Cy_GETREF(value2) != 3:
+        return 0
+    if Cy_GETREF(index3) != 3:
+        return 0
+    if Cy_GETREF(value3) != 3:
+        return 0
+    d1.update(d2)
+    if Cy_GETREF(index1) != 3:
+        return 0
+    if Cy_GETREF(value1) != 3:
+        return 0
+    if Cy_GETREF(index2) != 4:
+        return 0
+    if Cy_GETREF(value2) != 4:
+        return 0
+    if Cy_GETREF(index3) != 4:
+        return 0
+    if Cy_GETREF(value3) != 4:
+        return 0
+    del d2
+    if Cy_GETREF(index1) != 3:
+        return 0
+    if Cy_GETREF(value1) != 3:
+        return 0
+    if Cy_GETREF(index2) != 3:
+        return 0
+    if Cy_GETREF(value2) != 3:
+        return 0
+    if Cy_GETREF(index3) != 3:
+        return 0
+    if Cy_GETREF(value3) != 3:
+        return 0
+    del d1
+    if Cy_GETREF(index1) != 2:
+        return 0
+    if Cy_GETREF(value1) != 2:
+        return 0
+    if Cy_GETREF(index2) != 2:
+        return 0
+    if Cy_GETREF(value2) != 2:
+        return 0
+    if Cy_GETREF(index3) != 2:
+        return 0
+    if Cy_GETREF(value3) != 2:
+        return 0
+    return 1

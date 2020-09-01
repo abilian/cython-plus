@@ -103,6 +103,56 @@ def test_contains():
             return 0
     return 1
 
+def test_add():
+    """
+    >>> test_add()
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    """
+    l1 = cyplist[Value]()
+    for i in range(5):
+        l1.append(Value(i))
+    l2 = cyplist[Value]()
+    for i in range(5, 10):
+        l2.append(Value(i))
+    l = l1 + l2
+    return [v.value for v in l]
+
+def test_iadd():
+    """
+    >>> test_iadd()
+    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    """
+    l1 = cyplist[Value]()
+    for i in range(5):
+        l1.append(Value(i))
+    l2 = cyplist[Value]()
+    for i in range(5, 10):
+        l2.append(Value(i))
+    l1 += l2
+    return [v.value for v in l1]
+
+def test_mul():
+    """
+    >>> test_mul()
+    [0, 1, 0, 1, 0, 1]
+    """
+    l1 = cyplist[Value]()
+    for i in range(2):
+        l1.append(Value(i))
+    l = l1 * 3
+    return [v.value for v in l]
+
+def test_imul():
+    """
+    >>> test_imul()
+    [0, 1, 0, 1, 0, 1]
+    """
+    l = cyplist[Value]()
+    for i in range(2):
+        l.append(Value(i))
+    l *= 3
+    return [v.value for v in l]
+
 def test_getitem_out_of_range():
     """
     >>> test_getitem_out_of_range()
@@ -334,6 +384,44 @@ def test_iterator_refcount():
         return 0
 
     if Cy_GETREF(l) != 2:
+        return 0
+
+    return 1
+
+def test_concatenation_refcount():
+    """
+    >>> test_concatenation_refcount()
+    1
+    """
+    value = Value(1)
+    l1 = cyplist[Value]()
+
+    if Cy_GETREF(value) != 2:
+        return 0
+
+    l1.append(value)
+    if Cy_GETREF(value) != 3:
+        return 0
+
+    l2 = cyplist[Value]()
+    l2.append(value)
+    if Cy_GETREF(value) != 4:
+        return 0
+
+    l3 = l1 + l2
+    if Cy_GETREF(value) != 6:
+        return 0
+
+    l3 += l1
+    if Cy_GETREF(value) != 7:
+        return 0
+
+    l4 = l3 * 3
+    if Cy_GETREF(value) != 16:
+        return 0
+
+    l4 *= 2
+    if Cy_GETREF(value) != 25:
         return 0
 
     return 1

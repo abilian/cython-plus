@@ -97,6 +97,58 @@ cdef cypclass cyplist[V]:
             with gil:
                 raise RuntimeError("Modifying a list with active iterators")
 
+    cyplist[V] __add__(self, const cyplist[V] other) const:
+        result = cyplist[V]()
+        result._elements.reserve(self._elements.size() + other._elements.size())
+        for value in self._elements:
+            Cy_INCREF(value)
+            result._elements.push_back(value)
+        for value in other._elements:
+            Cy_INCREF(value)
+            result._elements.push_back(value)
+        return result
+
+    cyplist[V] __iadd__(self, const cyplist[V] other):
+        if self._active_iterators == 0:
+            self._elements.reserve(self._elements.size() + other._elements.size())
+            for value in other._elements:
+                Cy_INCREF(value)
+                self._elements.push_back(value)
+            return self
+        else:
+            with gil:
+                raise RuntimeError("Modifying a list with active iterators")
+
+    cyplist[V] __mul__(self, size_type n) const:
+        result = cyplist[V]()
+        result._elements.reserve(self._elements.size() * n)
+        for i in range(n):
+            for value in self._elements:
+                Cy_INCREF(value)
+                result._elements.push_back(value)
+        return result
+
+    cyplist[V] __imul__(self, size_type n):
+        if self._active_iterators == 0:
+            if n > 1:
+                elements = self._elements
+                self._elements.reserve(elements.size() * n)
+                for i in range(1, n):
+                    for value in elements:
+                        Cy_INCREF(value)
+                        self._elements.push_back(value)
+                return self
+            elif n == 1:
+                return self
+            else:
+                for value in self._elements:
+                    Cy_DECREF(value)
+                self._elements.clear()
+                return self
+        else:
+            with gil:
+                raise RuntimeError("Modifying a list with active iterators")
+
     list_iterator_t[cyplist[V], vector[value_type].iterator, value_type] begin(self) const:
         return list_iterator_t[cyplist[V], vector[value_type].iterator, value_type](self._elements.begin(), self)
 

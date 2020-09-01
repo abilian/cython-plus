@@ -286,13 +286,17 @@ cdef cypclass cypdict[K, V]:
         it = self._indices.find(key)
         end = self._indices.end()
         if it != end:
-            index = dereference(it).second
-            Cy_DECREF(self._items[index].first)
-            Cy_DECREF(self._items[index].second)
-            self._indices.erase(it)
-            if index < self._items.size() - 1:
-                self._items[index] = self._items[self._indices.size() - 1]
-            self._items.pop_back()
+            if self._active_iterators == 0:
+                index = dereference(it).second
+                Cy_DECREF(self._items[index].first)
+                Cy_DECREF(self._items[index].second)
+                self._indices.erase(it)
+                if index < self._items.size() - 1:
+                    self._items[index] = self._items[self._indices.size() - 1]
+                self._items.pop_back()
+            else:
+                with gil:
+                    raise RuntimeError("Modifying a dictionary with active iterators")
         else:
             with gil:
                 raise KeyError("Deleting nonexistent item")

@@ -283,6 +283,25 @@ def test_setitem_items_iterator_invalidation():
         print(e)
         return 1
 
+def test_delitem_iterator_invalidation():
+    """
+    >>> test_delitem_iterator_invalidation()
+    Modifying a dictionary with active iterators
+    1
+    """
+    d = cypdict[Index, Value]()
+    index = Index(0)
+    d[index] = Value(0)
+    iterator = d.begin()
+    try:
+        with nogil:
+            del d[index]
+            with gil:
+                return 0
+    except RuntimeError as e:
+        print(e)
+        return 1
+
 def test_clear_iterator_invalidation():
     """
     >>> test_clear_iterator_invalidation()
@@ -310,7 +329,9 @@ def test_modification_after_dict_iterator():
         pass
     try:
         with nogil:
-            d[Index()] = Value()
+            index = Index(0)
+            d[index] = Value(0)
+            del d[index]
             d.clear()
             with gil:
                 return 1
@@ -328,7 +349,9 @@ def test_modification_after_dict_keys_iterator():
         pass
     try:
         with nogil:
-            d[Index()] = Value()
+            index = Index(0)
+            d[index] = Value(0)
+            del d[index]
             d.clear()
             with gil:
                 return 1
@@ -346,7 +369,9 @@ def test_modification_after_dict_values_iterator():
         pass
     try:
         with nogil:
-            d[Index()] = Value()
+            index = Index(0)
+            d[index] = Value(0)
+            del d[index]
             d.clear()
             with gil:
                 return 1
@@ -364,7 +389,9 @@ def test_modification_after_dict_items_iterator():
         pass
     try:
         with nogil:
-            d[Index()] = Value()
+            index = Index(0)
+            d[index] = Value(0)
+            del d[index]
             d.clear()
             with gil:
                 return 1

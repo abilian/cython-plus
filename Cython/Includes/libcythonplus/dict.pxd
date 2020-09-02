@@ -186,10 +186,8 @@ cdef cypclass cypdict[K, V]:
         it = self._indices.find(key)
         end = self._indices.end()
         if it != end:
-            Cy_INCREF(key)
-            Cy_INCREF(value)
             index = dereference(it).second
-            Cy_DECREF(self._items[index].first)
+            Cy_INCREF(value)
             Cy_DECREF(self._items[index].second)
             self._items[index].second = value
         elif self._active_iterators == 0:

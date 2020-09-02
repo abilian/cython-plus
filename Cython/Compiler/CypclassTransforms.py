@@ -492,6 +492,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
     def __call__(self, root):
         self.rlocked = defaultdict(int)
         self.wlocked = defaultdict(int)
+        self.const = defaultdict(int)
         self.reading = False
         self.writing = False
         self.deleting = False
@@ -542,8 +543,8 @@ class CypclassLockTransform(Visitor.EnvTransform):
             return written_node
         ref_id = self.reference_identifier(written_node)
         if ref_id:
-            if ref_id.type.is_const:
-                error(written_node.pos, "Reference '%s' is const but requires a write lock" % self.id_to_name(ref_id))
+            if self.const[ref_id] > 0:
+                error(written_node.pos, "Local reference '%s' is const but requires a write lock" % self.id_to_name(ref_id))
                 return written_node
             if not self.wlocked[ref_id] > 0:
                 if lock_mode == "checklock":
@@ -580,14 +581,28 @@ class CypclassLockTransform(Visitor.EnvTransform):
             # else: should have caused a previous error
         return rhs
 
+    def mark_const_local_alias(self, lhs, rhs):
+        lhs_ref_id = self.reference_identifier(lhs)
+        rhs_ref_id = self.reference_identifier(rhs)
+        if not lhs_ref_id or not rhs_ref_id:
+            return
+        if self.const[rhs_ref_id] and lhs_ref_id.is_local:
+            self.const[lhs_ref_id] = 1
+
     def visit_CFuncDefNode(self, node):
         cyp_class_args = (e for e in node.local_scope.arg_entries if e.type.is_cyp_class)
         arg_locks = []
+        old_const = self.const.copy()
         for arg in cyp_class_args:
             # Mark each cypclass arguments as locked within the function body
-            arg_locks.append(self.stacklock(arg, "rlocked" if arg.type.is_const else "wlocked"))
+            if arg.type.is_const:
+                arg_locks.append(self.stacklock(arg, "rlocked"))
+                self.const[arg] = 1
+            else:
+                arg_locks.append(self.stacklock(arg, "wlocked"))
         with_body = lambda: self.visit(node.body)
         self.with_nested_stacklocks(iter(arg_locks), with_body)
+        self.const = old_const
         return node
 
     def visit_LockCypclassNode(self, node):
@@ -627,6 +642,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
             # Disallow re-binding a locked name
             error(node.lhs.pos, "Assigning to a locked cypclass reference")
             return node
+        self.mark_const_local_alias(node.lhs, node.rhs)
         node.rhs = self.lockcheck_if_subscript_rhs(node.lhs, node.rhs)
         with self.accesscontext(writing=True):
             self.visit(node.lhs)
@@ -641,6 +657,8 @@ class CypclassLockTransform(Visitor.EnvTransform):
                 # Disallow re-binding a locked name
                 error(lhs.pos, "Assigning to a locked cypclass reference")
                 return node
+        for lhs in node.lhs_list:
+            self.mark_const_local_alias(lhs, node.rhs)
         for lhs in node.lhs_list:
             node.rhs = self.lockcheck_if_subscript_rhs(lhs, node.rhs)
         with self.accesscontext(writing=True):

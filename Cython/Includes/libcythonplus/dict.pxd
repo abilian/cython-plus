@@ -175,17 +175,14 @@ cdef cypclass cypdict[K, V]:
 
     V __getitem__(self, const key_type key) except ~ const:
         it = self._indices.find(key)
-        end = self._indices.end()
-        if it != end:
+        if it != self._indices.end():
            return self._items[dereference(it).second].second
-        else:
-            with gil:
-                raise KeyError("Getting nonexistent item")
+        with gil:
+            raise KeyError("Getting nonexistent item")
 
     void __setitem__(self, const key_type key, const value_type value) except ~:
         it = self._indices.find(key)
-        end = self._indices.end()
-        if it != end:
+        if it != self._indices.end():
             index = dereference(it).second
             Cy_INCREF(value)
             Cy_DECREF(self._items[index].second)
@@ -201,22 +198,19 @@ cdef cypclass cypdict[K, V]:
 
     void __delitem__(self, const key_type key) except ~:
         it = self._indices.find(key)
-        end = self._indices.end()
-        if it != end:
-            if self._active_iterators == 0:
-                index = dereference(it).second
-                Cy_DECREF(self._items[index].first)
-                Cy_DECREF(self._items[index].second)
-                self._indices.erase(it)
-                if index < self._items.size() - 1:
-                    self._items[index] = self._items[self._indices.size() - 1]
-                self._items.pop_back()
-            else:
-                with gil:
-                    raise RuntimeError("Modifying a dictionary with active iterators")
-        else:
+        if it == self._indices.end():
             with gil:
                 raise KeyError("Deleting nonexistent item")
+        if self._active_iterators != 0:
+            with gil:
+                raise RuntimeError("Modifying a dictionary with active iterators")
+        index = dereference(it).second
+        Cy_DECREF(self._items[index].first)
+        Cy_DECREF(self._items[index].second)
+        self._indices.erase(it)
+        if index < self._items.size() - 1:
+            self._items[index] = self._items[self._indices.size() - 1]
+        self._items.pop_back()
 
     void update(self, const cypdict[K, V] other):
         for item in other.items():

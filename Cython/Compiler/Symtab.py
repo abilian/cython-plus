@@ -2992,7 +2992,7 @@ class CppClassScope(Scope):
         entry.original_name = original_name
 
         if (self.parent_type.is_cyp_class and type.is_static_method and name not in ("<alloc>", "__new__")):
-            entry.static_cname = "%s__static__%s" % (Naming.func_prefix, cname)
+            entry.static_cname = "%s__static__%s" % (Naming.func_prefix, cname or name)
 
         if reify:
             self.reify_method(entry)

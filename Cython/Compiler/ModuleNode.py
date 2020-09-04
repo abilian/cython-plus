@@ -1784,8 +1784,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         for e in inherited_methods:
             modifiers = code.build_function_modifiers(e.func_modifiers)
 
-            arg_names = ["%s_%d" % (arg.cname, i) for i, arg in enumerate(e.type.args)]
-            arg_decls = [arg.type.declaration_code(arg_name) for arg, arg_name in zip(e.type.args, arg_names)]
+            min_nargs = len(e.type.args) - e.type.optional_arg_count
+            arg_names = [arg.cname for arg in e.type.args[:min_nargs]]
+            arg_decls = [arg.declaration_code() for arg in e.type.args[:min_nargs]]
             if e.type.optional_arg_count:
                 opt_name = Naming.optional_args_cname
                 arg_decls.append(e.type.op_arg_struct.declaration_code(opt_name))
@@ -1814,8 +1815,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         func_type = static_method.type
         modifiers = code.build_function_modifiers(static_method.func_modifiers)
 
-        arg_names = ["%s_%d" % (arg.cname, i) for i, arg in enumerate(func_type.args)]
-        arg_decls = [arg.type.declaration_code(arg_name) for arg, arg_name in zip(func_type.args, arg_names)]
+        min_nargs = len(func_type.args) - func_type.optional_arg_count
+        arg_names = [arg.cname for arg in func_type.args[:min_nargs]]
+        arg_decls = [arg.declaration_code() for arg in func_type.args[:min_nargs]]
         if func_type.optional_arg_count:
             opt_name = Naming.optional_args_cname
             arg_decls.append(func_type.op_arg_struct.declaration_code(opt_name))

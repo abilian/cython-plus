@@ -4133,7 +4133,7 @@ class CppClassType(CType):
         if template_params is None:
             template_params = self.templates
         if self.templates:
-            template_strings = [param.declaration_code('', for_display, None, pyrex)
+            template_strings = [template_parameter_code(param, for_display, pyrex)
                                 for param in template_params
                                 if not is_optional_template_param(param) and not param.is_fused]
             if for_display:
@@ -5044,13 +5044,7 @@ def best_match(arg_types, functions, pos=None, env=None, args=None, throw=False)
             else:
                 type_list = [deductions[param] for param in func_type.templates]
                 from .Symtab import Entry
-                template_cstrings = [
-                        "%s%s" % (
-                            t.empty_declaration_code(),
-                            "*" if t.is_cyp_class else ""
-                        )
-                        for t in type_list
-                    ]
+                template_cstrings = [template_parameter_code(t) for t in type_list]
                 specialization = Entry(
                     name = func.name + "[%s]" % ",".join([str(t) for t in type_list]),
                     cname = func.cname + "<%s>" % ",".join(template_cstrings),
@@ -5478,7 +5472,7 @@ def cap_length(s, max_prefix=63, max_len=1024):
 
 def namespace_declaration_code(namespace):
     """
-    Add 'typename' to the beginning of the declaration code when the namespace is template-dependent
+    Add 'typename' to the beginning of the declaration code when the namespace is template-dependent.
     """
     base_code = namespace.empty_declaration_code()
     if not base_code.startswith("typename "):
@@ -5486,3 +5480,9 @@ def namespace_declaration_code(namespace):
             if any(isinstance(t, TemplatePlaceholderType) for t in namespace.templates):
                 base_code = "typename %s" % base_code
     return base_code
+
+def template_parameter_code(T, for_display = 0, pyrex = 0):
+    """
+    Return the code string for a template parameter in a template instanciation.
+    """
+    return T.declaration_code('', for_display, None, pyrex)

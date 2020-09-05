@@ -88,6 +88,152 @@
                 int CyObject_TRYWLOCK();
         };
 
+        template <typename T>
+        struct Cy_Ref_impl {
+            T* uobj = nullptr;
+
+            constexpr Cy_Ref_impl() noexcept = default;
+
+            // constexpr Cy_Ref_impl(std::nullptr_t null) noexcept : uobj(null) {}
+
+            Cy_Ref_impl(T* uobj) : uobj(uobj) {
+                if (uobj != nullptr) {
+                    uobj->CyObject_INCREF();
+                }
+            }
+
+            Cy_Ref_impl(const Cy_Ref_impl& rhs) : uobj(rhs.uobj) {
+                if (uobj != nullptr) {
+                    uobj->CyObject_INCREF();
+                }
+            }
+
+            template<typename U, typename std::enable_if<std::is_convertible<U*, T*>::value, int>::type = 0>
+            Cy_Ref_impl(const Cy_Ref_impl<U>& rhs) : uobj(rhs.uobj) {
+                if (uobj != nullptr) {
+                    uobj->CyObject_INCREF();
+                }
+            }
+
+            Cy_Ref_impl(Cy_Ref_impl&& rhs) noexcept : uobj(rhs.uobj) {
+                rhs.uobj = nullptr;
+            }
+
+            template<typename U, typename std::enable_if<std::is_convertible<U*, T*>::value, int>::type = 0>
+            Cy_Ref_impl(Cy_Ref_impl<U>&& rhs) noexcept : uobj(rhs.uobj) {
+                rhs.uobj = nullptr;
+            }
+
+            Cy_Ref_impl& operator=(Cy_Ref_impl rhs) noexcept {
+                std::swap(uobj, rhs.uobj);
+                return *this;
+            }
+
+            ~Cy_Ref_impl() {
+                if (uobj != nullptr) {
+                    uobj->CyObject_DECREF();
+                    uobj = nullptr;
+                }
+            }
+
+            constexpr T& operator*() const noexcept{
+                return *uobj;
+            }
+
+            constexpr T* operator->() const noexcept {
+                return uobj;
+            }
+
+            explicit operator bool() const noexcept {
+                return uobj;
+            }
+
+            constexpr operator T*() const noexcept {
+                return uobj;
+            }
+
+            template <typename U>
+            bool operator==(const Cy_Ref_impl<U>& rhs) const noexcept {
+                return uobj == rhs.uobj;
+            }
+
+            template <typename U>
+            friend bool operator==(const Cy_Ref_impl<U>& lhs, const Cy_Ref_impl<T>& rhs) noexcept {
+                return lhs.uobj == rhs.uobj;
+            }
+
+            template <typename U>
+            bool operator==(U* rhs) const noexcept {
+                return uobj == rhs;
+            }
+
+            template <typename U>
+            friend bool operator==(U* lhs, const Cy_Ref_impl<T>& rhs) noexcept {
+                return lhs == rhs.uobj;
+            }
+
+            bool operator==(std::nullptr_t) const noexcept {
+                return uobj == nullptr;
+            }
+
+            friend bool operator==(std::nullptr_t, const Cy_Ref_impl<T>& rhs) noexcept {
+                return rhs.uobj == nullptr;
+            }
+
+            template <typename U>
+            bool operator!=(const Cy_Ref_impl<U>& rhs) const noexcept {
+                return uobj != rhs.uobj;
+            }
+
+            template <typename U>
+            friend bool operator!=(const Cy_Ref_impl<U>& lhs, const Cy_Ref_impl<T>& rhs) noexcept {
+                return lhs.uobj != rhs.uobj;
+            }
+
+            template <typename U>
+            bool operator!=(U* rhs) const noexcept {
+                return uobj != rhs;
+            }
+
+            template <typename U>
+            friend bool operator!=(U* lhs, const Cy_Ref_impl<T>& rhs) noexcept {
+                return lhs != rhs.uobj;
+            }
+
+            bool operator!=(std::nullptr_t) const noexcept {
+                return uobj != nullptr;
+            }
+
+            friend bool operator!=(std::nullptr_t, const Cy_Ref_impl<T>& rhs) noexcept {
+                return rhs.uobj != nullptr;
+            }
+        };
+
+        namespace std {
+        template <typename T>
+        struct hash<Cy_Ref_impl<T>> {
+            size_t operator()(const Cy_Ref_impl<T>& ref) const {
+                return std::hash<T*>()(ref.uobj);
+            }
+        };
+        }
+
+        template <typename T, bool = std::is_convertible<T*, CyObject*>::value>
+        struct Cy_Ref_t {};
+
+        template <typename T>
+        struct Cy_Ref_t<T, true> {
+            using type = Cy_Ref_impl<T>;
+        };
+
+        template <typename T>
+        struct Cy_Ref_t<T, false> {
+            using type = T;
+        };
+
+        template <typename T>
+        using Cy_Ref = typename Cy_Ref_t<T>::type;
+
         class Cy_rlock_guard {
             CyObject* o;
             public:

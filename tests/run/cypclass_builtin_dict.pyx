@@ -437,26 +437,26 @@ cdef cypclass DestroyCheckValue(Value):
 def test_items_destroyed():
     """
     >>> test_items_destroyed()
-    ('destroyed index', 0)
     ('destroyed value', 0)
-    ('destroyed index', 1)
+    ('destroyed index', 0)
     ('destroyed value', 1)
-    ('destroyed index', 2)
+    ('destroyed index', 1)
     ('destroyed value', 2)
-    ('destroyed index', 3)
+    ('destroyed index', 2)
     ('destroyed value', 3)
-    ('destroyed index', 4)
+    ('destroyed index', 3)
     ('destroyed value', 4)
-    ('destroyed index', 5)
+    ('destroyed index', 4)
     ('destroyed value', 5)
-    ('destroyed index', 6)
+    ('destroyed index', 5)
     ('destroyed value', 6)
-    ('destroyed index', 7)
+    ('destroyed index', 6)
     ('destroyed value', 7)
-    ('destroyed index', 8)
+    ('destroyed index', 7)
     ('destroyed value', 8)
-    ('destroyed index', 9)
+    ('destroyed index', 8)
     ('destroyed value', 9)
+    ('destroyed index', 9)
     """
     d = cypdict[DestroyCheckIndex, DestroyCheckValue]()
     for i in range(10):
@@ -475,7 +475,7 @@ def test_items_refcount():
     if Cy_GETREF(value) != 2:
         return -2
     d[index] = value
-    if Cy_GETREF(index) != 3:
+    if Cy_GETREF(index) != 4:
         return -3
     if Cy_GETREF(value) != 3:
         return -4
@@ -485,7 +485,7 @@ def test_items_refcount():
     if Cy_GETREF(value) != 2:
         return -6
     d[index] = value
-    if Cy_GETREF(index) != 3:
+    if Cy_GETREF(index) != 4:
         return -7
     if Cy_GETREF(value) != 3:
         return -8
@@ -495,7 +495,7 @@ def test_items_refcount():
     if Cy_GETREF(value) != 2:
         return -10
     d[index] = value
-    if Cy_GETREF(index) != 3:
+    if Cy_GETREF(index) != 4:
         return -11
     if Cy_GETREF(value) != 3:
         return -12
@@ -522,41 +522,41 @@ def test_update_refcount():
     d1[index1] = value1
     d2[index2] = value2
     d2[index3] = value3
-    if Cy_GETREF(index1) != 3:
+    if Cy_GETREF(index1) != 4:
         return -1
     if Cy_GETREF(value1) != 3:
         return -2
-    if Cy_GETREF(index2) != 3:
+    if Cy_GETREF(index2) != 4:
         return -3
     if Cy_GETREF(value2) != 3:
         return -4
-    if Cy_GETREF(index3) != 3:
+    if Cy_GETREF(index3) != 4:
         return -5
     if Cy_GETREF(value3) != 3:
         return -6
     d1.update(d2)
-    if Cy_GETREF(index1) != 3:
+    if Cy_GETREF(index1) != 4:
         return -7
     if Cy_GETREF(value1) != 3:
         return -8
-    if Cy_GETREF(index2) != 4:
+    if Cy_GETREF(index2) != 6:
         return -9
     if Cy_GETREF(value2) != 4:
         return -10
-    if Cy_GETREF(index3) != 4:
+    if Cy_GETREF(index3) != 6:
         return -11
     if Cy_GETREF(value3) != 4:
         return -12
     del d2
-    if Cy_GETREF(index1) != 3:
+    if Cy_GETREF(index1) != 4:
         return -13
     if Cy_GETREF(value1) != 3:
         return -14
-    if Cy_GETREF(index2) != 3:
+    if Cy_GETREF(index2) != 4:
         return -15
     if Cy_GETREF(value2) != 3:
         return -16
-    if Cy_GETREF(index3) != 3:
+    if Cy_GETREF(index3) != 4:
         return -17
     if Cy_GETREF(value3) != 3:
         return -18

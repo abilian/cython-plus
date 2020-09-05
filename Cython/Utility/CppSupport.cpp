@@ -77,31 +77,28 @@ template <typename T, bool = std::is_void<T>::value>
 struct CheckedResult {};
 
 template <typename T>
-class CheckedResult<T, false> {
-  enum Status { Ok, Err };
+struct CheckedResult<T, false> {
+  bool error;
+  T result;
 
-  private:
-    enum Status status;
-
-  public:
-    T result;
-
-    CheckedResult(const T& value) : status(Ok), result(value) {}
-    CheckedResult() : status(Err) {}
-    operator T() { return result; }
-    void set_error() { status = Err; }
-    bool is_error() { return status == Err; }
+  CheckedResult() : error(true) {}
+  CheckedResult(const T& value) : error(false), result(value) {}
+  template<typename U, typename std::enable_if<std::is_convertible<U, T>::value, int>::type = 0>
+  CheckedResult(const CheckedResult<U>& rhs) : error(rhs.error), result(rhs.result) {}
+  // CheckedResult& operator=(const T& value) {
+  //     result = value;
+  //     status = Ok;
+  //     return *this;
+  // }
+  operator T() { return result; }
+  void set_error() { error = true; }
+  bool is_error() { return error; }
 };
 
 template <typename T>
-class CheckedResult<T, true> {
-  enum Status { Ok, Err };
-
-  public:
-    CheckedResult() : status(Ok) {}
-    void set_error() { status = Err; }
-    bool is_error() { return status == Err; }
-
-  private:
-    enum Status status;
+struct CheckedResult<T, true> {
+  bool error;
+  CheckedResult() : error(false) {}
+  void set_error() { error = true; }
+  bool is_error() { return error; }
 };

@@ -45,48 +45,14 @@ cdef extern from * nogil:
     public:
         using iterator = iterator_t;
 
-        friend void swap(dict_view & first, dict_view & second)
-        {
-            using std::swap;
-            swap(first.urange, second.urange);
-        }
-
         dict_view() = default;
-        dict_view(dict_view const & rhs) : urange(rhs.urange)
-        {
-            if (urange != NULL)
-            {
-                urange->CyObject_INCREF();
-            }
-        }
+        dict_view(const dict_view & rhs) = default;
+        dict_view(dict_view && rhs) = default;
+        dict_view & operator=(const dict_view& rhs) = default;
+        dict_view & operator=(dict_view&& rhs) = default;
+        ~dict_view() = default;
 
-        dict_view(dict_view && rhs) : dict_view()
-        {
-            swap(*this, rhs);
-        }
-
-        dict_view & operator=(dict_view rhs)
-        {
-            swap(*this, rhs);
-            return *this;
-        }
-
-        ~dict_view()
-        {
-            if (urange != NULL)
-            {
-                urange->CyObject_DECREF();
-                urange = NULL;
-            }
-        }
-
-        dict_view(dict_t urange) : urange(urange)
-        {
-            if (urange != NULL)
-            {
-                urange->CyObject_INCREF();
-            }
-        }
+        dict_view(dict_t urange) : urange(urange) {}
 
         iterator begin() const
         {
@@ -168,11 +134,6 @@ cdef cypclass cypdict[K, V]:
     __init__(self):
         self._active_iterators.store(0)
 
-    __dealloc__(self):
-        for item in self._items:
-            Cy_DECREF(item.first)
-            Cy_DECREF(item.second)
-
     V __getitem__(self, const key_type key) except ~ const:
         it = self._indices.find(key)
         if it != self._indices.end():
@@ -184,12 +145,8 @@ cdef cypclass cypdict[K, V]:
         it = self._indices.find(key)
         if it != self._indices.end():
             index = dereference(it).second
-            Cy_INCREF(value)
-            Cy_DECREF(self._items[index].second)
             self._items[index].second = value
         elif self._active_iterators == 0:
-            Cy_INCREF(key)
-            Cy_INCREF(value)
             self._indices[key] = self._items.size()
             self._items.push_back(item_type(key, value))
         else:
@@ -205,8 +162,6 @@ cdef cypclass cypdict[K, V]:
             with gil:
                 raise RuntimeError("Modifying a dictionary with active iterators")
         index = dereference(it).second
-        Cy_DECREF(self._items[index].first)
-        Cy_DECREF(self._items[index].second)
         self._indices.erase(it)
         if index < self._items.size() - 1:
             self._items[index] = self._items[self._indices.size() - 1]
@@ -218,9 +173,6 @@ cdef cypclass cypdict[K, V]:
 
     void clear(self) except ~:
         if self._active_iterators == 0:
-            for item in self._items:
-                Cy_DECREF(item.first)
-                Cy_DECREF(item.second)
             self._items.clear()
             self._indices.clear()
         else:

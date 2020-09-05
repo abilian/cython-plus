@@ -34,10 +34,6 @@ cdef cypclass cyplist[V]:
     __init__(self):
         self._active_iterators.store(0)
 
-    __dealloc__(self):
-        for value in self._elements:
-            Cy_DECREF(value)
-
     V __getitem__(self, const size_type index) except ~ const:
         if index < self._elements.size():
            return self._elements[index]
@@ -47,8 +43,6 @@ cdef cypclass cyplist[V]:
 
     void __setitem__(self, size_type index, const value_type value) except ~:
         if index < self._elements.size():
-            Cy_INCREF(value)
-            Cy_DECREF(self._elements[index])
             self._elements[index] = value
         else:
             with gil:
@@ -58,7 +52,6 @@ cdef cypclass cyplist[V]:
         if index < self._elements.size():
             if self._active_iterators == 0:
                 it = self._elements.begin() + index
-                Cy_DECREF(dereference(it))
                 self._elements.erase(it)
             else:
                 with gil:
@@ -69,7 +62,6 @@ cdef cypclass cyplist[V]:
 
     void append(self, const value_type value) except ~:
         if self._active_iterators == 0:
-            Cy_INCREF(value)
             self._elements.push_back(value)
         else:
             with gil:
@@ -79,7 +71,6 @@ cdef cypclass cyplist[V]:
         if self._active_iterators == 0:
             if index <= self._elements.size():
                 it = self._elements.begin() + index
-                Cy_INCREF(value)
                 self._elements.insert(it, value)
             else:
                 with gil:
@@ -90,8 +81,6 @@ cdef cypclass cyplist[V]:
 
     void clear(self) except ~:
         if self._active_iterators == 0:
-            for value in self._elements:
-                Cy_DECREF(value)
             self._elements.clear()
         else:
             with gil:
@@ -100,20 +89,13 @@ cdef cypclass cyplist[V]:
     cyplist[V] __add__(self, const cyplist[V] other) const:
         result = cyplist[V]()
         result._elements.reserve(self._elements.size() + other._elements.size())
-        for value in self._elements:
-            Cy_INCREF(value)
-            result._elements.push_back(value)
-        for value in other._elements:
-            Cy_INCREF(value)
-            result._elements.push_back(value)
+        result._elements.insert(result._elements.end(), self._elements.begin(), self._elements.end())
+        result._elements.insert(result._elements.end(), other._elements.begin(), other._elements.end())
         return result
 
     cyplist[V] __iadd__(self, const cyplist[V] other):
         if self._active_iterators == 0:
-            self._elements.reserve(self._elements.size() + other._elements.size())
-            for value in other._elements:
-                Cy_INCREF(value)
-                self._elements.push_back(value)
+            self._elements.insert(self._elements.end(), other._elements.begin(), other._elements.end())
             return self
         else:
             with gil:
@@ -123,9 +105,7 @@ cdef cypclass cyplist[V]:
         result = cyplist[V]()
         result._elements.reserve(self._elements.size() * n)
         for i in range(n):
-            for value in self._elements:
-                Cy_INCREF(value)
-                result._elements.push_back(value)
+            result._elements.insert(result._elements.end(), self._elements.begin(), self._elements.end())
         return result
 
     cyplist[V] __imul__(self, size_type n):
@@ -134,15 +114,11 @@ cdef cypclass cyplist[V]:
                 elements = self._elements
                 self._elements.reserve(elements.size() * n)
                 for i in range(1, n):
-                    for value in elements:
-                        Cy_INCREF(value)
-                        self._elements.push_back(value)
+                    self._elements.insert(self._elements.end(), elements.begin(), elements.end())
                 return self
             elif n == 1:
                 return self
             else:
-                for value in self._elements:
-                    Cy_DECREF(value)
                 self._elements.clear()
                 return self
         else:

@@ -20,7 +20,6 @@ cdef extern from * nogil:
         {
             if (urange != NULL)
             {
-                urange->CyObject_INCREF();
                 urange->_active_iterators++;
             }
         }
@@ -41,7 +40,6 @@ cdef extern from * nogil:
             swap(static_cast<base&>(*this), rhs);
             if (urange != NULL) {
                 urange->_active_iterators--;
-                urange->CyObject_DECREF();
                 urange = NULL;
             }
             return *this;
@@ -51,7 +49,6 @@ cdef extern from * nogil:
         {
             if (urange != NULL) {
                 urange->_active_iterators--;
-                urange->CyObject_DECREF();
                 urange = NULL;
             }
         }
@@ -61,7 +58,6 @@ cdef extern from * nogil:
         cy_iterator_t(base const & b, urng_t urange) : base{b}, urange{urange}
         {
             if (urange != NULL) {
-                urange->CyObject_INCREF();
                 urange->_active_iterators++;
             }
         }

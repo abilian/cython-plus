@@ -731,7 +731,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
             formal_nargs = len(func_type.args)
             actual_nargs = len(node.args)
             for i, formal_arg, actual_arg in zip(range(actual_nargs), func_type.args, node.args):
-                if formal_arg.type.is_cyp_class:
+                if formal_arg.type.is_cyp_class and actual_arg.type.is_cyp_class:
                     node.args[i] = self.lockcheck_written_or_read(actual_arg, reading=formal_arg.type.is_const)
         with self.accesscontext(reading=True):
             self.visitchildren(node)

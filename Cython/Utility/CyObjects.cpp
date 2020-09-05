@@ -148,7 +148,10 @@
                 return uobj;
             }
 
-            constexpr operator T*() const noexcept {
+            operator T*() const {
+                if (uobj != nullptr) {
+                    uobj->CyObject_INCREF();
+                }
                 return uobj;
             }
 

@@ -293,23 +293,6 @@ def translate_double_cpp_exception(code, pos, lhs_type, lhs_code, rhs_code, lhs_
     code.putln(code.error_goto(pos))
     code.putln('}')
 
-# Used to determine if a node has a persistent result, meaning it is not temporary
-# and doesn't depend on any temporary sub expressions.
-# Examples:
-#       name                # <- persistent
-#       name.attr           # <- persistent
-#       some_func()         # <- temporary
-#       some_func().attr    # <- temporary
-# Essentially this boils down to NameNodes and AttributeNodes that are recursively
-# only composed of NameNodes.
-def is_persistent(node):
-    if node.is_name:
-        return True
-    elif node.is_attribute:
-        return is_persistent(node.obj)
-    else:
-        return False
-
 
 class ExprNode(Node):
     #  subexprs     [string]     Class var holding names of subexpr node attrs
@@ -2937,7 +2920,7 @@ class CppIteratorNode(ExprNode):
         if sequence_type.is_cyp_class:
             self.cpp_attribute_op = "->"
         # essentially 3 options:
-        if is_persistent(self.sequence):
+        if self.sequence.is_simple():
             # 1) is a name and can be accessed directly;
             #    assigning to it may break the container, but that's the responsibility
             #    of the user

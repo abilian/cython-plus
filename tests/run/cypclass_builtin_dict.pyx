@@ -198,6 +198,49 @@ def test_contains():
             return -2
     return 0
 
+cdef cypclass EqualIndex(Index):
+    bint __eq__(self, EqualIndex other):
+        return self.index == other.index
+    int __hash__(self):
+        return self.index
+
+cdef cypclass AlwaysEqualIndex(Index):
+    bint __eq__(self, AlwaysEqualIndex other):
+        return True
+    int __hash__(self):
+        return 0
+
+def test_custom_eq_and_hash():
+    """
+    >>> test_custom_eq_and_hash()
+    0
+    """
+    d1 = cypdict[EqualIndex, double]()
+    d1[EqualIndex(0)] = 0.0
+    if EqualIndex(0) not in d1:
+        return -1
+    if EqualIndex(1) in d1:
+        return -2
+    if d1.__len__() != 1:
+        return -3
+    d1[EqualIndex(0)] = 2.0
+    if d1.__len__() != 1:
+        return -4
+    d1[EqualIndex(1)] = 1.0
+    if d1.__len__() != 2:
+        return -5
+
+    d2 = cypdict[AlwaysEqualIndex, double]()
+    d2[AlwaysEqualIndex(11)] = 11.0
+    for i in range(10):
+        index = AlwaysEqualIndex(i)
+        if index not in d2:
+            return -(i+6)
+        d2[index] = <double> i
+        if d2.__len__() != 1:
+            return -(i+16)
+    return 0
+
 def test_nonexistent_getitem_exception():
     """
     >>> test_nonexistent_getitem_exception()

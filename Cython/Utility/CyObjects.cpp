@@ -33,6 +33,10 @@
         #include <sys/syscall.h>
         #include <vector>
 
+        #include <sstream>
+        #include <iostream>
+        #include <stdexcept>
+
         #include <type_traits>
 
 
@@ -87,6 +91,18 @@
                 int CyObject_TRYRLOCK();
                 int CyObject_TRYWLOCK();
         };
+
+        template <typename T, typename = void>
+        struct Cy_has_equality : std::false_type {};
+
+        template <typename T>
+        struct Cy_has_equality<T, typename std::enable_if<std::is_convertible<decltype( std::declval<T>().operator==(std::declval<T*>()) ), bool>::value>::type> : std::true_type {};
+
+        template <typename T, typename = void>
+        struct Cy_has_hash : std::false_type {};
+
+        template <typename T>
+        struct Cy_has_hash<T, typename std::enable_if<std::is_convertible<decltype( std::declval<T>().__hash__() ), std::size_t>::value>::type> : std::true_type {};
 
         template <typename T>
         struct Cy_Ref_impl {
@@ -215,8 +231,27 @@
         namespace std {
         template <typename T>
         struct hash<Cy_Ref_impl<T>> {
+            template <typename U = T, typename std::enable_if<!Cy_has_hash<U>::value, int>::type = 0>
             size_t operator()(const Cy_Ref_impl<T>& ref) const {
+                static_assert(!Cy_has_equality<U>::value, "Cypclasses that define __eq__ must also define __hash__ to be hashable");
                 return std::hash<T*>()(ref.uobj);
+            }
+            template <typename U = T, typename std::enable_if<Cy_has_hash<U>::value, int>::type = 0>
+            size_t operator()(const Cy_Ref_impl<T>& ref) const {
+                static_assert(Cy_has_equality<U>::value, "Cypclasses that define __hash__ must also define __eq__ to be hashable");
+                return ref.uobj->__hash__();
+            }
+        };
+
+        template <typename T>
+        struct equal_to<Cy_Ref_impl<T>> {
+            template <typename U = T, typename std::enable_if<!Cy_has_equality<U>::value, int>::type = 0>
+            bool operator()(const Cy_Ref_impl<T>& lhs, const Cy_Ref_impl<T>& rhs) const {
+                return lhs.uobj == rhs.uobj;
+            }
+            template <typename U = T, typename std::enable_if<Cy_has_equality<U>::value, int>::type = 0>
+            bool operator()(const Cy_Ref_impl<T>& lhs, const Cy_Ref_impl<T>& rhs) const {
+                return lhs.uobj->operator==(rhs.uobj);
             }
         };
         }
@@ -500,9 +535,6 @@
 #ifdef __cplusplus
     #include <cstdlib>
     #include <cstddef>
-    #include <sstream>
-    #include <iostream>
-    #include <stdexcept>
 // atomic is already included in ModuleSetupCode
 //  #include <atomic>
 #else

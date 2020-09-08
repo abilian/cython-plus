@@ -2332,6 +2332,13 @@ class FuncDefNode(StatNode, BlockNode):
             # FIXME ideally use entry.xdecref_cleanup but this currently isn't reliable
             code.put_var_xdecref(entry, have_gil=gil_owned['success'])
 
+            if entry.type.is_array and entry.type.base_type.is_cyp_class:
+                loop_idx = code.funcstate.allocate_temp(PyrexTypes.c_size_t_type, manage_ref=False)
+                code.putln("for (%s = 0; %s < %s; %s++) {" % (loop_idx, loop_idx, entry.type.size, loop_idx))
+                code.putln("Cy_XDECREF(%s[%s]);" % (entry.cname, loop_idx))
+                code.putln("}")
+                code.funcstate.release_temp(loop_idx)
+
         # Decref any increfed args
         for entry in lenv.arg_entries:
             if entry.type.is_memoryviewslice:

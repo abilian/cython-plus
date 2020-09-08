@@ -3871,7 +3871,7 @@ class IndexNode(_IndexingBaseNode):
     def analyse_as_c_array(self, env, is_slice):
         base_type = self.base.type
         self.type = base_type.base_type
-        if self.type.is_cpp_class:
+        if self.type.is_cpp_class and not self.type.is_cyp_class:
             self.type = PyrexTypes.CReferenceType(self.type)
         if is_slice:
             self.type = base_type
@@ -4407,6 +4407,10 @@ class IndexNode(_IndexingBaseNode):
             code.putln(
                 "%s = %s;" % (self.result(), rhs.result()))
 
+        if (self.base.type.is_array or self.base.type.is_ptr) and self.type.is_cyp_class:
+            # XXX This is a good place for refcounting optimisation:
+            # if the rhs is a cypclass temporary we are doing an INCREF and a DECREF.
+            code.put_incref(self.result(), self.type)
         self.generate_subexpr_disposal_code(code)
         self.free_subexpr_temps(code)
         rhs.generate_disposal_code(code)
@@ -5397,12 +5401,28 @@ class SliceIndexNode(ExprNode):
             else:
                 array_length = '%s - %s' % (self.stop_code(), start_offset)
 
+            # Manage reference count of elements of cypclass arrays => DECREF overwritten references
+            if (self.type.is_array or self.type.is_ptr) and self.type.base_type.is_cyp_class:
+                loop_idx = code.funcstate.allocate_temp(PyrexTypes.c_size_t_type, manage_ref=False)
+                code.putln("for (%s = %s; %s < %s; %s++) {" % (loop_idx, start_offset, loop_idx, array_length, loop_idx))
+                code.putln("Cy_XDECREF(%s[%s]);" % (self.base.result(), loop_idx))
+                code.putln("}")
+                code.funcstate.release_temp(loop_idx)
+
             code.globalstate.use_utility_code(UtilityCode.load_cached("IncludeStringH", "StringTools.c"))
             code.putln("memcpy(&(%s[%s]), %s, sizeof(%s[0]) * (%s));" % (
                 self.base.result(), start_offset,
                 rhs.result(),
                 self.base.result(), array_length
             ))
+
+            # Manage reference count of elements of cypclass arrays => INCREF copied references
+            if (self.type.is_array or self.type.is_ptr) and self.type.base_type.is_cyp_class:
+                loop_idx = code.funcstate.allocate_temp(PyrexTypes.c_size_t_type, manage_ref=False)
+                code.putln("for (%s = %s; %s < %s; %s++) {" % (loop_idx, start_offset, loop_idx, array_length, loop_idx))
+                code.putln("Cy_INCREF(%s[%s]);" % (self.base.result(), loop_idx))
+                code.putln("}")
+                code.funcstate.release_temp(loop_idx)
 
         self.generate_subexpr_disposal_code(code)
         self.free_subexpr_temps(code)

@@ -2681,9 +2681,11 @@ class CArrayType(CPointerBaseType):
             dimension_code = ""
         if entity_code.startswith("*"):
             entity_code = "(%s)" % entity_code
+        declarator_code = "%s[%s]" % (entity_code, dimension_code)
+        if self.base_type.is_cyp_class:
+            declarator_code = "%s = {NULL}" % declarator_code
         return self.base_type.declaration_code(
-            "%s[%s]" % (entity_code, dimension_code),
-            for_display, dll_linkage, pyrex)
+            declarator_code, for_display, dll_linkage, pyrex)
 
     def as_argument_type(self):
         return c_ptr_type(self.base_type)

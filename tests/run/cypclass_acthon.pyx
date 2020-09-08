@@ -30,7 +30,6 @@ cdef cypclass BasicQueue(ActhonQueueInterface) checklock:
     self._queue.push_back(message)
     if message._sync_method is not NULL:
       message._sync_method.insertActivity(message)
-    Cy_INCREF(message)
 
   bint activate(self):
     cdef bint one_message_processed
@@ -52,7 +51,6 @@ cdef cypclass BasicQueue(ActhonQueueInterface) checklock:
     else:
       self._queue.push_back(next_message)
       # Don't forget to incref to avoid premature deallocation
-      Cy_INCREF(next_message)
     return one_message_processed
 
 cdef cypclass NoneResult(ActhonResultInterface) checklock:

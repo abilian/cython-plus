@@ -23,8 +23,6 @@ cdef cypclass SingleInsertionDict[K, V]:
         end = self._indices.end()
 
         if it == end:
-            Cy_INCREF(key)
-            Cy_INCREF(value)
             self._indices[key] = self._items.size()
             self._items.push_back((key, value))
         else:
@@ -46,8 +44,6 @@ cdef cypclass SingleInsertionDict[K, V]:
 
         if it != end:
             index = deref(it).second
-            Cy_DECREF(self._items[index][0])
-            Cy_DECREF(self._items[index][1])
             self._indices.erase(it)
             if index < self._items.size() - 1:
                 self._items[index] = self._items[self._indices.size() - 1]

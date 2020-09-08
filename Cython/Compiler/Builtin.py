@@ -652,24 +652,12 @@ def init_builtin_structs():
             name, "struct", scope, 1, None, cname = cname)
 
 def inject_cypclass_refcount_macros():
-    template_placeholder_type = PyrexTypes.TemplatePlaceholderType("T")
-    incref_type = PyrexTypes.CFuncType(
-        PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", template_placeholder_type, None)],
-        nogil = 1,
-        templates = [template_placeholder_type]
-    )
+    incref_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)], nogil = 1)
 
-    reference_to_template_type = PyrexTypes.CReferenceType(template_placeholder_type)
-    decref_type = PyrexTypes.CFuncType(
-        PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", reference_to_template_type, None)],
-        nogil = 1,
-        templates = [template_placeholder_type]
-    )
+    reference_to_cy_object_type = PyrexTypes.CReferenceType(PyrexTypes.cy_object_type)
+    decref_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", reference_to_cy_object_type, None)], nogil = 1)
 
-    getref_type = PyrexTypes.CFuncType(
-        PyrexTypes.c_int_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)],
-        nogil = 1,
-    )
+    getref_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)], nogil = 1)
 
     for macro, macro_type in [("Cy_INCREF", incref_type), ("Cy_DECREF", decref_type), ("Cy_XDECREF", decref_type), ("Cy_GETREF", getref_type)]:
         builtin_scope.declare_builtin_cfunction(macro, macro_type, macro)

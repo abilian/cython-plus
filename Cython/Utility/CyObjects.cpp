@@ -357,26 +357,13 @@
         };
 
 
-        /*
-            * Let Cy_INCREF, Cy_DECREF and Cy_XDECREF accept any argument type
-            * but only do the work when the argument is actually a CyObject
-            */
-        template <typename T, typename std::enable_if<!std::is_convertible<T, CyObject*>::value, int>::type = 0>
-        static inline void Cy_DECREF(T) {}
-
-        template <typename T, typename std::enable_if<!std::is_convertible<T, CyObject*>::value, int>::type = 0>
-        static inline void Cy_XDECREF(T) {}
-
-        template <typename T, typename std::enable_if<!std::is_convertible<T, CyObject*>::value, int>::type = 0>
-        static inline void Cy_INCREF(T) {}
-
-        template <typename T, typename std::enable_if<std::is_convertible<T, CyObject*>::value, int>::type = 0>
+        template <typename T>
         static inline void Cy_DECREF(T &ob) {
             if(ob->CyObject_DECREF())
                 ob = NULL;
         }
 
-        template <typename T, typename std::enable_if<std::is_convertible<T, CyObject*>::value, int>::type = 0>
+        template <typename T>
         static inline void Cy_XDECREF(T &ob) {
             if (ob != NULL) {
                 if(ob->CyObject_DECREF())
@@ -384,7 +371,7 @@
             }
         }
 
-        template <typename T, typename std::enable_if<std::is_convertible<T, CyObject*>::value, int>::type = 0>
+        template <typename T>
         static inline void Cy_INCREF(T ob) {
             if (ob != NULL)
                 ob->CyObject_INCREF();

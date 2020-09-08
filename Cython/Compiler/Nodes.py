@@ -6511,9 +6511,9 @@ class DelStatNode(StatNode):
                 arg.free_temps(code)
             elif arg.type.is_cyp_class:
                 arg.generate_evaluation_code(code)
-                code.putln("Cy_DECREF(%s);" % arg.result())
-                code.putln("%s = NULL;" % arg.result())
+                code.put_decref_clear(arg.result(), arg.type)
                 arg.generate_disposal_code(code)
+                arg.free_temps(code)
             # else error reported earlier
 
     def annotate(self, code):

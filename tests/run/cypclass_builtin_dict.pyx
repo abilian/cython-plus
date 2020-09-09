@@ -744,3 +744,29 @@ def test_iterator_refcount():
         return -11
 
     return 0
+
+cdef cypdict[Index, Value] pass_along(cypdict[Index, Value] d):
+    return d
+
+def test_iteration_refcount():
+    """
+    >>> test_iteration_refcount()
+    0
+    """
+    d = cypdict[Index, Value]()
+    if Cy_GETREF(d) != 2:
+        return -1
+
+    for key in d:
+        pass
+
+    if Cy_GETREF(d) != 2:
+        return -2
+
+    for key in pass_along(d):
+        pass
+
+    if Cy_GETREF(d) != 2:
+        return -3
+
+    return 0

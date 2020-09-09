@@ -112,11 +112,13 @@
 
             // constexpr Cy_Ref_impl(std::nullptr_t null) noexcept : uobj(null) {}
 
-            Cy_Ref_impl(T* uobj) : uobj(uobj) {
+            Cy_Ref_impl(T* const& uobj) : uobj(uobj) {
                 if (uobj != nullptr) {
                     uobj->CyObject_INCREF();
                 }
             }
+
+            constexpr Cy_Ref_impl(T* && uobj) noexcept : uobj(uobj) {}
 
             Cy_Ref_impl(const Cy_Ref_impl& rhs) : uobj(rhs.uobj) {
                 if (uobj != nullptr) {

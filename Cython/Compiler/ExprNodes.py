@@ -827,7 +827,7 @@ class ExprNode(Node):
                 # postponed from self.generate_evaluation_code()
                 self.generate_subexpr_disposal_code(code)
                 self.free_subexpr_temps(code)
-            if self.result():
+            if self.result() and not self.has_temp_moved:
                 code.put_decref_clear(self.result(), self.ctype(),
                                         have_gil=not self.in_nogil_context)
             if self.has_temp_moved:
@@ -2944,7 +2944,7 @@ class CppIteratorNode(ExprNode):
                 code.putln("%s = %s%s;" % (self.cpp_sequence_cname,
                                            "&" if temp_type.is_ptr else "",
                                            self.sequence.move_result_rhs()))
-                if sequence_type.is_cyp_class:
+                if sequence_type.is_cyp_class and not self.sequence.has_temp_moved:
                     code.put_incref(self.cpp_sequence_cname, sequence_type)
                 code.putln("%s = %s%sbegin();" % (self.result(), self.cpp_sequence_cname,
                                                   self.cpp_attribute_op))
@@ -6225,7 +6225,10 @@ class SimpleCallNode(CallNode):
         if self.type.is_cyp_class and isinstance(self.function, NewExprNode):
             return "%s()" % self.function.result()
         for formal_arg, actual_arg in args[:expected_nargs]:
-            arg_code = actual_arg.move_result_rhs_as(formal_arg.type)
+            if formal_arg.type.is_cyp_class:
+                arg_code = actual_arg.result()
+            else:
+                arg_code = actual_arg.move_result_rhs_as(formal_arg.type)
             arg_list_code.append(arg_code)
 
         if func_type.is_overridable:

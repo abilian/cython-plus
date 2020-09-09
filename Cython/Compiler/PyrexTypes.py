@@ -265,6 +265,7 @@ class PyrexType(BaseType):
     is_pythran_expr = 0
     is_numpy_buffer = 0
     is_checked_result = 0
+    is_template_typename = 0
     has_attributes = 0
     needs_refcounting = 0
     default_value = ""
@@ -3259,7 +3260,7 @@ class CFuncType(CType):
         arg_decl_list = []
         for arg in self.args[:len(self.args)-self.optional_arg_count]:
             arg_decl_list.append(
-                arg.type.declaration_code("", for_display, pyrex = pyrex))
+                arg.declaration_code(for_display, pyrex = pyrex, cname = ''))
         if self.is_overridable:
             arg_decl_list.append("int %s" % Naming.skip_dispatch_cname)
         if self.optional_arg_count:
@@ -3610,10 +3611,12 @@ class CFuncTypeArg(BaseType):
     accept_none = True
     accept_builtin_subtypes = False
     annotation = None
+    original_template = None
+    has_cypclass_specialisation = False
 
     subtypes = ['type']
 
-    def __init__(self, name, type, pos, cname=None, annotation=None):
+    def __init__(self, name, type, pos, cname=None, annotation=None, original_template=None):
         self.name = name
         if cname is not None:
             self.cname = cname
@@ -3624,15 +3627,23 @@ class CFuncTypeArg(BaseType):
         self.type = type
         self.pos = pos
         self.needs_type_test = False  # TODO: should these defaults be set in analyse_types()?
+        self.original_template = original_template or self
+        self.original_template.has_cypclass_specialisation = type.is_cyp_class
 
     def __repr__(self):
         return "%s:%s" % (self.name, repr(self.type))
 
-    def declaration_code(self, for_display = 0):
-        return self.type.declaration_code(self.cname, for_display)
+    def declaration_code(self, for_display = 0, pyrex = 0, cname = None):
+        if cname is None:
+            cname = self.cname
+        if self.type.is_template_typename and self.has_cypclass_specialisation:
+            base_code = "Cy_Raw<%s>" % self.type.empty_declaration_code()
+            return self.base_declaration_code(base_code, self.cname)
+        return self.type.declaration_code(cname, for_display, pyrex)
 
     def specialize(self, values):
-        return CFuncTypeArg(self.name, self.type.specialize(values), self.pos, self.cname)
+        return CFuncTypeArg(self.name, self.type.specialize(values), self.pos, self.cname,
+            None, self.original_template)
 
 
 class ToPyStructUtilityCode(object):
@@ -4537,6 +4548,7 @@ class CypClassType(CppClassType):
 
 
 class TemplatePlaceholderType(CType):
+    is_template_typename = 1
 
     def __init__(self, name, optional=False):
         self.name = name

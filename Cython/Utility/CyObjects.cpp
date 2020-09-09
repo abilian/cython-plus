@@ -272,6 +272,19 @@
         template <typename T>
         using Cy_Ref = typename Cy_Ref_t<T>::type;
 
+        template <typename T>
+        struct Cy_Raw_t {
+            using type = T;
+        };
+
+        template <typename T>
+        struct Cy_Raw_t<Cy_Ref_impl<T>> {
+            using type = T*;
+        };
+
+        template <typename T>
+        using Cy_Raw = typename Cy_Raw_t<T>::type;
+
         class Cy_rlock_guard {
             CyObject* o;
             public:

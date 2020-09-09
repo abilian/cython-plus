@@ -256,17 +256,14 @@
         };
         }
 
-        template <typename T, bool = std::is_convertible<T*, CyObject*>::value>
-        struct Cy_Ref_t {};
-
         template <typename T>
-        struct Cy_Ref_t<T, true> {
+        struct Cy_Ref_t {
             using type = Cy_Ref_impl<T>;
         };
 
         template <typename T>
-        struct Cy_Ref_t<T, false> {
-            using type = T;
+        struct Cy_Ref_t<Cy_Ref_impl<T>> {
+            using type = Cy_Ref_impl<T>;
         };
 
         template <typename T>

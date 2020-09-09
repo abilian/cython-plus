@@ -405,9 +405,11 @@ class CTypedefType(BaseType):
     #  typedef_cname       string
     #  typedef_base_type   PyrexType
     #  typedef_is_external bool
+    #  is_specialised      bool
 
     is_typedef = 1
     typedef_is_external = 0
+    is_specialised = 0
 
     to_py_utility_code = None
     from_py_utility_code = None
@@ -436,6 +438,8 @@ class CTypedefType(BaseType):
             base_code = public_decl(self.typedef_cname, dll_linkage)
         if self.typedef_namespace is not None and not pyrex:
             base_code = "%s::%s" % (namespace_declaration_code(self.typedef_namespace), base_code)
+        if self.is_specialised and self.is_cyp_class and entity_code:
+            base_code = "Cy_Raw<%s>" % base_code
         return self.base_declaration_code(base_code, entity_code)
 
     def as_argument_type(self):
@@ -456,8 +460,10 @@ class CTypedefType(BaseType):
         if base_type is self.typedef_base_type and namespace is self.typedef_namespace:
             return self
         else:
-            return create_typedef_type(self.typedef_name, base_type, self.typedef_cname,
+            specialized_type = create_typedef_type(self.typedef_name, base_type, self.typedef_cname,
                                 0, namespace)
+            specialized_type.is_specialised = base_type is not self.typedef_base_type
+            return specialized_type
 
     def __repr__(self):
         return "<CTypedefType %s>" % self.typedef_cname

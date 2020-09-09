@@ -164,11 +164,17 @@
                 return uobj;
             }
 
-            operator T*() const {
+            operator T*() const& {
                 if (uobj != nullptr) {
                     uobj->CyObject_INCREF();
                 }
                 return uobj;
+            }
+
+            operator T*() && {
+                T* obj = uobj;
+                uobj = nullptr;
+                return obj;
             }
 
             template <typename U>

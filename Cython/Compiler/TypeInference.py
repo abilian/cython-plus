@@ -536,7 +536,7 @@ def simply_type(result_type, pos):
         result_type = result_type.checked_base_type
     if result_type.is_reference:
         result_type = result_type.ref_base_type
-    if result_type.is_cv_qualified:
+    if result_type.is_cv_qualified and not result_type.is_cyp_class:
         result_type = result_type.cv_base_type
     if result_type.is_cpp_class:
         result_type.check_nullary_constructor(pos)

@@ -1847,8 +1847,6 @@ class CConstOrVolatileType(BaseType):
 
     def cv_string(self):
         cvstring = ""
-        if self.is_cyp_class:
-            return cvstring
         if self.is_const:
             cvstring = "const " + cvstring
         if self.is_volatile:
@@ -1866,8 +1864,17 @@ class CConstOrVolatileType(BaseType):
         cv = self.cv_string()
         if for_display or pyrex:
             return cv + self.cv_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex)
+        elif self.cv_base_type.is_cyp_class:
+            return cv + self.cv_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex)
         else:
             return self.cv_base_type.declaration_code(cv + entity_code, for_display, dll_linkage, pyrex)
+
+    def empty_declaration_code(self):
+        if self.cv_base_type.is_cyp_class:
+            cv = self.cv_string()
+            return cv + self.cv_base_type.empty_declaration_code()
+        else:
+            return super(CConstOrVolatileType, self).empty_declaration_code()
 
     def specialize(self, values):
         base_type = self.cv_base_type.specialize(values)
@@ -1895,6 +1902,15 @@ class CConstOrVolatileType(BaseType):
             return self.cv_base_type.same_as_resolved_type(other_type.cv_base_type)
         # Accept cv LHS <- non-cv RHS.
         return self.cv_base_type.same_as_resolved_type(other_type)
+
+    def as_argument_type(self):
+        if self.is_cyp_class:
+            # A const cypclass is actually a pointer to a const cypclass.
+            return self
+        else:
+            # This strips 'const' and 'volatile' qualifiers, which is not the documented goal
+            # but temporaries and Python function argument conversions rely on that.
+            return self.cv_base_type.as_argument_type()
 
     def __getattr__(self, name):
         return getattr(self.cv_base_type, name)

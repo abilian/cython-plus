@@ -1423,6 +1423,8 @@ class CVarDefNode(StatNode):
                             cfunc_declarator.args = []
                         cfunc_declarator.skipped_self = None
 
+                if 'mutable' in self.modifiers:
+                    error(self.pos, "Functions cannot be 'mutable'")
                 self.entry = dest_scope.declare_cfunction(
                     name, type, declarator.pos,
                     cname=cname, visibility=self.visibility, in_pxd=self.in_pxd,
@@ -1447,6 +1449,10 @@ class CVarDefNode(StatNode):
                     api=self.api, is_cdef=1)
                 if Options.docstrings:
                     self.entry.doc = embed_position(self.pos, self.doc)
+                if 'mutable' in self.modifiers:
+                    if not dest_scope.is_cpp_class_scope:
+                        error(self.pos, "Specifier 'mutable' can only apply to cppclass variable members")
+                    self.entry.is_mutable = 1
 
 
 class CStructOrUnionDefNode(StatNode):
@@ -2689,6 +2695,8 @@ class CFuncDefNode(FuncDefNode):
         typ.is_static_method = self.is_static_method
         typ.is_cyp_class_method = self.is_cyp_class_method
 
+        if 'mutable' in self.modifiers:
+            error(self.pos, "Functions cannot be 'mutable'")
         self.entry = env.declare_cfunction(
             name, typ, self.pos,
             cname=cname, visibility=self.visibility, api=self.api,

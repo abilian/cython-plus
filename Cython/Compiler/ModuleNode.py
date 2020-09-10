@@ -1628,6 +1628,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.putln("%s;" % dunder_activate_entry.type.declaration_code(dunder_activate_entry.cname))
             for attr in scope.var_entries:
                 cname = attr.cname
+                if attr.is_mutable:
+                    code.put("mutable ")
                 if attr.type.is_cfunction and attr.type.is_static_method:
                     code.put("static ")
                 elif attr.name == "<init>":

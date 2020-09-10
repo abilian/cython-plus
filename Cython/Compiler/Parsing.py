@@ -3332,7 +3332,7 @@ def p_visibility(s, prev_visibility):
     return visibility
 
 def p_c_modifiers(s):
-    if s.sy == 'IDENT' and s.systring in ('inline',):
+    if s.sy == 'IDENT' and s.systring in ('inline', 'mutable'):
         modifier = s.systring
         s.next()
         return [modifier] + p_c_modifiers(s)

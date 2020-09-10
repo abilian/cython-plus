@@ -105,6 +105,7 @@ class Entry(object):
     # is_cclass        boolean    Is an extension class
     # is_cpp_class     boolean    Is a C++ class
     # is_const         boolean    Is a constant
+    # is_mutable       boolean    Is a mutable attribute
     # is_property      boolean    Is a property of an extension type:
     # doc_cname        string or None  C const holding the docstring
     # getter_cname     string          C func for getting property
@@ -201,6 +202,7 @@ class Entry(object):
     is_cclass = 0
     is_cpp_class = 0
     is_const = 0
+    is_mutable = 0
     is_property = 0
     is_cproperty = 0
     doc_cname = None

@@ -549,56 +549,49 @@ def aggressive_spanning_type(types, might_overflow, pos, scope):
 
 def safe_spanning_type(types, might_overflow, pos, scope):
     result_type = simply_type(reduce(find_spanning_type, types), pos)
-
-    # if the result type is a typedef, use the resolved type to make decisions
-    # but keep the unresolved type as the value to be returned
-    resolved_result_type = result_type
-    if result_type.is_typedef:
-        resolved_result_type = result_type.resolve()
-
-    if resolved_result_type.is_pyobject:
+    if result_type.is_pyobject:
         # In theory, any specific Python type is always safe to
         # infer. However, inferring str can cause some existing code
         # to break, since we are also now much more strict about
         # coercion from str to char *. See trac #553.
-        if resolved_result_type.name == 'str':
+        if result_type.name == 'str':
             return py_object_type
         else:
             return result_type
-    elif resolved_result_type is PyrexTypes.c_double_type:
+    elif result_type is PyrexTypes.c_double_type:
         # Python's float type is just a C double, so it's safe to use
         # the C type instead
         return result_type
-    elif resolved_result_type is PyrexTypes.c_bint_type:
+    elif result_type is PyrexTypes.c_bint_type:
         # find_spanning_type() only returns 'bint' for clean boolean
         # operations without other int types, so this is safe, too
         return result_type
-    elif resolved_result_type.is_pythran_expr:
+    elif result_type.is_pythran_expr:
         return result_type
-    elif resolved_result_type.is_ptr:
+    elif result_type.is_ptr:
         # Any pointer except (signed|unsigned|) char* can't implicitly
         # become a PyObject, and inferring char* is now accepted, too.
         return result_type
-    elif resolved_result_type.is_cpp_class:
+    elif result_type.is_cpp_class:
         # These can't implicitly become Python objects either.
         return result_type
-    elif resolved_result_type.is_struct:
+    elif result_type.is_struct:
         # Though we have struct -> object for some structs, this is uncommonly
         # used, won't arise in pure Python, and there shouldn't be side
         # effects, so I'm declaring this safe.
         return result_type
     elif result_type.is_memoryviewslice:
         return result_type
-    elif resolved_result_type.is_ctuple:
+    elif result_type.is_ctuple:
         # Since structs are considered safe, and ctuples are essentially structs
         # with tuple-like syntax, they should be safe for the same reasons.
         return result_type
     # TODO: double complex should be OK as well, but we need
     # to make sure everything is supported.
-    elif (resolved_result_type.is_int or resolved_result_type.is_enum) and not might_overflow:
+    elif (result_type.is_int or result_type.is_enum) and not might_overflow:
         return result_type
-    elif (not resolved_result_type.can_coerce_to_pyobject(scope)
-            and not resolved_result_type.is_error):
+    elif (not result_type.can_coerce_to_pyobject(scope)
+            and not result_type.is_error):
         return result_type
     return py_object_type
 

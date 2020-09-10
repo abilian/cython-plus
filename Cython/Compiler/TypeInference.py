@@ -582,10 +582,6 @@ def safe_spanning_type(types, might_overflow, pos, scope):
         return result_type
     elif result_type.is_memoryviewslice:
         return result_type
-    elif result_type.is_ctuple:
-        # Since structs are considered safe, and ctuples are essentially structs
-        # with tuple-like syntax, they should be safe for the same reasons.
-        return result_type
     # TODO: double complex should be OK as well, but we need
     # to make sure everything is supported.
     elif (result_type.is_int or result_type.is_enum) and not might_overflow:

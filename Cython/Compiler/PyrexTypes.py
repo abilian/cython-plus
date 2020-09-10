@@ -1847,6 +1847,8 @@ class CConstOrVolatileType(BaseType):
 
     def cv_string(self):
         cvstring = ""
+        if self.is_cyp_class:
+            return cvstring
         if self.is_const:
             cvstring = "const " + cvstring
         if self.is_volatile:
@@ -1862,8 +1864,6 @@ class CConstOrVolatileType(BaseType):
     def declaration_code(self, entity_code,
             for_display = 0, dll_linkage = None, pyrex = 0):
         cv = self.cv_string()
-        if self.is_cyp_class and not for_display:
-            cv = ""
         if for_display or pyrex:
             return cv + self.cv_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex)
         else:
@@ -2940,14 +2940,12 @@ class CFuncType(CType):
     #                               (used for optimisation overrides)
     #  is_const_method  boolean
     #  is_static_method boolean
-    #  is_cyp_class_method  boolean
 
     is_cfunction = 1
     original_sig = None
     cached_specialized_types = None
     from_fused = False
     is_const_method = False
-    is_cyp_class_method = False
 
     subtypes = ['return_type', 'args']
 
@@ -3298,7 +3296,7 @@ class CFuncType(CType):
             if (not entity_code and cc) or entity_code.startswith("*"):
                 entity_code = "(%s%s)" % (cc, entity_code)
                 cc = ""
-        if self.is_const_method and (not self.is_cyp_class_method or for_display):
+        if self.is_const_method:
             trailer += " const"
         return "%s%s(%s)%s" % (cc, entity_code, arg_decl_code, trailer)
 
@@ -3309,7 +3307,7 @@ class CFuncType(CType):
         return self.return_type.declaration_code(declarator_code, for_display, dll_linkage, pyrex)
 
     def function_header_code(self, func_name, arg_code):
-        if self.is_const_method and not self.is_cyp_class_method:
+        if self.is_const_method:
             trailer = " const"
         else:
             trailer = ""

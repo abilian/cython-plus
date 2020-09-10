@@ -336,9 +336,9 @@
 
         struct ActhonResultInterface : public CyObject {
             virtual void pushVoidStarResult(void* result) = 0;
-            virtual void* getVoidStarResult() = 0;
+            virtual void* getVoidStarResult() const = 0;
             virtual void pushIntResult(int result) = 0;
-            virtual int getIntResult() = 0;
+            virtual int getIntResult() const = 0;
             operator int() { return this->getIntResult(); }
             operator void*() { return this->getVoidStarResult(); }
         };
@@ -346,8 +346,8 @@
         struct ActhonMessageInterface;
 
         struct ActhonSyncInterface : public CyObject {
-            virtual int isActivable() = 0;
-            virtual int isCompleted() = 0;
+            virtual int isActivable() const = 0;
+            virtual int isCompleted() const = 0;
             virtual void insertActivity(ActhonMessageInterface* msg) = 0;
             virtual void removeActivity(ActhonMessageInterface* msg) = 0;
         };
@@ -363,7 +363,7 @@
         struct ActhonQueueInterface : public CyObject {
             virtual void push(ActhonMessageInterface* message) = 0;
             virtual int activate() = 0;
-            virtual int is_empty() = 0;
+            virtual int is_empty() const = 0;
         };
 
         struct ActhonActivableClass : public CyObject {

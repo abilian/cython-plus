@@ -76,20 +76,20 @@
 
         class CyObject : public CyPyObject {
             private:
-                CyObject_ATOMIC_REFCOUNT_TYPE nogil_ob_refcnt;
-                CyLock ob_lock;
+                mutable CyObject_ATOMIC_REFCOUNT_TYPE nogil_ob_refcnt;
+                mutable CyLock ob_lock;
             public:
                 CyObject(): nogil_ob_refcnt(1) {}
                 virtual ~CyObject() {}
-                void CyObject_INCREF();
-                int CyObject_DECREF();
-                int CyObject_GETREF();
-                void CyObject_RLOCK(const char * context);
-                void CyObject_WLOCK(const char * context);
-                void CyObject_UNRLOCK();
-                void CyObject_UNWLOCK();
-                int CyObject_TRYRLOCK();
-                int CyObject_TRYWLOCK();
+                void CyObject_INCREF() const;
+                int CyObject_DECREF() const;
+                int CyObject_GETREF() const;
+                void CyObject_RLOCK(const char * context) const;
+                void CyObject_WLOCK(const char * context) const;
+                void CyObject_UNRLOCK() const;
+                void CyObject_UNWLOCK() const;
+                int CyObject_TRYRLOCK() const;
+                int CyObject_TRYWLOCK() const;
         };
 
         template <typename T, typename = void>
@@ -291,9 +291,9 @@
         using Cy_Raw = typename Cy_Raw_t<T>::type;
 
         class Cy_rlock_guard {
-            CyObject* o;
+            const CyObject* o;
             public:
-                Cy_rlock_guard(CyObject* o, const char * context) : o(o) {
+                Cy_rlock_guard(const CyObject* o, const char * context) : o(o) {
                     if (o != NULL) {
                         o->CyObject_RLOCK(context);
                     }
@@ -312,9 +312,9 @@
         };
 
         class Cy_wlock_guard {
-            CyObject* o;
+            const CyObject* o;
             public:
-                Cy_wlock_guard(CyObject* o, const char * context) : o(o) {
+                Cy_wlock_guard(const CyObject* o, const char * context) : o(o) {
                     if (o != NULL) {
                         o->CyObject_WLOCK(context);
                     }
@@ -786,12 +786,12 @@ void CyLock::unwlock() {
  * Atomic counter increment and decrement implementation based on
  * @source: https://www.boost.org/doc/libs/1_73_0/doc/html/atomic/usage_examples.html
  */ 
-void CyObject::CyObject_INCREF()
+void CyObject::CyObject_INCREF() const
 {
     this->nogil_ob_refcnt.fetch_add(1, std::memory_order_relaxed);
 }
 
-int CyObject::CyObject_DECREF()
+int CyObject::CyObject_DECREF() const
 {
     if (this->nogil_ob_refcnt.fetch_sub(1, std::memory_order_release) == 1) {
         std::atomic_thread_fence(std::memory_order_acquire);
@@ -801,36 +801,36 @@ int CyObject::CyObject_DECREF()
     return 0;
 }
 
-int CyObject::CyObject_GETREF()
+int CyObject::CyObject_GETREF() const
 {
     return this->nogil_ob_refcnt;
 }
 
-void CyObject::CyObject_RLOCK(const char *context)
+void CyObject::CyObject_RLOCK(const char *context) const
 {
     this->ob_lock.rlock(context);
 }
 
-void CyObject::CyObject_WLOCK(const char *context)
+void CyObject::CyObject_WLOCK(const char *context) const
 {
     this->ob_lock.wlock(context);
 }
 
-int CyObject::CyObject_TRYRLOCK()
+int CyObject::CyObject_TRYRLOCK() const
 {
     return this->ob_lock.tryrlock();
 }
 
-int CyObject::CyObject_TRYWLOCK()
+int CyObject::CyObject_TRYWLOCK() const
 {
     return this->ob_lock.trywlock();
 }
-void CyObject::CyObject_UNRLOCK()
+void CyObject::CyObject_UNRLOCK() const
 {
     this->ob_lock.unrlock();
 }
 
-void CyObject::CyObject_UNWLOCK()
+void CyObject::CyObject_UNWLOCK() const
 {
     this->ob_lock.unwlock();
 }

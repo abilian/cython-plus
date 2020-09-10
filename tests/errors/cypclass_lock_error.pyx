@@ -39,13 +39,6 @@ cdef take_non_const(A a):
 cdef take_const(const A a):
     take_non_const(a)
 
-
-cdef propagate_local_const(const A a):
-    cdef A b = a
-    c = a
-    take_non_const(b)
-    take_non_const(c)
-
 _ERRORS = u"""
 20:4: Reference 'obj' is not correctly locked in this expression (write lock required)
 21:4: Reference 'obj' is not correctly locked in this expression (read lock required)
@@ -54,7 +47,5 @@ _ERRORS = u"""
 25:4: Reference 'obj' is not correctly locked in this expression (read lock required)
 26:21: Reference 'obj' is not correctly locked in this expression (read lock required)
 32:17: Can only lock local variables or arguments
-40:19: Local reference 'a' is const but requires a write lock
-46:19: Local reference 'b' is const but requires a write lock
-47:19: Local reference 'c' is const but requires a write lock
+40:19: Reference 'a' is const but requires a write lock
 """

@@ -77,7 +77,7 @@ cdef extern from * nogil:
     cdef cppclass dict_key_iterator_t[dict_t, base_iterator_t, reference_t]:
         dict_key_iterator_t()
         dict_key_iterator_t(base_iterator_t)
-        dict_key_iterator_t(base_iterator_t, const dict_t)
+        dict_key_iterator_t(base_iterator_t, dict_t)
         reference_t operator*()
         dict_key_iterator_t operator++()
         bint operator!=(base_iterator_t)
@@ -85,7 +85,7 @@ cdef extern from * nogil:
     cdef cppclass dict_value_iterator_t[dict_t, base_iterator_t, reference_t]:
         dict_value_iterator_t()
         dict_value_iterator_t(base_iterator_t)
-        dict_value_iterator_t(base_iterator_t, const dict_t)
+        dict_value_iterator_t(base_iterator_t, dict_t)
         reference_t operator*()
         dict_value_iterator_t operator++()
         bint operator!=(base_iterator_t)
@@ -93,7 +93,7 @@ cdef extern from * nogil:
     cdef cppclass dict_item_iterator_t[dict_t, base_iterator_t, reference_t]:
         dict_item_iterator_t()
         dict_item_iterator_t(base_iterator_t)
-        dict_item_iterator_t(base_iterator_t, const dict_t)
+        dict_item_iterator_t(base_iterator_t, dict_t)
         reference_t operator*()
         dict_item_iterator_t operator++()
         bint operator!=(base_iterator_t)
@@ -101,21 +101,21 @@ cdef extern from * nogil:
     cdef cppclass dict_keys_view_t[dict_t, base_iterator_t, reference_t]:
         ctypedef dict_key_iterator_t[dict_t, base_iterator_t, reference_t] iterator
         dict_keys_view_t()
-        dict_keys_view_t(const dict_t)
+        dict_keys_view_t(dict_t)
         dict_key_iterator_t[dict_t, base_iterator_t, reference_t] begin()
         base_iterator_t end()
 
     cdef cppclass dict_values_view_t[dict_t, base_iterator_t, reference_t]:
         ctypedef dict_value_iterator_t[dict_t, base_iterator_t, reference_t] iterator
         dict_values_view_t()
-        dict_values_view_t(const dict_t)
+        dict_values_view_t(dict_t)
         dict_value_iterator_t[dict_t, base_iterator_t, reference_t] begin()
         base_iterator_t end()
 
     cdef cppclass dict_items_view_t[dict_t, base_iterator_t, reference_t]:
         ctypedef dict_item_iterator_t[dict_t, base_iterator_t, reference_t] iterator
         dict_items_view_t()
-        dict_items_view_t(const dict_t)
+        dict_items_view_t(dict_t)
         dict_item_iterator_t[dict_t, base_iterator_t, reference_t] begin()
         base_iterator_t end()
 
@@ -125,11 +125,14 @@ cdef cypclass cypdict[K, V]:
     ctypedef V value_type
     ctypedef pair[key_type, value_type] item_type
     ctypedef vector[item_type].size_type size_type
-    ctypedef dict_key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type] iterator
+    ctypedef dict_key_iterator_t[const cypdict[K, V], vector[item_type].iterator, key_type] iterator
+    ctypedef dict_keys_view_t[const cypdict[K, V], vector[item_type].iterator, key_type] keys_view
+    ctypedef dict_values_view_t[const cypdict[K, V], vector[item_type].iterator, value_type] values_view
+    ctypedef dict_items_view_t[const cypdict[K, V], vector[item_type].iterator, item_type] items_view
 
-    vector[item_type] _items
-    unordered_map[key_type, size_type] _indices
-    atomic[int] _active_iterators
+    mutable vector[item_type] _items
+    mutable unordered_map[key_type, size_type] _indices
+    mutable atomic[int] _active_iterators
 
     __init__(self):
         self._active_iterators.store(0)
@@ -179,8 +182,8 @@ cdef cypclass cypdict[K, V]:
             with gil:
                 raise RuntimeError("Modifying a dictionary with active iterators")
 
-    dict_key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type] begin(self) const:
-        return dict_key_iterator_t[cypdict[K, V], vector[item_type].iterator, key_type](self._items.begin(), self)
+    iterator begin(self) const:
+        return iterator(self._items.begin(), self)
 
     vector[item_type].iterator end(self) const:
         return self._items.end()
@@ -191,11 +194,11 @@ cdef cypclass cypdict[K, V]:
     bint __contains__(self, const key_type key) const:
         return self._indices.count(key)
 
-    dict_keys_view_t[cypdict[K, V], vector[item_type].iterator, key_type] keys(self) const:
-        return dict_keys_view_t[cypdict[K, V], vector[item_type].iterator, key_type](self)
+    keys_view keys(self) const:
+        return keys_view(self)
 
-    dict_values_view_t[cypdict[K, V], vector[item_type].iterator, value_type] values(self) const:
-        return dict_values_view_t[cypdict[K, V], vector[item_type].iterator, value_type](self)
+    values_view values(self) const:
+        return values_view(self)
 
-    dict_items_view_t[cypdict[K, V], vector[item_type].iterator, item_type] items(self) const:
-        return dict_items_view_t[cypdict[K, V], vector[item_type].iterator, item_type](self)
+    items_view items(self) const:
+        return items_view(self)

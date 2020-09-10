@@ -26,10 +26,10 @@ cdef extern from * nogil:
 cdef cypclass cyplist[V]:
     ctypedef V value_type
     ctypedef vector[value_type].size_type size_type
-    ctypedef list_iterator_t[cyplist[V], vector[value_type].iterator, value_type] iterator
+    ctypedef list_iterator_t[const cyplist[V], vector[value_type].iterator, value_type] iterator
 
-    vector[value_type] _elements
-    atomic[int] _active_iterators
+    mutable vector[value_type] _elements
+    mutable atomic[int] _active_iterators
 
     __init__(self):
         self._active_iterators.store(0)
@@ -125,8 +125,8 @@ cdef cypclass cyplist[V]:
             with gil:
                 raise RuntimeError("Modifying a list with active iterators")
 
-    list_iterator_t[cyplist[V], vector[value_type].iterator, value_type] begin(self) const:
-        return list_iterator_t[cyplist[V], vector[value_type].iterator, value_type](self._elements.begin(), self)
+    iterator begin(self) const:
+        return iterator(self._elements.begin(), self)
 
     vector[value_type].iterator end(self) const:
         return self._elements.end()

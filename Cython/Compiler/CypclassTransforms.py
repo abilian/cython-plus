@@ -573,7 +573,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
             if setitem and len(setitem.type.args) == 2:
                 arg_type = setitem.type.args[1].type
                 if arg_type.is_cyp_class:
-                    return self.lockcheck_written_or_read(rhs, reading=arg_type.is_const)
+                    return self.lockcheck_written_or_read(rhs, reading=arg_type.is_const_cyp_class)
             # else: should have caused a previous error
         return rhs
 
@@ -582,7 +582,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
         arg_locks = []
         for arg in cyp_class_args:
             # Mark each cypclass arguments as locked within the function body
-            arg_locks.append(self.stacklock(arg, "rlocked" if arg.type.is_const else "wlocked"))
+            arg_locks.append(self.stacklock(arg, "rlocked" if arg.type.is_const_cyp_class else "wlocked"))
         with_body = lambda: self.visit(node.body)
         self.with_nested_stacklocks(iter(arg_locks), with_body)
         return node
@@ -711,7 +711,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
             actual_nargs = len(node.args)
             for i, formal_arg, actual_arg in zip(range(actual_nargs), func_type.args, node.args):
                 if formal_arg.type.is_cyp_class and actual_arg.type.is_cyp_class:
-                    node.args[i] = self.lockcheck_written_or_read(actual_arg, reading=formal_arg.type.is_const)
+                    node.args[i] = self.lockcheck_written_or_read(actual_arg, reading=formal_arg.type.is_const_cyp_class)
         with self.accesscontext(reading=True):
             self.visitchildren(node)
         return node
@@ -737,7 +737,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
                 node.base = self.lockcheck_written_or_read(node.base, reading=func_type.is_const_method)
                 if len(func_type.args):
                     if func_type.args[0].type.is_cyp_class:
-                        node.index = self.lockcheck_written_or_read(node.index, reading=func_type.args[0].type.is_const)
+                        node.index = self.lockcheck_written_or_read(node.index, reading=func_type.args[0].type.is_const_cyp_class)
         with self.accesscontext(reading=True):
             self.visitchildren(node)
         return node
@@ -748,14 +748,14 @@ class CypclassLockTransform(Visitor.EnvTransform):
                 node.operand1 = self.lockcheck_written_or_read(node.operand1, reading=func_type.is_const_method)
                 arg_type = func_type.args[0].type
                 if arg_type.is_cyp_class:
-                    node.operand2 = self.lockcheck_written_or_read(node.operand2, reading=arg_type.is_const)
+                    node.operand2 = self.lockcheck_written_or_read(node.operand2, reading=arg_type.is_const_cyp_class)
             elif len(func_type.args) == 2:
                 arg1_type = func_type.args[0].type
                 if arg1_type.is_cyp_class:
-                    node.operand1 = self.lockcheck_written_or_read(node.operand1, reading=arg1_type.is_const)
+                    node.operand1 = self.lockcheck_written_or_read(node.operand1, reading=arg1_type.is_const_cyp_class)
                 arg2_type = func_type.args[1].type
                 if arg2_type.is_cyp_class:
-                    node.operand2 = self.lockcheck_written_or_read(node.operand2, reading=arg2_type.is_const)
+                    node.operand2 = self.lockcheck_written_or_read(node.operand2, reading=arg2_type.is_const_cyp_class)
 
     def visit_BinopNode(self, node):
         func_type = node.op_func_type

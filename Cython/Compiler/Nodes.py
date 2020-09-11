@@ -1307,6 +1307,11 @@ class CConstOrVolatileTypeNode(CBaseTypeNode):
         if base.is_pyobject:
             error(self.pos,
                   "Const/volatile base type cannot be a Python object")
+        if base.is_cyp_class:
+            if not self.is_const or self.is_volatile:
+                error(self.pos, "Cypclass doesn't support 'volatile' yet")
+                return base
+            return PyrexTypes.cyp_class_const_type(base)
         return PyrexTypes.c_const_or_volatile_type(base, self.is_const, self.is_volatile)
 
 
@@ -2726,7 +2731,7 @@ class CFuncDefNode(FuncDefNode):
             _name, _type, _pos, _ = declarator.skipped_self
             _cname = "this"
             if self.is_const_method:
-                _type = PyrexTypes.CConstType(_type)
+                _type = PyrexTypes.cyp_class_const_type(_type)
             entry = self.local_scope.declare(_name, _cname, _type, _pos, 'private')
             entry.is_variable = 1
             entry.is_self_arg = 1

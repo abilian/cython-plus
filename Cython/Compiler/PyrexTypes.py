@@ -249,6 +249,7 @@ class PyrexType(BaseType):
     is_struct_or_union = 0
     is_cpp_class = 0
     is_cyp_class = 0
+    is_const_cyp_class = 0
     is_cpp_string = 0
     is_struct = 0
     is_enum = 0
@@ -4551,6 +4552,66 @@ class CypClassType(CppClassType):
         raise NotImplementedError("Cy_XDECREF_SET is not defined for decrementing a group of cyobjects")
 
 
+class ConstCypclassType(BaseType):
+    "A const cypclass"
+
+    subtypes = ['const_base_type']
+
+    is_const_cyp_class = 1
+
+    def __init__(self, base_type):
+        assert base_type.is_cyp_class
+        self.const_base_type = base_type
+        if base_type.has_attributes and base_type.scope is not None:
+            from .Symtab import CConstOrVolatileScope
+            self.scope = CConstOrVolatileScope(base_type.scope, is_const = 1, is_volatile = 0)
+
+    def __repr__(self):
+        return "<ConstCypclassType %s%r>" % self.const_base_type
+
+    def __str__(self):
+        return self.declaration_code("", for_display=1)
+
+    def declaration_code(self, entity_code, for_display = 0, dll_linkage = None, pyrex = 0):
+        return "const %s" % self.const_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex)
+
+    def empty_declaration_code(self):
+        if self._empty_declaration is None:
+            self._empty_declaration = "const %s" % self.const_base_type.empty_declaration_code()
+        return self._empty_declaration
+
+    def specialize(self, values):
+        base_type = self.const_base_type.specialize(values)
+        if base_type == self.const_base_type:
+            return self
+        return ConstCypclassType(base_type)
+
+    def as_argument_type(self):
+        return self
+
+    def deduce_template_params(self, actual):
+        return self.const_base_type.deduce_template_params(actual)
+
+    def can_coerce_to_pyobject(self, env):
+        return self.const_base_type.can_coerce_to_pyobject(env)
+
+    def can_coerce_from_pyobject(self, env):
+        return self.const_base_type.can_coerce_from_pyobject(env)
+
+    def create_to_py_utility_code(self, env):
+        if self.const_base_type.create_to_py_utility_code(env):
+            self.to_py_function = self.const_base_type.to_py_function
+            return True
+
+    def same_as_resolved_type(self, other_type):
+        if other_type.is_const_cyp_class:
+            return self.const_base_type.same_as_resolved_type(other_type.const_base_type)
+        return 0
+
+    def __getattr__(self, name):
+        return getattr(self.const_base_type, name)
+
+
 class TemplatePlaceholderType(CType):
     is_template_typename = 1
 
@@ -5436,6 +5497,13 @@ def c_const_or_volatile_type(base_type, is_const, is_volatile):
         return error_type
     else:
         return CConstOrVolatileType(base_type, is_const, is_volatile)
+
+def cyp_class_const_type(base_type):
+    # Construct a Cypclass const type.
+    if base_type is error_type:
+        return error_type
+    else:
+        return ConstCypclassType(base_type)
 
 def same_type(type1, type2):
     return type1.same_as(type2)

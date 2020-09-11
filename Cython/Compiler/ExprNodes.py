@@ -2099,7 +2099,7 @@ class NameNode(AtomicExprNode):
                 entry = self.entry = entry.as_variable
                 self.type = entry.type
 
-        if self.type.is_const and not self.type.is_cyp_class:
+        if self.type.is_const:
             error(self.pos, "Assignment to const '%s'" % self.name)
         if self.type.is_reference:
             error(self.pos, "Assignment to reference '%s'" % self.name)

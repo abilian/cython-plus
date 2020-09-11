@@ -3236,20 +3236,13 @@ class CConstOrVolatileScope(Scope):
         self.base_type_scope = base_type_scope
         self.is_const = is_const
         self.is_volatile = is_volatile
-        self.cached_const_entries = {}
 
     def lookup_here(self, name):
-        try:
-            return self.cached_const_entries[name]
-        except KeyError:
-            entry = self.base_type_scope.lookup_here(name)
-            if entry is not None:
-                entry = copy.copy(entry)
-                entry.type = PyrexTypes.c_const_or_volatile_type(
-                        entry.type, self.is_const, self.is_volatile)
-            # The entry must be cached because otherwise a new type is created at
-            # each lookup, which can cause type inference to reinfer forever.
-            self.cached_const_entries[name] = entry
+        entry = self.base_type_scope.lookup_here(name)
+        if entry is not None:
+            entry = copy.copy(entry)
+            entry.type = PyrexTypes.c_const_or_volatile_type(
+                    entry.type, self.is_const, self.is_volatile)
             return entry
 
 

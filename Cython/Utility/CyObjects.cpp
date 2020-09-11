@@ -13,8 +13,8 @@
 
 #ifdef __cplusplus
     #if __cplusplus >= 201103L
-        #include <atomic>
         #include <cstdint>
+        #include <atomic>
         using namespace std;
         #define CyObject_ATOMIC_REFCOUNT_TYPE atomic_int
         #define CyObject_NO_OWNER -1

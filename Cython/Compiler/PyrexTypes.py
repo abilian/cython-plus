@@ -4465,7 +4465,6 @@ class CypClassType(CppClassType):
         return self._assign_from_py_code(
             source_code, result_code, error_pos, code, from_py_function, error_condition, extra_args=extra_args)
 
-
     def empty_declaration_code(self):
         if self._empty_declaration is None:
             self._empty_declaration = self.declaration_code('', deref=1)
@@ -4490,7 +4489,14 @@ class CypClassType(CppClassType):
     def dynamic_cast_code(self, expr_code):
         return "dynamic_cast<%s>(%s)" % (self.declaration_code(''), expr_code)
 
+    def same_as_resolved_type(self, other_type):
+        if other_type.is_const_cyp_class:
+            return 0
+        return super(CypClassType, self).same_as_resolved_type(other_type)
+
     def assignable_from_resolved_type(self, other_type):
+        if other_type.is_const_cyp_class:
+            return 0
         if other_type.is_ptr and other_type.base_type.is_cpp_class and other_type.base_type.is_subclass(self) or other_type.is_null_ptr:
             return 1
         return super(CypClassType, self).assignable_from_resolved_type(other_type)
@@ -4580,6 +4586,12 @@ class ConstCypclassType(BaseType):
             self._empty_declaration = "const %s" % self.const_base_type.empty_declaration_code()
         return self._empty_declaration
 
+    def resolve(self):
+        base_type = self.const_base_type.resolve()
+        if base_type == self.const_base_type:
+            return self
+        return ConstCypclassType(base_type)
+
     def specialize(self, values):
         base_type = self.const_base_type.specialize(values)
         if base_type == self.const_base_type:
@@ -4602,6 +4614,19 @@ class ConstCypclassType(BaseType):
         if self.const_base_type.create_to_py_utility_code(env):
             self.to_py_function = self.const_base_type.to_py_function
             return True
+
+    def assignable_from(self, src_type):
+        return self.assignable_from_resolved_type(src_type.resolve())
+
+    def assignable_from_resolved_type(self, src_type):
+        if src_type.is_const_cyp_class:
+            src_type = src_type.const_base_type
+        return self.const_base_type.assignable_from_resolved_type(src_type)
+
+    def same_as(self, other_type):
+        if not other_type.is_const_cyp_class:
+            return 0
+        return self.same_as_resolved_type(other_type.resolve())
 
     def same_as_resolved_type(self, other_type):
         if other_type.is_const_cyp_class:

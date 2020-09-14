@@ -4501,6 +4501,11 @@ class CypClassType(CppClassType):
             return 1
         return super(CypClassType, self).assignable_from_resolved_type(other_type)
 
+    def is_subclass(self, other_type):
+        if other_type.is_const_cyp_class:
+            other_type = other_type.const_base_type
+        return super(CypClassType, self).is_subclass(other_type)
+
     def get_constructor(self, pos):
         # This is (currently) only called by new statements.
         # In cypclass, it means direct memory allocation:

@@ -547,6 +547,12 @@ class Scope(object):
                                 cpp_override_allowed = True
                                 continue
 
+                            # allow const overloads
+                            if alt_type.is_const_method != type.is_const_method:
+                                error(pos, "Cypclass method const-overloads another method: not supported yet")
+                                cpp_override_allowed = True
+                                continue
+
                             elif alt_entry.is_inherited:
 
                                 # if the arguments are compatible, then the signatures need to actually be the
@@ -578,6 +584,10 @@ class Scope(object):
 
                             # stop if cpp_override_allowed is False for the current alternative
                             break
+
+                        # allow const overloads
+                        elif type.same_ptr_args_without_cv_with(alt_type):
+                            error(pos, "Cypclass method const-overloads another method: not supported yet")
 
                         # if an overloaded alternative has narrower argument types than another, then the method
                         # actually called will depend on the static type of the arguments

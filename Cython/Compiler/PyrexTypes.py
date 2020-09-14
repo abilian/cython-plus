@@ -3103,9 +3103,9 @@ class CFuncType(CType):
             return 1
         if not other_type.is_cfunction:
             return 0
-        return self.__compatible_arguments_with_resolved_type(other_type, as_cmethod)
+        return self._compatible_arguments_with_resolved_type(other_type, as_cmethod)
 
-    def __compatible_arguments_with_resolved_type(self, other_type, as_cmethod):
+    def _compatible_arguments_with_resolved_type(self, other_type, as_cmethod):
         nargs = len(self.args)
         if nargs - self.optional_arg_count != len(other_type.args) - other_type.optional_arg_count:
             return 0
@@ -3115,8 +3115,7 @@ class CFuncType(CType):
         # is exempt from compatibility checking (the proper check
         # is performed elsewhere).
         for i in range(as_cmethod, len(other_type.args)):
-            if not self.args[i].type.same_as(
-                    other_type.args[i].type):
+            if not self.args[i].type.same_as(other_type.args[i].type):
                 return 0
         if self.has_varargs != other_type.has_varargs:
             return 0
@@ -3134,7 +3133,7 @@ class CFuncType(CType):
             return 0
         if not self.is_overridable and other_type.is_overridable:
             return 0
-        if not skip_args and not self.__compatible_arguments_with_resolved_type(other_type, as_cmethod):
+        if not skip_args and not self._compatible_arguments_with_resolved_type(other_type, as_cmethod):
             return 0
         if not self.return_type.subtype_of_resolved_type(other_type.return_type):
             return 0
@@ -3173,14 +3172,9 @@ class CFuncType(CType):
         if nargs != len(other_type.args):
             return 0
         for i in range(as_cmethod, nargs):
-            if not self.args[i].type.subtype_of_resolved_type(other_type.args[i].type):
-                if not other_type.args[i].type.subtype_of_resolved_type(self.args[i].type):
+            if not ptr_to_subtype_of(self.args[i].type, other_type.args[i].type):
+                if not ptr_to_subtype_of(other_type.args[i].type, self.args[i].type):
                     return 0
-                else:
-                    other_type.args[i].needs_type_test = True
-            else:
-                self.args[i].needs_type_test = other_type.args[i].needs_type_test \
-                        or not self.args[i].type.same_as(other_type.args[i].type)
         if self.has_varargs != other_type.has_varargs:
             return 0
         if self.optional_arg_count != other_type.optional_arg_count:
@@ -3195,18 +3189,15 @@ class CFuncType(CType):
             return 1
         if not other_type.is_cfunction:
             return 0
-        return self.__narrower_arguments_than_resolved_type(other_type, as_cmethod)
+        return self._narrower_arguments_than_resolved_type(other_type, as_cmethod)
 
-    def __narrower_arguments_than_resolved_type(self, other_type, as_cmethod):
+    def _narrower_arguments_than_resolved_type(self, other_type, as_cmethod):
         nargs = len(self.args)
         if nargs != len(other_type.args):
             return 0
         for i in range(as_cmethod, nargs):
-            if not self.args[i].type.subtype_of_resolved_type(other_type.args[i].type):
+            if not ptr_to_subtype_of(self.args[i].type, other_type.args[i].type):
                 return 0
-            else:
-                self.args[i].needs_type_test = other_type.args[i].needs_type_test \
-                        or not self.args[i].type.same_as(other_type.args[i].type)
         if self.has_varargs != other_type.has_varargs:
             return 0
         if self.optional_arg_count != other_type.optional_arg_count:
@@ -3221,7 +3212,7 @@ class CFuncType(CType):
             return 1
         if not other_type.is_cfunction:
             return 0
-        if not skip_args and not self.__narrower_arguments_than_resolved_type(other_type, as_cmethod):
+        if not skip_args and not self._narrower_arguments_than_resolved_type(other_type, as_cmethod):
             return 0
         if not self.return_type.subtype_of_resolved_type(other_type.return_type):
             return 0
@@ -5540,6 +5531,13 @@ def same_type(type1, type2):
 
 def assignable_from(type1, type2):
     return type1.assignable_from(type2)
+
+def ptr_to_subtype_of(type1, type2):
+    if type1.is_cyp_class and type2.is_cyp_class:
+        return type1.subtype_of(type2)
+    elif type1.is_ptr and type2.is_ptr:
+        return type1.base_type.subtype_of(type2.base_type)
+    return 0
 
 def typecast(to_type, from_type, expr_code):
     #  Return expr_code cast to a C type which can be

@@ -13,7 +13,6 @@
 
 #ifdef __cplusplus
     #if __cplusplus >= 201103L
-        #include <cstdint>
         #include <atomic>
         using namespace std;
         #define CyObject_ATOMIC_REFCOUNT_TYPE atomic_int
@@ -47,7 +46,7 @@
                 pthread_cond_t readers_have_left;
                 pthread_cond_t writer_has_left;
                 atomic<pid_t> owner_id;
-                atomic_int32_t readers_nb;
+                atomic_int readers_nb;
                 uint32_t write_count;
                 const char *owner_context;
             public:

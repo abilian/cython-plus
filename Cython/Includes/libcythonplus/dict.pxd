@@ -125,20 +125,20 @@ cdef cypclass cypdict[K, V]:
     ctypedef V value_type
     ctypedef pair[key_type, value_type] item_type
     ctypedef vector[item_type].size_type size_type
-    ctypedef dict_key_iterator_t[const cypdict[K, V], vector[item_type].iterator, key_type] iterator
-    ctypedef dict_keys_view_t[const cypdict[K, V], vector[item_type].iterator, key_type] keys_view
-    ctypedef dict_values_view_t[const cypdict[K, V], vector[item_type].iterator, value_type] values_view
-    ctypedef dict_items_view_t[const cypdict[K, V], vector[item_type].iterator, item_type] items_view
+    ctypedef dict_key_iterator_t[const cypdict[K, V], vector[item_type].const_iterator, key_type] iterator
+    ctypedef dict_keys_view_t[const cypdict[K, V], vector[item_type].const_iterator, key_type] keys_view
+    ctypedef dict_values_view_t[const cypdict[K, V], vector[item_type].const_iterator, value_type] values_view
+    ctypedef dict_items_view_t[const cypdict[K, V], vector[item_type].const_iterator, item_type] items_view
 
-    mutable vector[item_type] _items
-    mutable unordered_map[key_type, size_type] _indices
+    vector[item_type] _items
+    unordered_map[key_type, size_type] _indices
     mutable atomic[int] _active_iterators
 
     __init__(self):
         self._active_iterators.store(0)
 
     V __getitem__(self, const key_type key) except ~ const:
-        it = self._indices.find(key)
+        it = self._indices.const_find(key)
         if it != self._indices.end():
            return self._items[dereference(it).second].second
         with gil:
@@ -183,10 +183,10 @@ cdef cypclass cypdict[K, V]:
                 raise RuntimeError("Modifying a dictionary with active iterators")
 
     iterator begin(self) const:
-        return iterator(self._items.begin(), self)
+        return iterator(self._items.const_begin(), self)
 
-    vector[item_type].iterator end(self) const:
-        return self._items.end()
+    vector[item_type].const_iterator end(self) const:
+        return self._items.const_end()
 
     size_type __len__(self) const:
         return self._items.size()

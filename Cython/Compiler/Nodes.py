@@ -826,6 +826,8 @@ class CConstDeclaratorNode(CDeclaratorNode):
     child_attrs = ["base"]
 
     def analyse(self, base_type, env, nonempty=0, visibility=None, in_pxd=False):
+        # XXX base_type is always a pointer type since CConstDeclaratorNode is only used when
+        # parsing '* const <declarator>'. As such the check below is probably superfluous.
         if base_type.is_pyobject:
             error(self.pos,
                   "Const base type cannot be a Python object")

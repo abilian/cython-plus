@@ -828,8 +828,12 @@ class ExprNode(Node):
                 self.generate_subexpr_disposal_code(code)
                 self.free_subexpr_temps(code)
             if self.result() and not self.has_temp_moved:
-                code.put_decref_clear(self.result(), self.ctype(),
-                                        have_gil=not self.in_nogil_context)
+                if self.type.is_cyp_class:
+                    code.put_xdecref_clear(self.result(), self.ctype(),
+                                            have_gil=not self.in_nogil_context)
+                else:
+                    code.put_decref_clear(self.result(), self.ctype(),
+                                            have_gil=not self.in_nogil_context)
             if self.has_temp_moved:
                 code.globalstate.use_utility_code(
                     UtilityCode.load_cached("MoveIfSupported", "CppSupport.cpp"))

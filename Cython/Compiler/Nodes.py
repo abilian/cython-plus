@@ -3735,7 +3735,7 @@ class DefNodeWrapper(FuncDefNode):
                 # The conversion from PyObject to CyObject always creates a new CyObject reference.
                 # This decrements all arguments-as-variables converted straight from an actual argument.
                 # This includes CyObjects converted directly from a corresponding PyObject argument.
-                if entry.xdecref_cleanup:
+                if entry.xdecref_cleanup or entry.type.is_cyp_class:
                     code.put_var_xdecref(entry)
                 else:
                     code.put_var_decref(entry)
@@ -3743,10 +3743,7 @@ class DefNodeWrapper(FuncDefNode):
             if entry.type.is_cyp_class:
                 # The conversion from PyObject to CyObject always creates a new CyObject reference.
                 # This decrements CyObjects converted from generic PyObject args passed via tuple and kw dict.
-                if entry.xdecref_cleanup:
-                    code.put_var_xdecref(entry)
-                else:
-                    code.put_var_decref(entry)
+                code.put_var_xdecref(entry)
 
         code.put_finish_refcount_context()
         if not self.return_type.is_void:

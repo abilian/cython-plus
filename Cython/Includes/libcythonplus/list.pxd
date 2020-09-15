@@ -26,9 +26,9 @@ cdef extern from * nogil:
 cdef cypclass cyplist[V]:
     ctypedef V value_type
     ctypedef vector[value_type].size_type size_type
-    ctypedef list_iterator_t[const cyplist[V], vector[value_type].iterator, value_type] iterator
+    ctypedef list_iterator_t[const cyplist[V], vector[value_type].const_iterator, value_type] iterator
 
-    mutable vector[value_type] _elements
+    vector[value_type] _elements
     mutable atomic[int] _active_iterators
 
     __init__(self):
@@ -89,13 +89,13 @@ cdef cypclass cyplist[V]:
     cyplist[V] __add__(self, const cyplist[V] other) const:
         result = cyplist[V]()
         result._elements.reserve(self._elements.size() + other._elements.size())
-        result._elements.insert(result._elements.end(), self._elements.begin(), self._elements.end())
-        result._elements.insert(result._elements.end(), other._elements.begin(), other._elements.end())
+        result._elements.insert(result._elements.end(), self._elements.const_begin(), self._elements.const_end())
+        result._elements.insert(result._elements.end(), other._elements.const_begin(), other._elements.const_end())
         return result
 
     cyplist[V] __iadd__(self, const cyplist[V] other):
         if self._active_iterators == 0:
-            self._elements.insert(self._elements.end(), other._elements.begin(), other._elements.end())
+            self._elements.insert(self._elements.end(), other._elements.const_begin(), other._elements.const_end())
             return self
         else:
             with gil:
@@ -105,7 +105,7 @@ cdef cypclass cyplist[V]:
         result = cyplist[V]()
         result._elements.reserve(self._elements.size() * n)
         for i in range(n):
-            result._elements.insert(result._elements.end(), self._elements.begin(), self._elements.end())
+            result._elements.insert(result._elements.end(), self._elements.const_begin(), self._elements.const_end())
         return result
 
     cyplist[V] __imul__(self, size_type n):
@@ -126,10 +126,10 @@ cdef cypclass cyplist[V]:
                 raise RuntimeError("Modifying a list with active iterators")
 
     iterator begin(self) const:
-        return iterator(self._elements.begin(), self)
+        return iterator(self._elements.const_begin(), self)
 
-    vector[value_type].iterator end(self) const:
-        return self._elements.end()
+    vector[value_type].const_iterator end(self) const:
+        return self._elements.const_end()
 
     size_type __len__(self) const:
         return self._elements.size()

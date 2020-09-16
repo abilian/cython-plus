@@ -656,7 +656,7 @@ class CFuncDeclaratorNode(CDeclaratorNode):
             name_declarator, type = arg_node.analyse(
                 env, nonempty=nonempty,
                 is_self_arg=(i == 0
-                             and (env.is_c_class_scope or  env.is_cpp_class_scope and env.parent_type.is_cyp_class)
+                             and (env.is_c_class_scope or env.is_cyp_class_scope)
                              and 'staticmethod' not in env.directives))
             name = name_declarator.name
             if name in directive_locals:
@@ -672,8 +672,8 @@ class CFuncDeclaratorNode(CDeclaratorNode):
                     type = other_type
             if name_declarator.cname:
                 error(self.pos, "Function argument cannot have C name specification")
-            if i == 0 and (env.is_c_class_scope or env.is_cpp_class_scope and env.parent_type.is_cyp_class) and type.is_unspecified:
-                if env.is_cpp_class_scope and env.parent_type.is_cyp_class:
+            if i == 0 and (env.is_c_class_scope or env.is_cyp_class_scope) and type.is_unspecified:
+                if env.is_cyp_class_scope:
                     type = env.lookup_here("this").type
                     self.skipped_self = (name, type, arg_node.pos, arg_node)
                     continue
@@ -1027,7 +1027,7 @@ class CSimpleBaseTypeNode(CBaseTypeNode):
             type = cy_object_type
             self.arg_name = EncodedString(self.name)
         elif self.name is None:
-            if self.is_self_arg and (env.is_c_class_scope or env.is_cpp_class_scope and env.parent_type.is_cyp_class):
+            if self.is_self_arg and (env.is_c_class_scope or env.is_cyp_class_scope):
                 #print "CSimpleBaseTypeNode.analyse: defaulting to parent type" ###
                 type = env.parent_type if env.is_c_class_scope else PyrexTypes.unspecified_type
             ## elif self.is_type_arg and env.is_c_class_scope:
@@ -1060,7 +1060,7 @@ class CSimpleBaseTypeNode(CBaseTypeNode):
                 if type is not None:
                     pass
                 elif could_be_name:
-                    if self.is_self_arg and (env.is_c_class_scope or env.is_cpp_class_scope and env.parent_type.is_cyp_class):
+                    if self.is_self_arg and (env.is_c_class_scope or env.is_cyp_class_scope):
                         type = env.parent_type if env.is_c_class_scope else PyrexTypes.unspecified_type
                     ## elif self.is_type_arg and env.is_c_class_scope:
                     ##     type = Builtin.type_type
@@ -1411,7 +1411,7 @@ class CVarDefNode(StatNode):
                 if 'staticmethod' in env.directives:
                     type.is_static_method = True
                 elif cfunc_declarator and name in ("__new__", "__alloc__") and\
-                     env.is_cpp_class_scope and env.parent_type.is_cyp_class:
+                     env.is_cyp_class_scope:
                     type.is_static_method = True
 
                     if cfunc_declarator.skipped_self:
@@ -1441,7 +1441,7 @@ class CVarDefNode(StatNode):
                 if create_extern_wrapper:
                     self.entry.type.create_to_py_utility_code(env)
                     self.entry.create_wrapper = True
-                if cfunc_declarator and type.is_cfunction and env.is_cpp_class_scope and env.parent_type.is_cyp_class\
+                if cfunc_declarator and type.is_cfunction and env.is_cyp_class_scope\
                    and not cfunc_declarator.skipped_self and not type.is_static_method:
                     # It means we have a cypclass method without the self argument
                     # => shout
@@ -2600,7 +2600,7 @@ class CFuncDefNode(FuncDefNode):
 
     def analyse_declarations(self, env):
         self.is_c_class_method = env.is_c_class_scope
-        self.is_cyp_class_method = env.is_cpp_class_scope and env.parent_type.is_cyp_class
+        self.is_cyp_class_method = env.is_cyp_class_scope
         if self.directive_locals is None:
             self.directive_locals = {}
         self.directive_locals.update(env.directives.get('locals', {}))

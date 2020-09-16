@@ -679,10 +679,18 @@ class CFuncDeclaratorNode(CDeclaratorNode):
                 elif env.is_cyp_class_scope:
                     # XXX is this different from 'env.parent_type' ?
                     type = env.lookup_here("this").type
-                    if self.is_const_method:
-                        type = PyrexTypes.cyp_class_const_type(type)
-                    self.skipped_self = (name, type, arg_node.pos, arg_node)
-                    continue
+                    if self.declared_name() != "__new__":
+                        if self.is_const_method:
+                            type = PyrexTypes.cyp_class_const_type(type)
+                        # skip 'self' argument from the list of actual arguments
+                        # to comply with C++ implicit 'this' argument passing.
+                        self.skipped_self = (name, type, arg_node.pos, arg_node)
+                        continue
+                    else:
+                        # Allow '__new__(alloc, ...)' syntax with untyped first argument.
+                        # Its type will be deduced as an allocation function, aka type = {class_type} (*f)() nogil
+                        # This is not a 'self' argument and '__new__' will be a static method, so don't skip it!
+                        type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(type, [], nogil=1))
             # Turn *[] argument into **
             if type.is_array:
                 type = PyrexTypes.c_ptr_type(type.base_type)
@@ -1416,25 +1424,21 @@ class CVarDefNode(StatNode):
                     cfunc_declarator = None
                 if 'staticmethod' in env.directives:
                     type.is_static_method = True
-                elif cfunc_declarator and name in ("__new__", "__alloc__") and\
-                     env.is_cyp_class_scope:
+                elif name in ("__new__", "__alloc__") and env.is_cyp_class_scope:
                     type.is_static_method = True
 
-                    if cfunc_declarator.skipped_self:
-                        _name, _type, _pos, _arg = cfunc_declarator.skipped_self
-                        if name == "__new__":
-                            _type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(_type, [], nogil=1))
-                            # aka _type = {class_type} (*f)() nogil
-                            reinjected_arg = PyrexTypes.CFuncTypeArg(_name, _type, _pos)
-                            type.args = [reinjected_arg] + type.args
-                            cfunc_declarator.args = [_arg] + cfunc_declarator.args
-                        elif name == "__alloc__":
-                            # Force __alloc__ to have the signature:
-                            # {class_type} f() nogil
-                            type.return_type = _type
-                            type.args = []
-                            cfunc_declarator.args = []
-                        cfunc_declarator.skipped_self = None
+                # Check that cypclass __alloc__ has correct signature
+                if name == "__alloc__" and env.is_cyp_class_scope:
+                    if not PyrexTypes.same_type(type.return_type, env.parent_type):
+                        error(self.pos, "Cypclass __alloc__ must return an instance of class type")
+                    if type.args:
+                        error(self.pos, "Cypclass __alloc__ must take no arguments")
+
+                # Check that cypclass __new__ has correct first argument
+                if name == "__new__" and env.is_cyp_class_scope:
+                    if not type.args or not PyrexTypes.same_type(
+                            type.args[0].type, PyrexTypes.CPtrType(PyrexTypes.CFuncType(env.parent_type, [], nogil=1))):
+                        error(self.pos, "Cypclass __new__ must take an allocation function as first argument")
 
                 if 'mutable' in self.modifiers:
                     error(self.pos, "Functions cannot be 'mutable'")
@@ -2641,30 +2645,8 @@ class CFuncDefNode(FuncDefNode):
         name = name_declarator.name
         cname = name_declarator.cname
 
-        # HACK: if we have a __new__ function in a cypclass which is
-        # not declared as static, the first argument may be untyped.
-        # In this case, it will go through the self arg execution flow,
-        # and it will be skipped from the actual arguments.
-        # It is reinserted here, as __new__ MUST be static in a cypclass,
-        # so there is no self arg (the first arg is actually the allocator).
-
         if self.is_cyp_class_method and name in ("__new__", "__alloc__") and not self.is_static_method:
             self.is_static_method = 1
-            if declarator.skipped_self:
-                _name, _type, _pos, _arg = declarator.skipped_self
-                if name == "__new__":
-                    _type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(_type, [], nogil=1))
-                    # aka _type = {class_type} (*f)() nogil
-                    reinjected_arg = PyrexTypes.CFuncTypeArg(_name, _type, _pos)
-                    typ.args = [reinjected_arg] + typ.args
-                    declarator.args = [_arg] + declarator.args
-                elif name == "__alloc__":
-                    # Force __alloc__ to have the signature:
-                    # {class_type} f() nogil
-                    typ.return_type = _type
-                    typ.args = []
-                    declarator.args = []
-                declarator.skipped_self = None
 
         self.cfunc_declarator = declarator
         self.args = declarator.args
@@ -2707,6 +2689,19 @@ class CFuncDefNode(FuncDefNode):
         self.is_const_method = self.cfunc_declarator.is_const_method
         typ.is_const_method = self.is_const_method
         typ.is_static_method = self.is_static_method
+
+        # Check that cypclass __alloc__ has correct signature
+        if name == "__alloc__" and self.is_cyp_class_method:
+            if not PyrexTypes.same_type(typ.return_type, env.parent_type):
+                error(self.pos, "Cypclass __alloc__ must return an instance of class type")
+            if typ.args:
+                error(self.pos, "Cypclass __alloc__ must take no arguments")
+
+        # Check that cypclass __new__ has correct first argument
+        if name == "__new__" and self.is_cyp_class_method:
+            if not typ.args or not PyrexTypes.same_type(
+                    typ.args[0].type, PyrexTypes.CPtrType(PyrexTypes.CFuncType(env.parent_type, [], nogil=1))):
+                error(self.pos, "Cypclass __new__ must take an allocation function as first argument")
 
         if 'mutable' in self.modifiers:
             error(self.pos, "Functions cannot be 'mutable'")

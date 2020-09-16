@@ -5163,7 +5163,7 @@ def best_match(arg_types, functions, pos=None, env=None, args=None, throw=False)
             errors.append((func, error_mesg))
             continue
         # Skip non_const methods called on const object
-        if func_type.is_const and not func_type.is_const_method:
+        if func_type.is_const and not func_type.is_const_method and not func_type.is_static_method:
             # Impose const-correctness only on cypclass methods for now
             if func_type.is_cyp_class_method:
                 error_mesg = "Cannot call non-const method on const object"

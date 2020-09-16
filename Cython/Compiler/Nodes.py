@@ -677,9 +677,12 @@ class CFuncDeclaratorNode(CDeclaratorNode):
                     # fix the type of self
                     type = env.parent_type
                 elif env.is_cyp_class_scope:
+                    # Accept 'f(const self, ...)' syntax as equivalent to 'f(self, ...) const'
+                    is_const_self = type.is_const
                     # XXX is this different from 'env.parent_type' ?
                     type = env.lookup_here("this").type
                     if self.declared_name() != "__new__":
+                        self.is_const_method |= is_const_self
                         if self.is_const_method:
                             type = PyrexTypes.cyp_class_const_type(type)
                         # skip 'self' argument from the list of actual arguments
@@ -902,20 +905,29 @@ class CArgDeclNode(Node):
 
     def analyse(self, env, nonempty=0, is_self_arg=False):
         if is_self_arg:
-            self.base_type.is_self_arg = self.is_self_arg = True
+            self_base_type = self.base_type
+            if isinstance(self_base_type, CConstOrVolatileTypeNode):
+                self_base_type = self_base_type.base_type
+            self_base_type.is_self_arg = self.is_self_arg = True
         if self.type is None:
             # The parser may misinterpret names as types. We fix that here.
             if isinstance(self.declarator, CNameDeclaratorNode) and self.declarator.name == '':
+                name_as_type = self.base_type
+                # Support syntax like 'const self'
+                # XXX Generally, the code below assumes name_as_type is a CSimpleBaseTypeNode
+                # and crashes when that assumption is broken.
+                if isinstance(name_as_type, CConstOrVolatileTypeNode):
+                    name_as_type = name_as_type.base_type
                 if nonempty:
-                    if self.base_type.is_basic_c_type:
+                    if name_as_type.is_basic_c_type:
                         # char, short, long called "int"
-                        type = self.base_type.analyse(env, could_be_name=True)
+                        type = name_as_type.analyse(env, could_be_name=True)
                         arg_name = type.empty_declaration_code()
                     else:
-                        arg_name = self.base_type.name
+                        arg_name = name_as_type.name
                     self.declarator.name = EncodedString(arg_name)
-                    self.base_type.name = None
-                    self.base_type.is_basic_c_type = False
+                    name_as_type.name = None
+                    name_as_type.is_basic_c_type = False
                 could_be_name = True
             else:
                 could_be_name = False

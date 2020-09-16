@@ -2698,6 +2698,7 @@ class CFuncDefNode(FuncDefNode):
         #name = name_declarator.name
         #cname = name_declarator.cname
 
+        self.is_const_method = self.cfunc_declarator.is_const_method
         typ.is_const_method = self.is_const_method
         typ.is_static_method = self.is_static_method
 

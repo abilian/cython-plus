@@ -2845,6 +2845,12 @@ def p_c_array_declarator(s, base):
     s.expect(']')
     return Nodes.CArrayDeclaratorNode(pos, base = base, dimension = dim)
 
+def p_cpp_const_method(s, ctx):
+    if s.sy == 'IDENT' and s.systring == 'const' and ctx.level == 'cpp_class':
+        s.next()
+        return 1
+    return 0
+
 def p_c_func_declarator(s, pos, ctx, base, cmethod_flag):
     # Opening paren has already been skipped
     args = p_c_arg_list(s, ctx, cmethod_flag = cmethod_flag,
@@ -2854,10 +2860,12 @@ def p_c_func_declarator(s, pos, ctx, base, cmethod_flag):
     nogil = p_nogil(s)
     exc_val, exc_check = p_exception_value_clause(s)
     with_gil = p_with_gil(s)
+    is_const_method = p_cpp_const_method(s, ctx)
     return Nodes.CFuncDeclaratorNode(pos,
         base = base, args = args, has_varargs = ellipsis,
         exception_value = exc_val, exception_check = exc_check,
-        nogil = nogil or ctx.nogil or with_gil, with_gil = with_gil)
+        nogil = nogil or ctx.nogil or with_gil, with_gil = with_gil,
+        is_const_method = is_const_method)
 
 supported_overloaded_operators = cython.declare(set, set([
     '+', '-', '*', '/', '%',
@@ -3345,11 +3353,6 @@ def p_c_func_or_var_declaration(s, pos, ctx):
     declarator = p_c_declarator(s, ctx(modifiers=modifiers), cmethod_flag = cmethod_flag,
                                 assignable = 1, nonempty = 1)
     declarator.overridable = ctx.overridable
-    if s.sy == 'IDENT' and s.systring == 'const' and ctx.level == 'cpp_class':
-        s.next()
-        is_const_method = 1
-    else:
-        is_const_method = 0
     if s.sy == '->':
         # Special enough to give a better error message and keep going.
         s.error(
@@ -3370,13 +3373,10 @@ def p_c_func_or_var_declaration(s, pos, ctx):
             doc = doc,
             modifiers = modifiers,
             api = ctx.api,
-            overridable = ctx.overridable,
-            is_const_method = is_const_method)
+            overridable = ctx.overridable)
     else:
         #if api:
         #    s.error("'api' not allowed with variable declaration")
-        if is_const_method:
-            declarator.is_const_method = is_const_method
         declarators = [declarator]
         while s.sy == ',':
             s.next()

@@ -3253,10 +3253,21 @@ class CConstOrVolatileScope(Scope):
             return self.cached_const_or_volatile_entries[name]
         except KeyError:
             entry = self.base_type_scope.lookup_here(name)
-            if entry is not None:
+            if entry is not None and not entry.is_type:
                 entry = copy.copy(entry)
                 entry.type = PyrexTypes.c_const_or_volatile_type(
                         entry.type, self.is_const, self.is_volatile)
+                # Copy and adapt all the overloaded alternatives
+                if entry.is_cfunction:
+                    # the overloaded entry at index 0 is always the one in the scope dict
+                    overloaded_alternatives = [entry]
+                    for alt in entry.overloaded_alternatives[1:]:
+                        qual_alt = copy.copy(alt)
+                        qual_alt.type = PyrexTypes.c_const_or_volatile_type(
+                                alt.type, self.is_const, self.is_volatile)
+                        qual_alt.overloaded_alternatives = overloaded_alternatives
+                        overloaded_alternatives.append(qual_alt)
+                    entry.overloaded_alternatives = overloaded_alternatives
             self.cached_const_or_volatile_entries[name] = entry
             return entry
 

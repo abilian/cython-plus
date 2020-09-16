@@ -2941,19 +2941,21 @@ class CFuncType(CType):
     #                               (used for optimisation overrides)
     #  is_const_method  boolean
     #  is_static_method boolean
+    #  is_cyp_class_method boolean
 
     is_cfunction = 1
     original_sig = None
     cached_specialized_types = None
     from_fused = False
     is_const_method = False
+    is_cyp_class_method = False
 
     subtypes = ['return_type', 'args']
 
     def __init__(self, return_type, args, has_varargs = 0,
             exception_value = None, exception_check = 0, calling_convention = "",
             nogil = 0, with_gil = 0, is_overridable = 0, optional_arg_count = 0,
-            is_const_method = False, is_static_method=False,
+            is_const_method = False, is_static_method=False, is_cyp_class_method=False,
             templates = None, is_strict_signature = False):
         self.return_type = return_type
         self.args = args
@@ -2967,6 +2969,7 @@ class CFuncType(CType):
         self.is_overridable = is_overridable
         self.is_const_method = is_const_method
         self.is_static_method = is_static_method
+        self.is_cyp_class_method = is_cyp_class_method
         self.templates = templates
         self.is_strict_signature = is_strict_signature
 
@@ -2997,6 +3000,7 @@ class CFuncType(CType):
                 with_gil,
                 self.is_overridable, self.optional_arg_count,
                 self.is_const_method, self.is_static_method,
+                self.is_cyp_class_method,
                 self.templates, self.is_strict_signature)
 
     def calling_convention_prefix(self):
@@ -3348,6 +3352,7 @@ class CFuncType(CType):
                            optional_arg_count = self.optional_arg_count,
                            is_const_method = self.is_const_method,
                            is_static_method = self.is_static_method,
+                           is_cyp_class_method = self.is_cyp_class_method,
                            templates = self.templates)
 
         result.from_fused = self.is_fused
@@ -5157,6 +5162,13 @@ def best_match(arg_types, functions, pos=None, env=None, args=None, throw=False)
                          % (expectation, actual_nargs)
             errors.append((func, error_mesg))
             continue
+        # Skip non_const methods called on const object
+        if func_type.is_const and not func_type.is_const_method:
+            # Impose const-correctness only on cypclass methods for now
+            if func_type.is_cyp_class_method:
+                error_mesg = "Cannot call non-const method on const object"
+                errors.append((func, error_mesg))
+                continue
         if func_type.templates:
             deductions = reduce(
                 merge_template_deductions,

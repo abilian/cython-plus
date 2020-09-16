@@ -779,6 +779,7 @@ class CFuncDeclaratorNode(CDeclaratorNode):
             calling_convention=self.base.calling_convention,
             nogil=self.nogil, with_gil=self.with_gil, is_overridable=self.overridable,
             is_const_method=self.is_const_method,
+            is_cyp_class_method = env.is_cyp_class_scope,
             templates=self.templates)
 
         if self.optional_arg_count:

@@ -2928,7 +2928,7 @@ def p_c_simple_declarator(s, ctx, empty, is_type, cmethod_flag,
             cname = None
         if cname is None and ctx.namespace is not None and nonempty:
             cname = ctx.namespace + "::" + name
-        if name == 'operator' and ctx.visibility == 'extern' and nonempty:
+        if name == 'operator' and (ctx.visibility == 'extern' or ctx.level == 'cpp_class') and nonempty:
             op = s.sy
             if [1 for c in op if c in '+-*/<=>!%&|([^~,']:
                 s.next()
@@ -2957,7 +2957,7 @@ def p_c_simple_declarator(s, ctx, empty, is_type, cmethod_flag,
                 name = name + ' ' + op
                 s.next()
         result = Nodes.CNameDeclaratorNode(pos,
-            name = name, cname = cname, default = rhs)
+            name = EncodedString(name), cname = cname, default = rhs)
     result.calling_convention = calling_convention
     return result
 

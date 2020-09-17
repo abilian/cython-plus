@@ -51,6 +51,7 @@ class Ctx(object):
     namespace = None
     templates = None
     allow_struct_enum_decorator = False
+    modifiers = []
 
     def __init__(self, **kwds):
         self.__dict__.update(kwds)
@@ -2861,6 +2862,8 @@ def p_c_func_declarator(s, pos, ctx, base, cmethod_flag):
     exc_val, exc_check = p_exception_value_clause(s)
     with_gil = p_with_gil(s)
     is_const_method = p_cpp_const_method(s, ctx)
+    if 'mutable' in ctx.modifiers:
+        s.error("Functions cannot be 'mutable'")
     return Nodes.CFuncDeclaratorNode(pos,
         base = base, args = args, has_varargs = ellipsis,
         exception_value = exc_val, exception_check = exc_check,
@@ -3365,6 +3368,8 @@ def p_c_func_or_var_declaration(s, pos, ctx):
         if ctx.level not in ('module', 'c_class', 'module_pxd', 'c_class_pxd', 'cpp_class') and not ctx.templates:
             s.error("C function definition not allowed here")
         doc, suite = p_suite_with_docstring(s, Ctx(level='function'))
+        if 'mutable' in modifiers:
+            s.error("Functions cannot be 'mutable'")
         result = Nodes.CFuncDefNode(pos,
             visibility = ctx.visibility,
             base_type = base_type,

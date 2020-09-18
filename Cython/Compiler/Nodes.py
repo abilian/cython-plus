@@ -6334,6 +6334,8 @@ class InPlaceAssignmentNode(AssignmentNode):
         elif self.lhs.type.is_string and self.operator in '+-':
             # use pointer arithmetic for char* LHS instead of string concat
             self.rhs = self.rhs.coerce_to(PyrexTypes.c_py_ssize_t_type, env)
+        elif self.lhs.type.is_cpp_class:
+            return ExprStatNode(self.pos, expr=self.create_binop_node().analyse_types(env))
         return self
 
     def generate_execution_code(self, code):

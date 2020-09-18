@@ -11556,7 +11556,7 @@ class BinopNode(ExprNode):
             or self.operand2.type.is_cpp_class)
 
     def analyse_cpp_py_operation(self, env):
-        operator = self.operator if not self.inplace else self.operator+"="
+        operator = self.operator = self.operator if not self.inplace else self.operator+"="
         entry = None
         try:
             entry = env.lookup_operator(operator, [self.operand1, self.operand2], throw=True)
@@ -11583,7 +11583,7 @@ class BinopNode(ExprNode):
         self.is_temp = 1
 
     def analyse_cpp_operation(self, env):
-        operator = self.operator if not self.inplace else self.operator+"="
+        operator = self.operator = self.operator if not self.inplace else self.operator+"="
         entry = env.lookup_operator(operator, [self.operand1, self.operand2])
         if not entry:
             self.type_error()
@@ -12279,8 +12279,9 @@ class ModNode(DivNode):
                 op1 = self.operand1.result()
                 if self.operand1.type.is_cyp_class:
                     op1 = "(*%s)" % op1
-                return "(%s %% %s)" % (
+                return "(%s %s %s)" % (
                     op1,
+                    self.operator,
                     self.operand2.result())
         else:
             return "__Pyx_mod_%s(%s, %s)" % (

@@ -377,6 +377,25 @@ def test_clear_iterator_invalidation():
         print(e)
         return 0
 
+def test_update_iterator_invalidation():
+    """
+    >>> test_update_iterator_invalidation()
+    Modifying a dictionary with active iterators
+    0
+    """
+    d = cypdict[Index, Value]()
+    d2 = cypdict[Index, Value]()
+    d2[Index(1)] = Value(1)
+    iterator = d.begin()
+    try:
+        with nogil:
+            d.update(d2)
+            with gil:
+                return -1
+    except RuntimeError as e:
+        print(e)
+        return 0
+
 def test_modification_after_dict_iterator():
     """
     >>> test_modification_after_dict_iterator()

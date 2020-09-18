@@ -11597,6 +11597,8 @@ class BinopNode(ExprNode):
             self.is_temp = 1
             if self.exception_value is None:
                 env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
+        elif self.exception_check == "~":
+            self.is_temp = 1
         if func_type.is_ptr:
             func_type = func_type.base_type
         self.op_func_type = func_type
@@ -11685,11 +11687,17 @@ class BinopNode(ExprNode):
         elif self.is_temp:
             # C++ overloaded operators with exception values are currently all
             # handled through temporaries.
-            if self.is_cpp_operation() and self.exception_check == '+':
+            is_cpp_operation = self.is_cpp_operation()
+            if is_cpp_operation and self.exception_check == '+':
                 translate_cpp_exception(code, self.pos,
                                         "%s = %s;" % (self.result(), self.calculate_result_code()),
                                         self.result() if self.type.is_pyobject else None,
                                         self.exception_value, self.in_nogil_context)
+            elif is_cpp_operation and self.exception_check == "~":
+                checked_result_type = self.type
+                exc_check_code = checked_result_type.error_condition(self.result())
+                goto_error = code.error_goto_if(exc_check_code, self.pos)
+                code.putln("%s = %s; %s" % (self.result(), self.calculate_result_code(), goto_error))
             else:
                 code.putln("%s = %s;" % (self.result(), self.calculate_result_code()))
 

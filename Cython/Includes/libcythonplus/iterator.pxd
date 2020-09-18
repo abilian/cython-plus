@@ -26,7 +26,7 @@ cdef extern from * nogil:
 
         cy_iterator_t(cy_iterator_t && rhs) : cy_iterator_t()
         {
-            std::swap(*this, rhs);
+            swap(*this, rhs);
         }
 
         cy_iterator_t & operator=(cy_iterator_t rhs)
@@ -37,7 +37,7 @@ cdef extern from * nogil:
 
         cy_iterator_t & operator=(base_iterator_t rhs)
         {
-            swap(static_cast<base&>(*this), rhs);
+            static_cast<base&>(*this) = rhs;
             if (urange != NULL) {
                 urange->_active_iterators--;
                 urange = NULL;

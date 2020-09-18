@@ -2965,6 +2965,20 @@ class CppIteratorNode(ExprNode):
                         self.result()))
         code.putln("++%s;" % self.result())
 
+    def generate_subexpr_disposal_code(self, code):
+        if self.sequence.is_simple():
+            # the sequence is accessed directly so any temporary result in its
+            # subexpressions must remain available until the iterator is not needed
+            return
+        ExprNode.generate_subexpr_disposal_code(self, code)
+
+    def free_subexpr_temps(self, code):
+        if self.sequence.is_simple():
+            # the sequence is accessed directly so any temporary result in its
+            # subexpressions must remain available until the iterator is not needed
+            return
+        ExprNode.free_subexpr_temps(self, code)
+
     def generate_disposal_code(self, code):
         # clean-up the iterator by assigning end to it
         # this is only required if the iterator holds resources that must be released once iteration is complete
@@ -2974,12 +2988,15 @@ class CppIteratorNode(ExprNode):
                         self.cpp_attribute_op))
         if self.cpp_sequence_cname and self.sequence.type.is_cyp_class:
             code.put_decref(self.cpp_sequence_cname, self.sequence.type)
-        super(CppIteratorNode, self).generate_disposal_code(code)
+        if self.sequence.is_simple():
+            # postponed from CppIteratorNode.generate_subexpr_disposal_code
+            # and CppIteratorNode.free_subexpr_temps
+            ExprNode.generate_subexpr_disposal_code(self, code)
+            ExprNode.free_subexpr_temps(self, code)
 
     def free_temps(self, code):
         if self.cpp_sequence_cname:
             code.funcstate.release_temp(self.cpp_sequence_cname)
-        # skip over IteratorNode since we don't use any of the temps it does
         ExprNode.free_temps(self, code)
 
 

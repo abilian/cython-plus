@@ -2878,8 +2878,16 @@ class CppIteratorNode(ExprNode):
         sequence_type = self.sequence.type
         if sequence_type.is_ptr:
             sequence_type = sequence_type.base_type
-        begin = sequence_type.scope.lookup("begin")
-        end = sequence_type.scope.lookup("end")
+        if sequence_type.is_const or sequence_type.is_const_cyp_class:
+            begin = sequence_type.scope.lookup("const_begin")
+            end = sequence_type.scope.lookup("const_end")
+            if not begin or begin.cname != "begin":
+                begin = sequence_type.scope.lookup("begin")
+            if not end or end.cname != "end":
+                end = sequence_type.scope.lookup("end")
+        else:
+            begin = sequence_type.scope.lookup("begin")
+            end = sequence_type.scope.lookup("end")
         if (begin is None
                 or not begin.type.is_cfunction
                 or begin.type.args):

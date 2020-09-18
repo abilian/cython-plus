@@ -1837,14 +1837,22 @@ class CConstOrVolatileType(BaseType):
     subtypes = ['cv_base_type']
 
     is_cv_qualified = 1
+    cached_scopes = {}
 
     def __init__(self, base_type, is_const=0, is_volatile=0):
         self.cv_base_type = base_type
         self.is_const = is_const
         self.is_volatile = is_volatile
         if base_type.has_attributes and base_type.scope is not None:
-            from .Symtab import CConstOrVolatileScope
-            self.scope = CConstOrVolatileScope(base_type.scope, is_const, is_volatile)
+            key = base_type.resolve()
+            try:
+                self.scope = self.cached_scopes[key]
+            except KeyError:
+                # caching the scopes avoids duplicating entries for each scope
+                # which can lead to duplicate entries being considered for overlad resolution
+                # resulting in bogus ambiguous calls even when there is a single definition
+                from .Symtab import CConstOrVolatileScope
+                self.scope = self.cached_scopes[key] = CConstOrVolatileScope(base_type.scope, is_const, is_volatile)
 
     def cv_string(self):
         cvstring = ""

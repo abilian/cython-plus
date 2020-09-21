@@ -3253,7 +3253,7 @@ class CConstOrVolatileScope(Scope):
             return self.cached_const_or_volatile_entries[name]
         except KeyError:
             entry = self.base_type_scope.lookup_here(name)
-            if entry is not None and not entry.is_type:
+            if entry is not None and not entry.is_type and (not entry.is_mutable or self.is_volatile):
                 entry = copy.copy(entry)
                 entry.type = PyrexTypes.c_const_or_volatile_type(
                         entry.type, self.is_const, self.is_volatile)

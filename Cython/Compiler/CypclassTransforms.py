@@ -705,6 +705,8 @@ class CypclassLockTransform(Visitor.EnvTransform):
         return node
 
     def visit_SimpleCallNode(self, node):
+        if node.type.is_error:
+            return node
         func_type = node.function_type()
         if func_type.is_cfunction:
             formal_nargs = len(func_type.args)

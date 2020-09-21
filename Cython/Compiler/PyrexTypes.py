@@ -180,6 +180,9 @@ class PyrexType(BaseType):
     #  is_volatile           boolean     Is a C volatile type
     #  is_cv_qualified       boolean     Is a C const or volatile type
     #  is_cfunction          boolean     Is a C function type
+    #  is_from_qualified     boolean     Is a method looked-up from a qualified type
+    #  is_from_const         boolean     Is a method looked-up from a const type
+    #  is_from_volatile      boolean     Is a method looked-up from a volatile type
     #  is_struct_or_union    boolean     Is a C struct or union type
     #  is_struct             boolean     Is a C struct type
     #  is_enum               boolean     Is a C enum type
@@ -246,6 +249,9 @@ class PyrexType(BaseType):
     is_volatile = 0
     is_cv_qualified = 0
     is_cfunction = 0
+    is_from_qualified = 0
+    is_from_const = 0
+    is_from_volatile = 0
     is_struct_or_union = 0
     is_cpp_class = 0
     is_cyp_class = 0
@@ -1911,6 +1917,95 @@ class CConstOrVolatileType(BaseType):
 
 def CConstType(base_type):
     return CConstOrVolatileType(base_type, is_const=1)
+
+
+class QualifiedMethodType(BaseType):
+    "A method looked-up from a qualified object"
+
+    subtypes = ['method_base_type']
+
+    is_from_qualified = 1
+    is_from_const = 0
+    is_from_volatile = 0
+
+    def __init__(self, base_type, const=0, volatile=0):
+        assert isinstance(base_type, CFuncType)
+        self.method_base_type = base_type
+        self.is_from_const = const
+        self.is_from_volatile = volatile
+
+    def specialize(self, values):
+        base_type = self.method_base_type.specialize(values)
+        if base_type == self.method_base_type:
+            return self
+        return QualifiedMethodType(base_type, self.is_from_const, self.is_from_volatile)
+
+    def resolve(self):
+        base_type = self.method_base_type.resolve()
+        if base_type == self.method_base_type:
+            return self
+        return QualifiedMethodType(base_type, self.is_from_const, self.is_from_volatile)
+
+    def with_with_gil(self, with_gil):
+        base_type = self.method_base_type.with_with_gil()
+        if base_type == self.method_base_type:
+            return self
+        return QualifiedMethodType(base_type, self.is_from_const, self.is_from_volatile)
+
+    def as_argument_type(self):
+        return c_ptr_type(self)
+
+    # All that follows is just to behave exactly like the underlying function type
+
+    def __getattr__(self, name):
+        return getattr(self.method_base_type, name)
+
+    # These are defined because the definitions in BaseType might bypass __getattr__
+
+    def can_coerce_to_pyobject(self, env):
+        return self.method_base_type.can_coerce_to_pyobject(env)
+
+    def can_coerce_from_pyobject(self, env):
+        return self.method_base_type.can_coerce_from_pyobject(env)
+
+    def can_coerce_to_pystring(self, env, format_spec=None):
+        return self.method_base_type.can_coerce_to_pystring(env, format_spec)
+
+    def convert_to_pystring(self, cvalue, code, format_spec=None):
+        return self.method_base_type.convert_to_pystring(cvalue, code, format_spec)
+
+    def cast_code(self, expr_code):
+        return self.method_base_type.cast_code(expr_code)
+
+    def empty_declaration_code(self):
+        return self.method_base_type.empty_declaration_code()
+
+    def specialization_name(self):
+        return self.method_base_type.specialization_name()
+
+    def get_fused_types(self, result=None, seen=None, subtypes=None):
+        return self.method_base_type.get_fused_types(result, seen, subtypes)
+
+    def specialize_fused(self, env):
+        return self.method_base_type.specialize_fused(env)
+
+    def deduce_template_params(self, actual):
+        return self.method_base_type.deduce_template_params
+
+    def __lt__(self, other):
+        return self.method_base_type.__lt__(other)
+
+    def py_type_name(self):
+        return self.method_base_type.py_type_name()
+
+    def typeof_name(self):
+        return self.method_base_type.typeof_name()
+
+    def check_for_null_code(self, cname):
+        return self.method_base_type.check_for_null_code(cname)
+
+    def invalid_value(self):
+        return self.method_base_type.invalid_value()
 
 
 class FusedType(CType):
@@ -5171,7 +5266,7 @@ def best_match(arg_types, functions, pos=None, env=None, args=None, throw=False)
             errors.append((func, error_mesg))
             continue
         # Skip non_const methods called on const object
-        if func_type.is_const and not func_type.is_const_method and not func_type.is_static_method:
+        if func_type.is_from_const and not func_type.is_const_method and not func_type.is_static_method:
             # Impose const-correctness only on cypclass methods for now
             if func_type.is_cyp_class_method:
                 error_mesg = "Cannot call non-const method on const object"
@@ -5566,6 +5661,13 @@ def cyp_class_const_type(base_type):
         return error_type
     else:
         return ConstCypclassType(base_type)
+
+def qualified_method_type(base_type, const, volatile):
+    # Construct a proxy type for methods looked-up from qualified objects.
+    if base_type is error_type:
+        return error_type
+    else:
+        return QualifiedMethodType(base_type, const, volatile)
 
 def same_type(type1, type2):
     return type1.same_as(type2)

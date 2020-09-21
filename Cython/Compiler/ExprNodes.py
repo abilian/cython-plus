@@ -6036,10 +6036,12 @@ class SimpleCallNode(CallNode):
             args = self.args
 
         if func_type.is_cpp_class:
-            overloaded_entry = self.function.type.scope.lookup("operator()")
+            # operator() cannot be a non-member function
+            overloaded_entry = self.function.type.scope.lookup_here("operator()")
             if overloaded_entry is None:
                 self.type = PyrexTypes.error_type
                 self.result_code = "<error>"
+                error(self.pos, "Object of type '%s' is not callable." % self.function.type)
                 return
             self.function = CoerceFromCallable(self.function)
         elif hasattr(self.function, 'entry'):

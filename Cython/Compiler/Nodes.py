@@ -672,28 +672,32 @@ class CFuncDeclaratorNode(CDeclaratorNode):
                     type = other_type
             if name_declarator.cname:
                 error(self.pos, "Function argument cannot have C name specification")
-            if i == 0 and type.is_unspecified:
-                if env.is_c_class_scope:
-                    # fix the type of self
-                    type = env.parent_type
-                elif env.is_cyp_class_scope:
+            if i == 0 and env.is_c_class_scope and type.is_unspecified:
+                # fix the type of self
+                # XXX is it ever possible for the type not to have been deduced previsouly ?
+                type = env.parent_type
+            elif i == 0 and env.is_cyp_class_scope and 'staticmethod' not in env.directives and self.declared_name() != "alloc":
+                if self.declared_name() != "__new__":
                     # Accept 'f(const self, ...)' syntax as equivalent to 'f(self, ...) const'
-                    is_const_self = type.is_const
-                    # XXX is this different from 'env.parent_type' ?
-                    type = env.lookup_here("this").type
-                    if self.declared_name() != "__new__":
-                        self.is_const_method |= is_const_self
-                        if self.is_const_method:
-                            type = PyrexTypes.cyp_class_const_type(type)
-                        # skip 'self' argument from the list of actual arguments
-                        # to comply with C++ implicit 'this' argument passing.
-                        self.skipped_self = (name, type, arg_node.pos, arg_node)
-                        continue
-                    else:
-                        # Allow '__new__(alloc, ...)' syntax with untyped first argument.
-                        # Its type will be deduced as an allocation function, aka type = {class_type} (*f)() nogil
-                        # This is not a 'self' argument and '__new__' will be a static method, so don't skip it!
-                        type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(type, [], nogil=1))
+                    unqualified_type = type
+                    if type.is_const_cyp_class:
+                        self.is_const_method = True
+                        unqualified_type = type.const_base_type
+                    elif self.is_const_method:
+                        type = PyrexTypes.cyp_class_const_type(type)
+                    # check that the type of self is correct:
+                    if not unqualified_type.same_as(env.parent_type):
+                        error(self.pos, "Wrong type for self argument - expected %s, got %s" % (env.parent_type, type))
+                    # skip 'self' argument from the list of actual arguments
+                    # to comply with C++ implicit 'this' argument passing.
+                    self.skipped_self = (name, type, arg_node.pos, arg_node)
+                    continue
+                else:
+                    # Allow '__new__(alloc, ...)' syntax with untyped first argument.
+                    # Its type will be deduced as an allocation function, aka type = {class_type} (*f)() nogil
+                    # This is not a 'self' argument and '__new__' will be a static method, so don't skip it!
+                    type = env.parent_type
+                    type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(type, [], nogil=1))
             # Turn *[] argument into **
             if type.is_array:
                 type = PyrexTypes.c_ptr_type(type.base_type)
@@ -1055,7 +1059,7 @@ class CSimpleBaseTypeNode(CBaseTypeNode):
             if self.is_self_arg and (env.is_c_class_scope or env.is_cyp_class_scope):
                 #print "CSimpleBaseTypeNode.analyse: defaulting to parent type" ###
                 # For cypclass methods, the type of 'self' is always determined in CFuncDeclaratorNode
-                type = env.parent_type if env.is_c_class_scope else PyrexTypes.unspecified_type
+                type = env.parent_type
             ## elif self.is_type_arg and env.is_c_class_scope:
             ##     type = Builtin.type_type
             else:
@@ -1088,7 +1092,7 @@ class CSimpleBaseTypeNode(CBaseTypeNode):
                 elif could_be_name:
                     if self.is_self_arg and (env.is_c_class_scope or env.is_cyp_class_scope):
                         # For cypclass methods, the type of 'self' is always determined in CFuncDeclaratorNode
-                        type = env.parent_type if env.is_c_class_scope else PyrexTypes.unspecified_type
+                        type = env.parent_type
                     ## elif self.is_type_arg and env.is_c_class_scope:
                     ##     type = Builtin.type_type
                     else:

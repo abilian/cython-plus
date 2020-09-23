@@ -2974,14 +2974,14 @@ class CppIteratorNode(ExprNode):
         code.putln("++%s;" % self.result())
 
     def generate_subexpr_disposal_code(self, code):
-        if self.sequence.is_simple():
+        if not self.cpp_sequence_cname:
             # the sequence is accessed directly so any temporary result in its
             # subexpressions must remain available until the iterator is not needed
             return
         ExprNode.generate_subexpr_disposal_code(self, code)
 
     def free_subexpr_temps(self, code):
-        if self.sequence.is_simple():
+        if not self.cpp_sequence_cname:
             # the sequence is accessed directly so any temporary result in its
             # subexpressions must remain available until the iterator is not needed
             return
@@ -2996,11 +2996,19 @@ class CppIteratorNode(ExprNode):
                         self.cpp_attribute_op))
         if self.cpp_sequence_cname and self.sequence.type.is_cyp_class:
             code.put_decref(self.cpp_sequence_cname, self.sequence.type)
-        if self.sequence.is_simple():
+        if not self.cpp_sequence_cname:
             # postponed from CppIteratorNode.generate_subexpr_disposal_code
             # and CppIteratorNode.free_subexpr_temps
             ExprNode.generate_subexpr_disposal_code(self, code)
             ExprNode.free_subexpr_temps(self, code)
+            # Adapt relevant bits from ExprNode.generate_disposal_code
+            if self.result() and not self.has_temp_moved and self.type.is_cyp_class:
+                code.put_xdecref_clear(self.result(), self.ctype(), have_gil=not self.in_nogil_context)
+            if self.has_temp_moved:
+                code.globalstate.use_utility_code(
+                    UtilityCode.load_cached("MoveIfSupported", "CppSupport.cpp"))
+        else:
+            ExprNode.generate_disposal_code(self, code)
 
     def free_temps(self, code):
         if self.cpp_sequence_cname:

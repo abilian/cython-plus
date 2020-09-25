@@ -34,7 +34,7 @@ cdef cypclass cyplist[V]:
     __init__(self):
         self._active_iterators.store(0)
 
-    V __getitem__(self, const size_type index) except ~ const:
+    V __getitem__(const self, const size_type index) except ~:
         if index < self._elements.size():
            return self._elements[index]
         else:
@@ -86,7 +86,7 @@ cdef cypclass cyplist[V]:
             with gil:
                 raise RuntimeError("Modifying a list with active iterators")
 
-    cyplist[V] __add__(self, const cyplist[V] other) const:
+    cyplist[V] __add__(const self, const cyplist[V] other):
         result = cyplist[V]()
         result._elements.reserve(self._elements.size() + other._elements.size())
         result._elements.insert(result._elements.end(), self._elements.const_begin(), self._elements.const_end())
@@ -101,7 +101,7 @@ cdef cypclass cyplist[V]:
             with gil:
                 raise RuntimeError("Modifying a list with active iterators")
 
-    cyplist[V] __mul__(self, size_type n) const:
+    cyplist[V] __mul__(const self, size_type n):
         result = cyplist[V]()
         result._elements.reserve(self._elements.size() * n)
         for i in range(n):
@@ -125,13 +125,13 @@ cdef cypclass cyplist[V]:
             with gil:
                 raise RuntimeError("Modifying a list with active iterators")
 
-    iterator begin(self) const:
+    iterator begin(const self):
         return iterator(self._elements.const_begin(), self)
 
-    vector[value_type].const_iterator end(self) const:
+    vector[value_type].const_iterator end(const self):
         return self._elements.const_end()
 
-    size_type __len__(self) const:
+    size_type __len__(const self):
         return self._elements.size()
 
     bint __contains__(self, const value_type value):

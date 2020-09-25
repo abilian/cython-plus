@@ -79,13 +79,13 @@ cdef cypclass cypset[V]:
 
     # inspection operations
 
-    size_type __len__(self) const:
+    size_type __len__(const self):
         return self._elements.size()
 
     bint __contains__(self, const value_type value):
         return self._elements.count(value)
 
-    bint isdisjoint(self, const cypset[V] other) const:
+    bint isdisjoint(const self, const cypset[V] other):
         cdef const cypset[V] smallest
         cdef const cypset[V] greatest
         if self._elements.size() < other._elements.size():
@@ -101,7 +101,7 @@ cdef cypclass cypset[V]:
 
     # set comparisons
 
-    bint __eq__(self, const cypset[V] other) const:
+    bint __eq__(const self, const cypset[V] other):
         if self._elements.size() != other._elements.size():
             return 0
         for value in self._elements:
@@ -109,7 +109,7 @@ cdef cypclass cypset[V]:
                 return 0
         return 1
 
-    bint __ne__(self, const cypset[V] other) const:
+    bint __ne__(const self, const cypset[V] other):
         if self._elements.size() != other._elements.size():
             return 1
         for value in self._elements:
@@ -117,7 +117,7 @@ cdef cypclass cypset[V]:
                 return 1
         return 0
 
-    bint __le__(self, const cypset[V] other) const:
+    bint __le__(const self, const cypset[V] other):
         if self._elements.size() > other._elements.size():
             return 0
         for value in self._elements:
@@ -125,13 +125,13 @@ cdef cypclass cypset[V]:
                 return 0
         return 1
 
-    bint __lt__(self, const cypset[V] other) const:
+    bint __lt__(const self, const cypset[V] other):
         return self <= other and self._elements.size() < other._elements.size()
 
-    bint issubset(self, const cypset[V] other) const:
+    bint issubset(const self, const cypset[V] other):
         return self <= other
 
-    bint __ge__(self, const cypset[V] other) const:
+    bint __ge__(const self, const cypset[V] other):
         if self._elements.size() < other._elements.size():
             return 0
         for value in other._elements:
@@ -139,25 +139,25 @@ cdef cypclass cypset[V]:
                 return 0
         return 1
 
-    bint __gt__(self, const cypset[V] other) const:
+    bint __gt__(const self, const cypset[V] other):
         return self >= other and self._elements.size() > other._elements.size()
 
-    bint issuperset(self, const cypset[V] other) const:
+    bint issuperset(const self, const cypset[V] other):
         return self >= other
 
 
     # set non-modifying operations
 
-    cypset[V] __or__(self, const cypset[V] other) const:
+    cypset[V] __or__(const self, const cypset[V] other):
         result = cypset[V]()
         result._elements.insert(self._elements.const_begin(), self._elements.const_end())
         result._elements.insert(other._elements.const_begin(), other._elements.const_end())
         return result
 
-    cypset[V] union "set_union"(self, const cypset[V] other) const:
+    cypset[V] union "set_union"(const self, const cypset[V] other):
         return self | other
 
-    cypset[V] __and__(self, const cypset[V] other) const:
+    cypset[V] __and__(const self, const cypset[V] other):
         cdef const cypset[V] smallest
         cdef const cypset[V] greatest
         if self._elements.size() < other._elements.size():
@@ -172,20 +172,20 @@ cdef cypclass cypset[V]:
                 result._elements.insert(value)
         return result
 
-    cypset[V] intersection(self, const cypset[V] other) const:
+    cypset[V] intersection(const self, const cypset[V] other):
         return self & other
 
-    cypset[V] __sub__(self, const cypset[V] other) const:
+    cypset[V] __sub__(const self, const cypset[V] other):
         result = cypset[V]()
         for value in self._elements:
             if other._elements.count(value) == 0:
                 result._elements.insert(value)
         return result
 
-    cypset[V] difference(self, const cypset[V] other) const:
+    cypset[V] difference(const self, const cypset[V] other):
         return self - other
 
-    cypset[V] __xor__(self, const cypset[V] other) const:
+    cypset[V] __xor__(const self, const cypset[V] other):
         result = cypset[V]()
         result._elements = other._elements
         for value in self._elements:
@@ -196,7 +196,7 @@ cdef cypclass cypset[V]:
                 result._elements.insert(value)
         return result
 
-    cypset[V] symmetric_difference(self, const cypset[V] other) const:
+    cypset[V] symmetric_difference(const self, const cypset[V] other):
         return self ^ other
 
 
@@ -261,8 +261,8 @@ cdef cypclass cypset[V]:
 
     # iterators
 
-    iterator begin(self) const:
+    iterator begin(const self):
         return iterator(self._elements.const_begin(), self)
 
-    unordered_set[value_type].const_iterator end(self) const:
+    unordered_set[value_type].const_iterator end(const self):
         return self._elements.const_end()

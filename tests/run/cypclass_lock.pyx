@@ -6,7 +6,7 @@ cdef cypclass A checklock:
     int a
     __init__(self):
         self.a = 0
-    int getter(self) const:
+    int getter(const self):
         return self.a
     void setter(self, int a):
         self.a = a

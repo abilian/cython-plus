@@ -175,7 +175,7 @@ cdef cypclass Subscript:
         self.value = NULL
         self.index = NULL
 
-    Value __getitem__(self, Index index) const:
+    Value __getitem__(const self, Index index):
         if self.index is index:
             return value
         return NULL

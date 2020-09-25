@@ -137,7 +137,7 @@ cdef cypclass cypdict[K, V]:
     __init__(self):
         self._active_iterators.store(0)
 
-    V __getitem__(self, const key_type key) except ~ const:
+    V __getitem__(const self, const key_type key) except ~:
         it = self._indices.const_find(key)
         if it != self._indices.end():
            return self._items[dereference(it).second].second
@@ -182,23 +182,23 @@ cdef cypclass cypdict[K, V]:
             with gil:
                 raise RuntimeError("Modifying a dictionary with active iterators")
 
-    iterator begin(self) const:
+    iterator begin(const self):
         return iterator(self._items.const_begin(), self)
 
-    vector[item_type].const_iterator end(self) const:
+    vector[item_type].const_iterator end(const self):
         return self._items.const_end()
 
-    size_type __len__(self) const:
+    size_type __len__(const self):
         return self._items.size()
 
-    bint __contains__(self, const key_type key) const:
+    bint __contains__(const self, const key_type key):
         return self._indices.count(key)
 
-    keys_view keys(self) const:
+    keys_view keys(const self):
         return keys_view(self)
 
-    values_view values(self) const:
+    values_view values(const self):
         return values_view(self)
 
-    items_view items(self) const:
+    items_view items(const self):
         return items_view(self)

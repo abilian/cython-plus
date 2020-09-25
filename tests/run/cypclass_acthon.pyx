@@ -23,7 +23,7 @@ cdef cypclass BasicQueue(ActhonQueueInterface) checklock:
   __dealloc__(self):
     del self._queue
 
-  bint is_empty(self) const:
+  bint is_empty(const self):
     return self._queue.empty()
 
   void push(self, ActhonMessageInterface message):
@@ -58,9 +58,9 @@ cdef cypclass NoneResult(ActhonResultInterface) checklock:
     pass
   void pushIntResult(self, int result):
     pass
-  void* getVoidStarResult(self) const:
+  void* getVoidStarResult(const self):
     return NULL
-  int getIntResult(self) const:
+  int getIntResult(const self):
     return 0
 
 cdef cypclass WaitResult(ActhonResultInterface) checklock:
@@ -89,18 +89,18 @@ cdef cypclass WaitResult(ActhonResultInterface) checklock:
     self.result.int_val = result
     sem_post(&self.semaphore)
 
-  result_t _getRawResult(self) const:
+  result_t _getRawResult(const self):
     # We must ensure a result exists, but we can let others access it immediately
     # The cast here is a way of const-casting (we're modifying the semaphore in a const method)
     sem_wait(<sem_t*> &self.semaphore)
     sem_post(<sem_t*> &self.semaphore)
     return self.result
 
-  void* getVoidStarResult(self) const:
+  void* getVoidStarResult(const self):
     res = self._getRawResult()
     return res.ptr
 
-  int getIntResult(self) const:
+  int getIntResult(const self):
     res = self._getRawResult()
     return res.int_val
 
@@ -118,10 +118,10 @@ cdef cypclass ActivityCounterSync(ActhonSyncInterface) checklock:
   void removeActivity(self, ActhonMessageInterface msg):
     self.count -= 1
 
-  bint isCompleted(self) const:
+  bint isCompleted(const self):
     return self.count == 0
 
-  bint isActivable(self) const:
+  bint isActivable(const self):
     cdef bint res = True
     if self.previous_sync is not NULL:
       prev_sync = self.previous_sync
@@ -135,7 +135,7 @@ cdef cypclass A checklock activable:
         self.a = 0
         self._active_result_class = WaitResult.construct
         self._active_queue_class = BasicQueue()
-    int getter(self) const:
+    int getter(const self):
         return self.a
     void setter(self, int a):
         self.a = a

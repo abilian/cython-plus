@@ -4,7 +4,7 @@
 
 cdef cypclass A checklock:
     int a
-    int getter(self) const:
+    int getter(const self):
         return self.a
     void setter(self, int a):
         self.a = a

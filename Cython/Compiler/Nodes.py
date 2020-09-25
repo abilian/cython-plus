@@ -651,6 +651,8 @@ class CFuncDeclaratorNode(CDeclaratorNode):
             directive_locals = {}
         if nonempty:
             nonempty -= 1
+        if self.is_const_method and env.is_cyp_class_scope:
+            error(self.pos, "The form 'f(self, ...) const' is not allowed for cypclass methods. Use 'f(const self, ...)' instead")
         func_type_args = []
         for i, arg_node in enumerate(self.args):
             name_declarator, type = arg_node.analyse(
@@ -683,8 +685,6 @@ class CFuncDeclaratorNode(CDeclaratorNode):
                     if type.is_const_cyp_class:
                         self.is_const_method = True
                         unqualified_type = type.const_base_type
-                    elif self.is_const_method:
-                        type = PyrexTypes.cyp_class_const_type(type)
                     # check that the type of self is correct:
                     if not unqualified_type.same_as(env.parent_type):
                         error(self.pos, "Wrong type for self argument - expected %s, got %s" % (env.parent_type, type))

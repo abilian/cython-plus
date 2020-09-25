@@ -3268,10 +3268,13 @@ class CConstOrVolatileScope(Scope):
                         qual_alt.overloaded_alternatives = overloaded_alternatives
                         overloaded_alternatives.append(qual_alt)
                     entry.overloaded_alternatives = overloaded_alternatives
-                elif not entry.is_mutable or self.is_volatile:
-                    entry = copy.copy(entry)
-                    entry.type = PyrexTypes.c_const_or_volatile_type(
-                            entry.type, self.is_const, self.is_volatile)
+                else:
+                    is_const = self.is_const and not entry.is_mutable
+                    is_volatile = self.is_volatile
+                    if is_const or is_volatile:
+                        entry = copy.copy(entry)
+                        entry.type = PyrexTypes.c_const_or_volatile_type(
+                                entry.type, is_const, is_volatile)
             self.cached_const_or_volatile_entries[name] = entry
             return entry
 

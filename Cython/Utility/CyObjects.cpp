@@ -58,6 +58,11 @@
                     this->readers_nb = 0;
                     this->write_count = 0;
                 }
+                ~CyLock() {
+                    pthread_mutex_destroy(&this->guard);
+                    pthread_cond_destroy(&this->readers_have_left);
+                    pthread_cond_destroy(&this->writer_has_left);
+                }
                 void wlock(const char * context);
                 void rlock(const char * context);
                 void unwlock();

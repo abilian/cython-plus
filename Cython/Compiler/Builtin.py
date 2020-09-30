@@ -652,21 +652,45 @@ def init_builtin_structs():
             name, "struct", scope, 1, None, cname = cname)
 
 def inject_cypclass_refcount_macros():
-    incref_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)], nogil = 1)
+    incref_type = PyrexTypes.CFuncType(
+        PyrexTypes.c_void_type,
+        [
+            PyrexTypes.CFuncTypeArg("obj", PyrexTypes.const_cy_object_type, None)
+        ],
+        nogil = 1)
 
-    reference_to_cy_object_type = PyrexTypes.CReferenceType(PyrexTypes.cy_object_type)
-    decref_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", reference_to_cy_object_type, None)], nogil = 1)
+    decref_type = PyrexTypes.CFuncType(
+        PyrexTypes.c_void_type,
+        [
+            PyrexTypes.CFuncTypeArg("obj", PyrexTypes.CReferenceType(PyrexTypes.const_cy_object_type), None)
+        ],
+        nogil = 1)
 
-    getref_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)], nogil = 1)
+    getref_type = PyrexTypes.CFuncType(
+        PyrexTypes.c_int_type,
+        [
+            PyrexTypes.CFuncTypeArg("obj", PyrexTypes.const_cy_object_type, None)
+        ],
+        nogil = 1)
 
     for macro, macro_type in [("Cy_INCREF", incref_type), ("Cy_DECREF", decref_type), ("Cy_XDECREF", decref_type), ("Cy_GETREF", getref_type)]:
         builtin_scope.declare_builtin_cfunction(macro, macro_type, macro)
 
 def inject_cypclass_lock_macros():
-    blocking_macro_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)], nogil = 1)
+    blocking_macro_type = PyrexTypes.CFuncType(
+        PyrexTypes.c_void_type,
+        [
+            PyrexTypes.CFuncTypeArg("obj", PyrexTypes.const_cy_object_type, None)
+        ],
+        nogil = 1)
     for macro in ("Cy_RLOCK", "Cy_WLOCK", "Cy_UNWLOCK", "Cy_UNRLOCK"):
         builtin_scope.declare_builtin_cfunction(macro, blocking_macro_type, macro)
-    nonblocking_macro_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type, [PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None)], nogil = 1)
+
+    nonblocking_macro_type = PyrexTypes.CFuncType(PyrexTypes.c_int_type,
+        [
+            PyrexTypes.CFuncTypeArg("obj", PyrexTypes.const_cy_object_type, None)
+        ],
+        nogil = 1)
     for macro in ("Cy_TRYRLOCK", "Cy_TRYWLOCK"):
         builtin_scope.declare_builtin_cfunction(macro, nonblocking_macro_type, macro)
 

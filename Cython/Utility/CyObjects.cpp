@@ -399,11 +399,11 @@
                 ob->CyObject_INCREF();
         }
 
-        static inline int _Cy_GETREF(CyObject *ob) {
+        static inline int _Cy_GETREF(const CyObject *ob) {
             return ob->CyObject_GETREF();
         }
 
-        static inline void _Cy_RLOCK(CyObject *ob, const char *context) {
+        static inline void _Cy_RLOCK(const CyObject *ob, const char *context) {
             if (ob != NULL) {
                 ob->CyObject_RLOCK(context);
             }
@@ -412,7 +412,7 @@
             }
         }
 
-        static inline void _Cy_WLOCK(CyObject *ob, const char *context) {
+        static inline void _Cy_WLOCK(const CyObject *ob, const char *context) {
             if (ob != NULL) {
                 ob->CyObject_WLOCK(context);
             }
@@ -421,7 +421,7 @@
             }
         }
 
-        static inline void _Cy_UNRLOCK(CyObject *ob) {
+        static inline void _Cy_UNRLOCK(const CyObject *ob) {
             if (ob != NULL) {
                 ob->CyObject_UNRLOCK();
             }
@@ -430,7 +430,7 @@
             }
         }
 
-        static inline void _Cy_UNWLOCK(CyObject *ob) {
+        static inline void _Cy_UNWLOCK(const CyObject *ob) {
             if (ob != NULL) {
                 ob->CyObject_UNWLOCK();
             }
@@ -439,11 +439,11 @@
             }
         }
 
-        static inline int _Cy_TRYRLOCK(CyObject *ob) {
+        static inline int _Cy_TRYRLOCK(const CyObject *ob) {
             return ob->CyObject_TRYRLOCK();
         }
 
-        static inline int _Cy_TRYWLOCK(CyObject *ob) {
+        static inline int _Cy_TRYWLOCK(const CyObject *ob) {
             return ob->CyObject_TRYWLOCK();
         }
 

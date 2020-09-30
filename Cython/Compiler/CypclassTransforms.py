@@ -132,6 +132,10 @@ def NAME(ARGDECLS):
             # skip forward declarations
             return
 
+        if node.entry.defined_in_pxd:
+            # Skip cypclasses defined in a pxd file
+            return
+
         new_entry = node.scope.lookup_here("__new__")
         if new_entry and new_entry.type.return_type is not node.entry.type:
             # skip cypclasses that don't instanciate their own type

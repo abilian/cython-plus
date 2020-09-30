@@ -4356,7 +4356,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             module,
             module_name))
 
-        type_name = type.name.as_c_string_literal()
+        if type.is_cyp_wrapper:
+            # the scope class name is correct but the type name is mangled
+            # to distinguish it from the underlying cypclass name
+            type_name = type.scope.class_name.as_c_string_literal()
+        else:
+            type_name = type.name.as_c_string_literal()
 
         if condition and replacement:
             code.putln("")  # start in new line

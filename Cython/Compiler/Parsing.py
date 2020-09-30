@@ -2079,7 +2079,7 @@ def p_with_items(s, is_async=False):
         else:
             body = p_suite(s)
         return Nodes.GILStatNode(pos, state=state, body=body, condition=condition)
-    elif not s.in_python_file and s.sy == 'IDENT' and s.systring in ('unlocked', 'rlocked', 'wlocked'):
+    elif not s.in_python_file and s.sy == 'IDENT' and s.systring in ('rlocked', 'wlocked'):
         state = s.systring
         s.next()
 

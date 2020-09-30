@@ -5337,9 +5337,9 @@ class CClassDefNode(ClassDefNode):
             scope.directives = env.directives
 
         if scope is not None and self.is_cyp_wrapper:
-                # > correct a cypclass wrapper scope's name
-                scope.qualified_name = scope.qualifying_scope().qualify_name(self.wrapped_nested_name)
-                scope.class_name = self.wrapped_nested_name
+            # > correct a cypclass wrapper scope's name
+            scope.qualified_name = scope.qualifying_scope().qualify_name(self.wrapped_nested_name)
+            scope.class_name = self.wrapped_nested_name
 
         if self.doc and Options.docstrings:
             scope.doc = embed_position(self.pos, self.doc)

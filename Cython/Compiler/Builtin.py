@@ -675,7 +675,7 @@ def inject_cypclass_typecheck_functions():
     isinstanceof_type = PyrexTypes.CFuncType(
         PyrexTypes.c_int_type,
         [
-            PyrexTypes.CFuncTypeArg("obj", PyrexTypes.cy_object_type, None),
+            PyrexTypes.CFuncTypeArg("obj", PyrexTypes.const_cy_object_type, None),
             PyrexTypes.CFuncTypeArg("type", template_placeholder_type, None)
         ],
         nogil = 1,

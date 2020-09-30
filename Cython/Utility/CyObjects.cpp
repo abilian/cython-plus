@@ -456,7 +456,7 @@
         template <typename T, typename O>
         static inline int isinstanceof(O ob) {
             static_assert(std::is_convertible<T, CyObject *>::value, "wrong type 'T' for isinstanceof[T]");
-            return dynamic_cast<T>(ob) != NULL;
+            return dynamic_cast<const typename std::remove_pointer<T>::type *>(ob) != NULL;
         }
 
         /*

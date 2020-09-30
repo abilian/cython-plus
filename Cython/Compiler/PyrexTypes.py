@@ -5040,6 +5040,7 @@ unspecified_type = UnspecifiedType()
 py_object_type = PyObjectType()
 
 cy_object_type = CypClassType('cyobject', None, "CyObject", None)
+const_cy_object_type = ConstCypclassType(cy_object_type)
 
 c_void_type =        CVoidType()
 

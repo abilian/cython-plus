@@ -1796,16 +1796,20 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             cname = e.cname if not e.type.is_static_method else e.static_cname
 
+            resolution = e.from_type.empty_declaration_code()
+            call = "%s::%s(%s)" % (resolution, cname, ", ".join(arg_names))
+
             header = e.type.function_header_code(cname, ", ".join(arg_decls))
             if not e.name.startswith("operator "):
-                header = e.type.return_type.declaration_code(header)
+                header = "auto %s -> decltype(%s)" % (header, call)
 
             return_code = "" if e.type.return_type.is_void else "return "
-            resolution = e.from_type.empty_declaration_code()
 
-            body = "%s%s::%s(%s);" % (return_code, resolution, cname, ", ".join(arg_names))
+            body = "%s%s;" % (return_code, call)
 
-            code.putln("virtual %s%s {%s}" % (modifiers, header, body))
+            code.putln("virtual %s%s {" % (modifiers, header))
+            code.putln(body)
+            code.putln("}")
         if inherited_methods:
             code.putln("")
 
@@ -1825,16 +1829,19 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             arg_decls.append(func_type.op_arg_struct.declaration_code(opt_name))
             arg_names.append(opt_name)
 
+        call = "%s(%s)" % (static_method.cname, ", ".join(arg_names))
+
         header = func_type.function_header_code(static_method.static_cname, ", ".join(arg_decls))
         if not static_method.name.startswith("operator "):
-            header = func_type.return_type.declaration_code(header)
+            header = "auto %s -> decltype(%s)" % (header, call)
 
         return_code = "" if func_type.return_type.is_void else "return "
 
-        body = "%s%s(%s);" % (return_code, static_method.cname, ", ".join(arg_names))
+        body = "%s%s;" % (return_code, call)
 
-        code.putln("virtual %s%s {%s}" % (modifiers, header, body))
-
+        code.putln("virtual %s%s {" % (modifiers, header))
+        code.putln(body)
+        code.putln("}")
 
     def generate_enum_definition(self, entry, code):
         code.mark_pos(entry.pos)

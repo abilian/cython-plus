@@ -1253,7 +1253,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             for i, narg in enumerate(func_type.args[:narg_count]):
                 if narg.type.is_cyp_class:
-                    try_op = "Cy_TRYRLOCK" if narg.type.is_const else "Cy_TRYWLOCK"
+                    try_op = "Cy_TRYRLOCK" if narg.type.is_const_cyp_class else "Cy_TRYWLOCK"
                     code.putln("%s = %s(this->%s) != 0;" % (failed_trylock, try_op, narg.cname))
                     code.putln("if (!%s) {" % failed_trylock)
                     code.putln("++%s;" % trylock_result)
@@ -1265,7 +1265,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.increase_indent()
                 for opt_idx, optarg in enumerate(func_type.args[narg_count:]):
                     if optarg.type.is_cyp_class:
-                        try_op = "Cy_TRYRLOCK" if optarg.type.is_const else "Cy_TRYWLOCK"
+                        try_op = "Cy_TRYRLOCK" if optarg.type.is_const_cyp_class else "Cy_TRYWLOCK"
                         code.putln("if (this->%s->%sn > %s) {" %
                                         (opt_arg_name,
                                         Naming.pyrex_prefix,
@@ -1303,7 +1303,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 for i, narg in enumerate(func_type.args[:narg_count]):
                     if narg.type.is_cyp_class:
                         code.putln("if (%s > %s) {" % (trylock_result, num_unlock))
-                        unlock_op = "Cy_UNRLOCK" if narg.type.is_const else "Cy_UNWLOCK"
+                        unlock_op = "Cy_UNRLOCK" if narg.type.is_const_cyp_class else "Cy_UNWLOCK"
                         code.putln("%s(this->%s);" % (unlock_op, narg.cname))
                         num_unlock += 1
                 if opt_arg_count and num_optional_if:
@@ -1311,7 +1311,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     for opt_idx, optarg in enumerate(func_type.args[narg_count:]):
                         if optarg.type.is_cyp_class:
                             code.putln("if (%s > %s) {" % (trylock_result, num_unlock))
-                            unlock_op = "Cy_UNRLOCK" if optarg.type.is_const else "Cy_UNWLOCK"
+                            unlock_op = "Cy_UNRLOCK" if optarg.type.is_const_cyp_class else "Cy_UNWLOCK"
                             code.putln("%s(this->%s->%s);" % (unlock_op, opt_arg_name, func_type.opt_arg_cname(optarg.name)))
                             num_unlock += 1
                     # Note: we do not respect the semantic order of end-blocks here for simplification purpose.
@@ -1335,7 +1335,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             )
             unlock_op = "Cy_UNRLOCK" if reified_function_entry.type.is_const_method else "Cy_UNWLOCK"
             code.putln("%s(this->%s);" % (unlock_op, target_object_cname))
-            arg_unlocker = lambda arg: "Cy_UNRLOCK" if arg.type.is_const else "Cy_UNWLOCK"
+            arg_unlocker = lambda arg: "Cy_UNRLOCK" if arg.type.is_const_cyp_class else "Cy_UNWLOCK"
             put_cypclass_op_on_narg_optarg(arg_unlocker, reified_function_entry.type, Naming.optional_args_cname, code)
             code.putln("/* Push result in the result object */")
             if does_return:

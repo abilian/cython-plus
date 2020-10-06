@@ -82,7 +82,7 @@ cdef cypclass cypset[V]:
     size_type __len__(const self):
         return self._elements.size()
 
-    bint __contains__(self, const value_type value):
+    bint __contains__(const self, const value_type value):
         return self._elements.count(value)
 
     bint isdisjoint(const self, const cypset[V] other):

@@ -134,7 +134,7 @@ cdef cypclass cyplist[V]:
     size_type __len__(const self):
         return self._elements.size()
 
-    bint __contains__(self, const value_type value):
+    bint __contains__(const self, const value_type value):
         for v in self._elements:
             if value is v:
                 return 1

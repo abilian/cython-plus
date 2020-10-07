@@ -13276,11 +13276,23 @@ class PrimaryCmpNode(ExprNode, CmpNode):
             operator = "__contains__"
         entry = env.lookup_operator(operator, [self.operand1, self.operand2])
         if entry is None:
-            if self.operator in ("is", "is_not")\
-               and (type1.is_ptr or type1.is_cyp_class)\
-               and (type2.is_ptr or type2.is_cyp_class):
-                self.type = PyrexTypes.c_bint_type
-                return
+            if self.operator in ("is", "is_not"):
+                if type1.is_cyp_class and type2.is_cyp_class:
+                    common_type = PyrexTypes.independent_spanning_type(type1, type2)
+                    if common_type.is_error:
+                        common_type = PyrexTypes.cy_object_type
+                    if type1.is_const_cyp_class or type2.is_const_cyp_class:
+                        if not common_type.is_const_cyp_class:
+                            common_type = PyrexTypes.cyp_class_const_type(common_type)
+                    # do not analyse the TypecastNode
+                    # to ensure a simple pointer cast is used and not a user-defined conversion method
+                    self.operand1 = TypecastNode(self.operand1.pos, operand=self.operand1, type=common_type)
+                    self.operand2 = TypecastNode(self.operand2.pos, operand=self.operand2, type=common_type)
+                    self.type = PyrexTypes.c_bint_type
+                    return
+                elif (type1.is_ptr or type1.is_cyp_class) and (type2.is_ptr or type2.is_cyp_class):
+                    self.type = PyrexTypes.c_bint_type
+                    return
             error(self.pos, "Invalid types for '%s' (%s, %s)" %
                 (self.operator, type1, type2))
             self.type = PyrexTypes.error_type

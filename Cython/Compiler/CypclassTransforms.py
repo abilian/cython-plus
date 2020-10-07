@@ -599,7 +599,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
         if not node.obj.type.is_cyp_class:
             error(node.obj.pos, "Locking non-cypclass reference")
             return node
-        if not obj_ref_id.is_local or obj_ref_id.is_arg:
+        if not (obj_ref_id.is_local or obj_ref_id.is_arg or obj_ref_id.is_self_arg):
             error(node.obj.pos, "Can only lock local variables or arguments")
             return node
         with self.stacklock(obj_ref_id, node.state):

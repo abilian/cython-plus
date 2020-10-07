@@ -4711,6 +4711,12 @@ class ConstCypclassType(BaseType):
             self._empty_declaration = "const %s" % self.const_base_type.empty_declaration_code()
         return self._empty_declaration
 
+    def cast_code(self, expr_code):
+        return "((%s)%s)" % (self.declaration_code(''), expr_code)
+
+    def dynamic_cast_code(self, expr_code):
+        return "dynamic_cast<%s>(%s)" % (self.declaration_code(''), expr_code)
+
     def resolve(self):
         base_type = self.const_base_type.resolve()
         if base_type == self.const_base_type:

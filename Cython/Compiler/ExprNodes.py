@@ -10914,7 +10914,7 @@ class TypecastNode(ExprNode):
             if entry:
                 self.op_func_type = entry.type
             if self.type.is_cyp_class:
-                self.is_temp = True
+                self.is_temp = self.overloaded
         if self.type.is_ptr and self.type.base_type.is_cfunction and self.type.base_type.nogil:
             op_type = self.operand.type
             if op_type.is_ptr:

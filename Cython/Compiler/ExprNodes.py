@@ -10966,7 +10966,7 @@ class TypecastNode(ExprNode):
                 if self.overloaded:
                     operand_result = '(*%s)' % operand_result
             # use dynamic cast when dowcasting from a base to a cypclass
-            if self.type.is_cyp_class and operand_type in self.type.mro():
+            if self.type.is_cyp_class and operand_type in self.type.mro() and not self.type.same_as(operand_type):
                 return self.type.dynamic_cast_code(operand_result)
             return self.type.cast_code(operand_result)
 
@@ -10994,7 +10994,7 @@ class TypecastNode(ExprNode):
                 star = "*" if self.overloaded else ""
                 operand_result = "%s%s" % (star, self.operand.result())
                 # use dynamic cast when dowcasting from a base to a cypclass
-                if self.operand.type in self.type.mro():
+                if self.operand.type in self.type.mro() and not self.type.same_as(self.operand.type):
                     code.putln(
                         "%s = dynamic_cast<%s>(%s);" % (
                             self.result(),

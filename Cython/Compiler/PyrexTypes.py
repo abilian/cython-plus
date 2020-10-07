@@ -4703,8 +4703,8 @@ class ConstCypclassType(BaseType):
     def __str__(self):
         return self.declaration_code("", for_display=1)
 
-    def declaration_code(self, entity_code, for_display = 0, dll_linkage = None, pyrex = 0):
-        return "const %s" % self.const_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex)
+    def declaration_code(self, entity_code, for_display = 0, dll_linkage = None, pyrex = 0, template_params = None, deref = 0):
+        return "const %s" % self.const_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex, template_params, deref)
 
     def empty_declaration_code(self):
         if self._empty_declaration is None:

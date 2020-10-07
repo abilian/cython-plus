@@ -578,15 +578,15 @@ void CyLock::rlock(const char *context) {
         #else
         pid_t owner_id = this->owner_id;
         pthread_mutex_lock(&(CyLock::log_guard));
-        std::cout
+        std::cerr
             << "Data Race between [this] reader #" <<  caller_id
             << " and [other] writer #" << owner_id
             << " on lock " << this << std::endl;
         if (context != NULL) {
-            std::cout << "In [this] context: " << context << std::endl;
+            std::cerr << "In [this] context: " << context << std::endl;
         }
         if (this->owner_context != NULL) {
-            std::cout << "In [other] context: " << this->owner_context << std::endl;
+            std::cerr << "In [other] context: " << this->owner_context << std::endl;
         }
         pthread_mutex_unlock(&(CyLock::log_guard));
         #endif
@@ -676,16 +676,18 @@ void CyLock::wlock(const char *context) {
             }
             throw std::runtime_error(msg.str());
             #else
-            std::cout
+            pthread_mutex_lock(&(CyLock::log_guard));
+            std::cerr
                 << "Data Race between [this] writer #" <<  caller_id
                 << " and [other] reader #" << owner_id
                 << " on lock " << this << std::endl;
             if (context != NULL) {
-                std::cout << "In [this] context: " << context << std::endl;
+                std::cerr << "In [this] context: " << context << std::endl;
             }
             if (this->owner_context != NULL) {
-                std::cout << "In [other] context: " << this->owner_context << std::endl;
+                std::cerr << "In [other] context: " << this->owner_context << std::endl;
             }
+            pthread_mutex_unlock(&(CyLock::log_guard));
             #endif
         }
 
@@ -709,15 +711,15 @@ void CyLock::wlock(const char *context) {
             throw std::runtime_error(msg.str());
             #else
             pthread_mutex_lock(&(CyLock::log_guard));
-            std::cout
+            std::cerr
                 << "Data Race between [this] writer #" <<  caller_id
                 << " and [other] writer #" << owner_id
                 << " on lock " << this << std::endl;
             if (context != NULL) {
-                std::cout << "In [this] context: " << context << std::endl;
+                std::cerr << "In [this] context: " << context << std::endl;
             }
             if (this->owner_context != NULL) {
-                std::cout << "In [other] context: " << this->owner_context << std::endl;
+                std::cerr << "In [other] context: " << this->owner_context << std::endl;
             }
             pthread_mutex_unlock(&(CyLock::log_guard));
             #endif

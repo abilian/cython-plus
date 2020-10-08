@@ -4220,6 +4220,23 @@ class IndexNode(_IndexingBaseNode):
                 # This is a bug
                 raise InternalError("Couldn't find the right signature")
 
+    def coerce_to_temp(self, env):
+        temp = ExprNode.coerce_to_temp(self, env)
+        if self.type.is_cyp_class and not (self.base.type.is_array or self.base.type.is_ptr):
+            # This is already a new reference
+            # either via cpp operator[]
+            # or via cypclass __getitem__
+            temp.use_managed_ref = False
+        return temp
+
+    def make_owned_reference(self, code):
+        if self.type.is_cyp_class and not (self.base.type.is_array or self.base.type.is_ptr):
+            # This is already a new reference
+            # either via cpp operator[]
+            # or via cypclass __getitem__
+            return
+        ExprNode.make_owned_reference(self, code)
+
     gil_message = "Indexing Python object"
 
     def calculate_result_code(self):

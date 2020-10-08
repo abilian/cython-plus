@@ -14159,7 +14159,11 @@ class CoerceToLockedTempNode(CoerceToTempNode):
 
     def __init__(self, arg, env=None, rlock_only=False):
         self.rlock_only = rlock_only
-        if isinstance(arg, CoerceToTempNode):
+        if isinstance(arg, IndexNode):
+            # reuse reference count management logic
+            self.use_managed_ref = arg.coerce_to_temp(env).use_managed_ref
+        elif isinstance(arg, CoerceToTempNode):
+            self.use_managed_ref = arg.use_managed_ref
             arg = arg.arg
         super(CoerceToLockedTempNode, self).__init__(arg, env)
 

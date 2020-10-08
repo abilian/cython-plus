@@ -92,3 +92,26 @@ def test_stack_refcount():
         return -3
 
     return 0
+
+def test_loop_variable_refcount():
+    """
+    >>> test_loop_variable_refcount()
+    Value destroyed
+    0
+    """
+    s = Stack()
+    s.push(Value())
+
+    for val in s:
+        refcnt = Cy_GETREF(val)
+        if refcnt != 3:
+            print(refcnt)
+            return -1
+
+    for val in s:
+        refcnt = Cy_GETREF(val)
+        if refcnt != 3:
+            print(refcnt)
+            return -1
+
+    return 0

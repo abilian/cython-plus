@@ -11581,7 +11581,7 @@ class BinopNode(ExprNode):
             or self.operand2.type.is_cpp_class)
 
     def analyse_cpp_py_operation(self, env):
-        operator = self.operator = self.operator if not self.inplace else self.operator+"="
+        operator = self.operator if not self.inplace else self.operator+"="
         entry = None
         try:
             entry = env.lookup_operator(operator, [self.operand1, self.operand2], throw=True)

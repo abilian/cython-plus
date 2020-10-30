@@ -189,11 +189,6 @@
             }
 
             template <typename U>
-            friend bool operator==(const Cy_Ref_impl<U>& lhs, const Cy_Ref_impl<T>& rhs) noexcept {
-                return lhs.uobj == rhs.uobj;
-            }
-
-            template <typename U>
             bool operator==(U* rhs) const noexcept {
                 return uobj == rhs;
             }
@@ -214,11 +209,6 @@
             template <typename U>
             bool operator!=(const Cy_Ref_impl<U>& rhs) const noexcept {
                 return uobj != rhs.uobj;
-            }
-
-            template <typename U>
-            friend bool operator!=(const Cy_Ref_impl<U>& lhs, const Cy_Ref_impl<T>& rhs) noexcept {
-                return lhs.uobj != rhs.uobj;
             }
 
             template <typename U>

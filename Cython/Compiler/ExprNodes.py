@@ -3771,7 +3771,14 @@ class IndexNode(_IndexingBaseNode):
             return py_object_type
 
     def analyse_types(self, env):
-        return self.analyse_base_and_index_types(env, getting=True)
+        index_node = self.analyse_base_and_index_types(env, getting=True)
+        if index_node.type.is_cyp_class:
+            # If a[b] is a cypclass, a new reference is returned.
+            # In that case it must be stored for later decref-ing.
+            # XXX: future optimisation: only coerce to temporary
+            # when the value is not already assigned to a variable.
+            return index_node.coerce_to_temp(env)
+        return index_node
 
     def analyse_target_types(self, env):
         node = self.analyse_base_and_index_types(env, setting=True)

@@ -14192,10 +14192,24 @@ class CoerceToLockedTempNode(CoerceToTempNode):
         else:
             code.putln("Cy_wlock_guard %s(%s, %s);" % (guard_code, self.result(), context))
 
+    def generate_subexpr_disposal_code(self, code):
+        # Postponed until this node is disposed of.
+        # See ExprNode.generate_evaluation_code.
+        return
+
+    def free_subexpr_temps(self, code):
+        # Postponed until this node is disposed of.
+        # See ExprNode.generate_evaluation_code.
+        return
+
     def generate_disposal_code(self, code):
         # Close the scope to release the lock.
         code.putln("}")
-        super(CoerceToLockedTempNode, self).generate_disposal_code(code)
+        # Dispose of and release postponed subexpressions.
+        ExprNode.generate_subexpr_disposal_code(self, code)
+        ExprNode.free_subexpr_temps(self, code)
+        # Dispose of and release this temporary.
+        ExprNode.generate_disposal_code(self, code)
 
 
 class ProxyNode(CoercionNode):

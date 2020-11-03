@@ -502,7 +502,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
         return super(CypclassLockTransform, self).__call__(root)
 
     def reference_identifier(self, node):
-        while isinstance(node, ExprNodes.CoerceToTempNode):  # works for CoerceToLockedTempNode as well
+        while isinstance(node, ExprNodes.CoerceToTempNode):
             node = node.arg
         if node.is_name:
             return node.entry
@@ -531,13 +531,13 @@ class CypclassLockTransform(Visitor.EnvTransform):
                         ) % self.id_to_name(ref_id) )
                 elif lock_mode == "autolock":
                     # for now, lock a temporary for each expression
-                    return ExprNodes.CoerceToLockedTempNode(read_node, self.current_env(), rlock_only=True)
+                    return ExprNodes.CoerceToLockedNode(read_node, self.current_env(), rlock_only=True)
         else:
             if lock_mode == "checklock":
                 error(read_node.pos, "This expression is not correctly locked (read lock required)")
             elif lock_mode == "autolock":
-                if not isinstance(read_node, ExprNodes.CoerceToLockedTempNode):
-                    return ExprNodes.CoerceToLockedTempNode(read_node, self.current_env(), rlock_only=True)
+                if not isinstance(read_node, ExprNodes.CoerceToLockedNode):
+                    return ExprNodes.CoerceToLockedNode(read_node, self.current_env(), rlock_only=True)
         return read_node
 
     def lockcheck_written(self, written_node):
@@ -553,15 +553,15 @@ class CypclassLockTransform(Visitor.EnvTransform):
                         ) % self.id_to_name(ref_id) )
                 elif lock_mode == "autolock":
                     # for now, lock a temporary for each expression
-                    return ExprNodes.CoerceToLockedTempNode(written_node, self.current_env(), rlock_only=False)
+                    return ExprNodes.CoerceToLockedNode(written_node, self.current_env(), rlock_only=False)
         else:
             if lock_mode == "checklock":
                 error(written_node.pos, "This expression is not correctly locked (write lock required)")
             elif lock_mode == "autolock":
-                if isinstance(written_node, ExprNodes.CoerceToLockedTempNode):
+                if isinstance(written_node, ExprNodes.CoerceToLockedNode):
                     written_node.rlock_only = False
                 else:
-                    return ExprNodes.CoerceToLockedTempNode(written_node, self.current_env())
+                    return ExprNodes.CoerceToLockedNode(written_node, self.current_env())
         return written_node
 
     def lockcheck_written_or_read(self, node, reading=False):

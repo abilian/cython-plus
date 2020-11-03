@@ -14158,24 +14158,29 @@ class CoerceToTempNode(CoercionNode):
                 code.put_incref_memoryviewslice(self.result(), self.type,
                                             have_gil=not self.in_nogil_context)
 
-class CoerceToLockedTempNode(CoerceToTempNode):
+class CoerceToLockedNode(CoercionNode):
+    # This node is used to lock a node of cypclass type around the evaluation of its subexpressions.
+
     # rlock_only    boolean
-    # guard_code    used internally
 
     def __init__(self, arg, env=None, rlock_only=False):
         self.rlock_only = rlock_only
-        if isinstance(arg, IndexNode):
-            # reuse reference count management logic
-            self.use_managed_ref = arg.coerce_to_temp(env).use_managed_ref
-        elif isinstance(arg, CoerceToTempNode):
-            self.use_managed_ref = arg.use_managed_ref
-            arg = arg.arg
-        super(CoerceToLockedTempNode, self).__init__(arg, env)
+        self.type = arg.type
+        arg = arg.coerce_to_temp(env)
+        arg.postpone_subexpr_disposal = True
+        super(CoerceToLockedNode,self).__init__(arg)
+
+    def result(self):
+        return self.arg.result()
+
+    def is_simple(self):
+        return False
+
+    def may_be_none(self):
+        return self.arg.may_be_none()
 
     def generate_result_code(self, code):
-        super(CoerceToLockedTempNode, self).generate_result_code(code)
-
-        #XXX Code duplicated from Nodes.LockCypclassNode
+        #XXX Code duplicated from Nodes.LockCypclassNode.
         if self.arg.pos:
             source_descr, lineno, colno = self.arg.pos
             source_str = source_descr.get_description()
@@ -14190,31 +14195,19 @@ class CoerceToLockedTempNode(CoerceToTempNode):
         # Create a scope to use scope bound resource management (RAII).
         code.putln("{")
 
-        # Each lock guard has its onw scope, so a prefix is enough to prevent name collisions
+        # Since each lock guard has its onw scope,
+        # a prefix is enough to prevent name collisions.
         guard_code = "%sguard" % Naming.cypclass_lock_guard_prefix
         if self.rlock_only:
             code.putln("Cy_rlock_guard %s(%s, %s);" % (guard_code, self.result(), context))
         else:
             code.putln("Cy_wlock_guard %s(%s, %s);" % (guard_code, self.result(), context))
 
-    def generate_subexpr_disposal_code(self, code):
-        # Postponed until this node is disposed of.
-        # See ExprNode.generate_evaluation_code.
-        return
-
-    def free_subexpr_temps(self, code):
-        # Postponed until this node is disposed of.
-        # See ExprNode.generate_evaluation_code.
-        return
-
     def generate_disposal_code(self, code):
         # Close the scope to release the lock.
         code.putln("}")
-        # Dispose of and release postponed subexpressions.
-        ExprNode.generate_subexpr_disposal_code(self, code)
-        ExprNode.free_subexpr_temps(self, code)
-        # Dispose of and release this temporary.
-        ExprNode.generate_disposal_code(self, code)
+        # Dispose of subexpressions.
+        super(CoerceToLockedNode,self).generate_disposal_code(code)
 
 
 class ProxyNode(CoercionNode):

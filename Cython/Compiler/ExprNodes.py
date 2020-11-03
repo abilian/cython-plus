@@ -306,6 +306,10 @@ class ExprNode(Node):
     #  saved_subexpr_nodes
     #               [ExprNode or [ExprNode or None] or None]
     #                            Cached result of subexpr_nodes()
+    #  postpone_subexpr_disposal
+    #               boolean
+    #                            Postpone disposing of the subexpressions of a
+    #                              temporary node until it is itself freed.
     #  use_managed_ref boolean   use ref-counted temps/assignments/etc.
     #  result_is_used  boolean   indicates that the result will be dropped and the
     #  is_numpy_attribute   boolean   Is a Numpy module attribute
@@ -449,6 +453,7 @@ class ExprNode(Node):
     is_memview_copy_assignment = False
 
     saved_subexpr_nodes = None
+    postpone_subexpr_disposal = False
     is_temp = False
     has_temp_moved = False  # if True then attempting to do anything but free the temp is invalid
     is_target = False
@@ -808,7 +813,7 @@ class ExprNode(Node):
             self.allocate_temp_result(code)
 
         self.generate_result_code(code)
-        if self.is_temp and not (self.type.is_string or self.type.is_pyunicode_ptr):
+        if self.is_temp and not (self.type.is_string or self.type.is_pyunicode_ptr or self.postpone_subexpr_disposal):
             # If we are temp we do not need to wait until this node is disposed
             # before disposing children.
             self.generate_subexpr_disposal_code(code)
@@ -823,7 +828,7 @@ class ExprNode(Node):
 
     def generate_disposal_code(self, code):
         if self.is_temp:
-            if self.type.is_string or self.type.is_pyunicode_ptr:
+            if self.type.is_string or self.type.is_pyunicode_ptr or self.postpone_subexpr_disposal:
                 # postponed from self.generate_evaluation_code()
                 self.generate_subexpr_disposal_code(code)
                 self.free_subexpr_temps(code)
@@ -849,7 +854,7 @@ class ExprNode(Node):
 
     def generate_post_assignment_code(self, code):
         if self.is_temp:
-            if self.type.is_string or self.type.is_pyunicode_ptr:
+            if self.type.is_string or self.type.is_pyunicode_ptr or self.postpone_subexpr_disposal:
                 # postponed from self.generate_evaluation_code()
                 self.generate_subexpr_disposal_code(code)
                 self.free_subexpr_temps(code)

@@ -737,6 +737,11 @@ class ExprNode(Node):
         #  a subnode.
         return self.is_temp
 
+    def result_is_new_reference(self):
+        # Return true if the result is a new reference that is
+        # already incref-ed and will need to be decref-ed later.
+        return self.result_in_temp()
+
     def target_code(self):
         #  Return code fragment for use as LHS of a C assignment.
         return self.calculate_result_code()
@@ -786,7 +791,7 @@ class ExprNode(Node):
         Make sure we own a reference to result.
         If the result is in a temp, it is already a new reference.
         """
-        if not self.result_in_temp():
+        if not self.result_is_new_reference():
             # FIXME: is this verification really necessary ?
             if self.type.is_cyp_class and "NULL" in self.result():
                 pass
@@ -798,7 +803,7 @@ class ExprNode(Node):
         Make sure we own the reference to this memoryview slice.
         """
         # TODO ideally this would be shared with "make_owned_reference"
-        if not self.result_in_temp():
+        if not self.result_is_new_reference():
             code.put_incref_memoryviewslice(self.result(), self.type,
                                             have_gil=not self.in_nogil_context)
 
@@ -4247,13 +4252,13 @@ class IndexNode(_IndexingBaseNode):
             temp.use_managed_ref = False
         return temp
 
-    def make_owned_reference(self, code):
+    def result_is_new_reference(self):
         if self.type.is_cyp_class and not (self.base.type.is_array or self.base.type.is_ptr):
             # This is already a new reference
             # either via cpp operator[]
             # or via cypclass __getitem__
-            return
-        ExprNode.make_owned_reference(self, code)
+            return True
+        return ExprNode.result_is_new_reference(self)
 
     gil_message = "Indexing Python object"
 
@@ -8035,7 +8040,7 @@ class SequenceNode(ExprNode):
 
             for i in range(arg_count):
                 arg = self.args[i]
-                if c_mult or not arg.result_in_temp():
+                if c_mult or not arg.result_is_new_reference():
                     code.put_incref(arg.result(), arg.ctype())
                 arg.generate_giveref(code)
                 code.putln("%s(%s, %s, %s);" % (

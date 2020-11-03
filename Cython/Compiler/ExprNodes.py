@@ -14262,14 +14262,19 @@ class CoerceToTempNode(CoercionNode):
 class CoerceToLockedNode(CoercionNode):
     # This node is used to lock a node of cypclass type around the evaluation of its subexpressions.
 
-    # exclusive    boolean
+    # exclusive     boolean
+    # needs_decref  boolean     used internally
 
     def __init__(self, arg, env=None, exclusive=True):
         self.exclusive = exclusive
         self.type = arg.type
-        arg = arg.coerce_to_temp(env)
-        arg.postpone_subexpr_disposal = True
-        super(CoerceToLockedNode,self).__init__(arg)
+        temp_arg = arg.coerce_to_temp(env)
+        temp_arg.postpone_subexpr_disposal = True
+        # Avoid incrementing the reference count when assigning to the temporary
+        # but ensure it will be decremented if it was already incremented previously.
+        self.needs_decref = not temp_arg.use_managed_ref
+        temp_arg.use_managed_ref = False
+        super(CoerceToLockedNode,self).__init__(temp_arg)
 
     def result(self):
         return self.arg.result()
@@ -14307,8 +14312,12 @@ class CoerceToLockedNode(CoercionNode):
     def generate_disposal_code(self, code):
         # Close the scope to release the lock.
         code.putln("}")
-        # Dispose of subexpressions.
-        super(CoerceToLockedNode,self).generate_disposal_code(code)
+        # Dispose of and free subexpressions.
+        self.arg.generate_subexpr_disposal_code(code)
+        self.arg.free_subexpr_temps(code)
+        # Decref only if previously incref-ed.
+        if self.needs_decref:
+            code.put_xdecref_clear(self.result(), self.ctype(), have_gil=not self.in_nogil_context)
 
 
 class ProxyNode(CoercionNode):

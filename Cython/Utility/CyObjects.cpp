@@ -456,7 +456,7 @@
         template <typename T>
         static inline typename T::Activated * activate(T * ob) {
             static_assert(std::is_convertible<T *, ActhonActivableClass *>::value, "wrong type for activate");
-            return ob->__activate__(NULL);
+            return ob->__activate__();
         }
 
         /*

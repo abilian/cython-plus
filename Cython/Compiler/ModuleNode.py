@@ -968,48 +968,19 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         """
             Generate activate function for activable cypclass entries.
         """
-        activate_class_decl = "%s::Activated" % entry.type.empty_declaration_code()
-        dunder_activate_entry = entry.type.scope.lookup_here("__activate__")
-        # Here we generate the function header like Nodes.CFuncDefNode would do,
-        # but we streamline the process because we know the exact prototype.
-        dunder_activate_arg = dunder_activate_entry.type.op_arg_struct.declaration_code(Naming.optional_args_cname)
-        dunder_activate_entity = dunder_activate_entry.type.function_header_code(dunder_activate_entry.func_cname, dunder_activate_arg)
-        dunder_activate_header = dunder_activate_entry.type.return_type.declaration_code(dunder_activate_entity)
-        code.putln("%s {" % dunder_activate_header)
-        code.putln("%s;" % dunder_activate_entry.type.return_type.declaration_code("activated_instance"))
-        code.putln('if (%s) {' % Naming.optional_args_cname)
-        activated_class_constructor_optargs_list = ["this"]
-        activated_class_constructor_defaultargs_list = ["this->_active_queue_class", "this->_active_result_class"]
-        for i, arg in enumerate(dunder_activate_entry.type.args):
-            code.putln("if (%s->%sn <= %s) {" %
-                        (Naming.optional_args_cname,
-                        Naming.pyrex_prefix, i))
-            code.putln("activated_instance = new %s(%s);" %
-                        (activate_class_decl,
-                        ", ".join(activated_class_constructor_optargs_list + activated_class_constructor_defaultargs_list[i:])))
-            code.putln("} else {")
-            activated_class_constructor_optargs_list.append("%s->%s" %
-                                                            (Naming.optional_args_cname,
-                                                            dunder_activate_entry.type.opt_arg_cname(arg.name)))
-        # We're in the final else clause, corresponding to all optional arguments specified)
-        code.putln("activated_instance = new %s(%s);" %
-                    (activate_class_decl,
-                    ", ".join(activated_class_constructor_optargs_list)))
-        for _ in dunder_activate_entry.type.args:
-            code.putln("}")
-        code.putln("}")
-        code.putln("else {")
+        class_decl = entry.type.empty_declaration_code()
+        activated_class_decl = "%s::Activated" % class_decl
+        code.putln("%s *%s::__activate__() {" % (activated_class_decl, class_decl))
         code.putln("if (this->%s == NULL) {" % Naming.cypclass_active_self_cname)
-        code.putln("this->%s = new %s(this, %s);" %
-                    (Naming.cypclass_active_self_cname,
-                    activate_class_decl,
-                    ", ".join(activated_class_constructor_defaultargs_list))
-                    )
+        code.putln("this->%s = new %s(this, %s);" % (
+                    Naming.cypclass_active_self_cname,
+                    activated_class_decl,
+                    ", ".join(["this->_active_queue_class", "this->_active_result_class"])
+            )
+        )
         code.putln("}")
-        code.putln("Cy_INCREF((%s *)(this->%s));" % (activate_class_decl, Naming.cypclass_active_self_cname))
-        code.putln("activated_instance = (%s *)(this->%s);" % (activate_class_decl, Naming.cypclass_active_self_cname))
-        code.putln("}")
-        code.putln("return activated_instance;")
+        code.putln("Cy_INCREF((%s *)(this->%s));" % (activated_class_decl, Naming.cypclass_active_self_cname))
+        code.putln("return (%s *)(this->%s);" % (activated_class_decl, Naming.cypclass_active_self_cname))
         code.putln("}")
 
 
@@ -1040,15 +1011,15 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             initialize_code = "ActhonActivableClass(active_queue, active_result_constructor)"
         code.putln("struct %s::Activated : %s {" % (entry.type.empty_declaration_code(), base_classes_code))
         code.putln("%s;" % entry.type.declaration_code(passive_self_attr_cname))
+        result_constructor_type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(result_interface_type, [], nogil = 1))
         code.putln(("Activated(%s * passive_object, %s, %s)"
-                    ": %s, %s(passive_object){} // Used by _passive_self.__activate__()"
-                    % (
+                    ": %s, %s(passive_object){} // Used by _passive_self.__activate__()" % (
                         entry.type.empty_declaration_code(),
                         queue_interface_type.declaration_code("active_queue"),
-                        entry.type.scope.lookup_here("__activate__").type.args[1].type.declaration_code("active_result_constructor"),
+                        result_constructor_type.declaration_code("active_result_constructor"),
                         initialize_code,
                         passive_self_attr_cname
-                        )
+                    )
         ))
         for reified_function_entry in entry.type.scope.reified_entries:
             reifying_class_name = "%s%s" % (Naming.cypclass_reified_prefix, reified_function_entry.name)
@@ -1624,8 +1595,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             destructor = None
             if entry.type.is_cyp_class and entry.type.activable:
                 code.putln("struct Activated;")
-                dunder_activate_entry = scope.lookup_here("__activate__")
-                code.putln("%s;" % dunder_activate_entry.type.declaration_code(dunder_activate_entry.cname))
+                code.putln("%s::Activated *__activate__();" % entry.type.empty_declaration_code())
             for attr in scope.var_entries:
                 cname = attr.cname
                 if attr.is_mutable:

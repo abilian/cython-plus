@@ -872,50 +872,6 @@ class Scope(object):
 
                 if entry.type.activable:
                     # === Acthon ===
-                    act_scope = CppClassScope("Activated", scope)
-                    act_type = PyrexTypes.CypClassType(
-                        EncodedString("Activated"), act_scope, "Activated", None, templates = templates, lock_mode=entry.type.lock_mode)
-                    act_type.set_scope(act_scope)
-                    act_type.namespace = entry.type
-
-                    # Declare dunder activate method (its definition is generated automatically)
-                    from . import Builtin
-                    queue_type = Builtin.acthon_queue_type
-                    result_type = Builtin.acthon_result_type
-                    queue_arg = PyrexTypes.CFuncTypeArg(EncodedString("queue"), queue_type, pos)
-                    result_type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(result_type, [], nogil = 1))
-                    result_arg = PyrexTypes.CFuncTypeArg(EncodedString("result"), result_type, pos)
-                    activate_type = PyrexTypes.CFuncType(act_type, [queue_arg, result_arg], nogil = 1, optional_arg_count = 2)
-
-                    # HACK !!! This is a dirty duplication of Nodes.CFuncDeclaratorNode.declare_optional_arg_struct
-                    def declare_opt_arg_struct(func_type, name, env, pos):
-                        scope = StructOrUnionScope()
-                        arg_count_member = EncodedString('%sn' % Naming.pyrex_prefix)
-                        scope.declare_var(arg_count_member, PyrexTypes.c_int_type, pos)
-
-                        for arg in func_type.args[len(func_type.args) - func_type.optional_arg_count:]:
-                            scope.declare_var(arg.name, arg.type, arg.pos, allow_pyobject=True, allow_memoryview=True)
-
-                        struct_cname = env.mangle(Naming.opt_arg_prefix, name)
-
-                        op_args_struct = env.global_scope().declare_struct_or_union(
-                            name=EncodedString(struct_cname),
-                            kind='struct',
-                            scope=scope,
-                            typedef_flag=0,
-                            pos=pos,
-                            cname=struct_cname)
-
-                        op_args_struct.defined_in_pxd = 1
-                        op_args_struct.used = 1
-
-                        func_type.op_arg_struct = PyrexTypes.c_ptr_type(op_args_struct.type)
-
-                    declare_opt_arg_struct(activate_type, name, self, pos)
-
-                    activate_entry = scope.declare(EncodedString("__activate__"), "__activate__", activate_type, None, 'extern')
-                    activate_entry.is_variable = activate_entry.is_cfunction = 1
-                    activate_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), "__activate__")
 
                     # Declare 'activate' function for this class
                     activate_func_arg = PyrexTypes.CFuncTypeArg(EncodedString("o"), entry.type, pos)

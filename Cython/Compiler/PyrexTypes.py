@@ -256,6 +256,7 @@ class PyrexType(BaseType):
     is_cpp_class = 0
     is_cyp_class = 0
     is_const_cyp_class = 0
+    is_qualified_cyp_class = 0
     is_cpp_string = 0
     is_struct = 0
     is_enum = 0
@@ -4768,6 +4769,108 @@ class ConstCypclassType(BaseType):
         return getattr(self.const_base_type, name)
 
 
+class QualifiedCypclassType(BaseType):
+    "A qualified cypclass reference"
+
+    # qualifier     string      the qualifier keyword
+
+    subtypes = ['qual_base_type']
+
+    is_cyp_class = 1
+    is_qualified_cyp_class = 1
+
+    def __init__(self, base_type, qualifier):
+        assert base_type.is_cyp_class
+        self.qual_base_type = base_type
+        self.qualifier = qualifier
+
+        if qualifier == 'active':
+            assert base_type.activable
+            # For now just redirect to the nested "Activated" cypclass scope
+            self.scope = self.qual_base_type.scope.lookup_here("Activated").type.scope
+
+        elif base_type.has_attributes and base_type.scope is not None:
+            from .Symtab import QualifiedCypclassScope
+            self.scope = QualifiedCypclassScope(base_type.scope, qualifier)
+
+    def __repr__(self):
+        return "<QualifiedCypclassType %s%r>" % self.qual_base_type
+
+    def __str__(self):
+        return self.declaration_code("", for_display=1)
+
+    def declaration_code(self, entity_code, for_display = 0, dll_linkage = None, pyrex = 0, template_params = None, deref = 0):
+        if for_display:
+            decl = self.qual_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex, template_params, deref)
+            return "%s %s" % (self.qualifier, decl)
+        if self.qualifier == 'active':
+            decl_type = self.qual_base_type.scope.lookup_here("Activated").type
+        else:
+            decl_type = self.qual_base_type
+        return decl_type.declaration_code(entity_code, for_display, dll_linkage, pyrex, template_params, deref)
+
+    def empty_declaration_code(self):
+        if self._empty_declaration is None:
+            self._empty_declaration = self.qual_base_type.empty_declaration_code()
+        return self._empty_declaration
+
+    def cast_code(self, expr_code):
+        return "((%s)%s)" % (self.declaration_code(''), expr_code)
+
+    def dynamic_cast_code(self, expr_code):
+        return "dynamic_cast<%s>(%s)" % (self.declaration_code(''), expr_code)
+
+    def resolve(self):
+        base_type = self.qual_base_type.resolve()
+        if base_type == self.qual_base_type:
+            return self
+        return QualifiedCypclassType(base_type, self.qualifier)
+
+    def specialize(self, values):
+        base_type = self.qual_base_type.specialize(values)
+        if base_type == self.qual_base_type:
+            return self
+        return QualifiedCypclassType(base_type, self.qualifier)
+
+    def as_argument_type(self):
+        return self
+
+    def deduce_template_params(self, actual):
+        return self.qual_base_type.deduce_template_params(actual)
+
+    def can_coerce_to_pyobject(self, env):
+        return self.qual_base_type.can_coerce_to_pyobject(env)
+
+    def can_coerce_from_pyobject(self, env):
+        return self.qual_base_type.can_coerce_from_pyobject(env)
+
+    def create_to_py_utility_code(self, env):
+        if self.qual_base_type.create_to_py_utility_code(env):
+            self.to_py_function = self.qual_base_type.to_py_function
+            return True
+
+    def assignable_from(self, src_type):
+        return self.assignable_from_resolved_type(src_type.resolve())
+
+    def assignable_from_resolved_type(self, src_type):
+        if src_type.is_qualified_cyp_class and self.qualifier == src_type.qualifier:
+            return self.qual_base_type.assignable_from_resolved_type(src_type.qual_base_type)
+        return 0
+
+    def same_as(self, other_type):
+        if not other_type.is_qualified_cyp_class:
+            return 0
+        return self.same_as_resolved_type(other_type.resolve())
+
+    def same_as_resolved_type(self, other_type):
+        if other_type.is_qualified_cyp_class and self.qualifier == other_type.qualifier:
+            return self.qual_base_type.same_as_resolved_type(other_type.qual_base_type)
+        return 0
+
+    def __getattr__(self, name):
+        return getattr(self.qual_base_type, name)
+
+
 class TemplatePlaceholderType(CType):
     is_template_typename = 1
 
@@ -5668,6 +5771,13 @@ def cyp_class_const_type(base_type):
         return error_type
     else:
         return ConstCypclassType(base_type)
+
+def cyp_class_qualified_type(base_type, qualifier):
+    # Construct a qualified cypclass type.
+    if base_type is error_type:
+        return error_type
+    else:
+        return QualifiedCypclassType(base_type, qualifier)
 
 def qualified_method_type(base_type, const, volatile):
     # Construct a proxy type for methods looked-up from qualified objects.

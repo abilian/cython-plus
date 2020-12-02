@@ -919,6 +919,20 @@ class Scope(object):
                     activate_entry.is_variable = activate_entry.is_cfunction = 1
                     activate_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), "__activate__")
 
+                    activate_func_arg = PyrexTypes.CFuncTypeArg(EncodedString("o"), entry.type, pos)
+                    activate_func_return = PyrexTypes.cyp_class_qualified_type(entry.type, 'active')
+                    activate_func_type = PyrexTypes.CFuncType(activate_func_return, [activate_func_arg], nogil = 1)
+                    builtin_scope = scope.builtin_scope()
+                    if 'activate' in builtin_scope.entries:
+                        activate_func_entry = Entry(EncodedString('activate'), 'activate', activate_func_type, pos=None)
+                        activate_func_entry.visibility = 'extern'
+                        activate_func_entry.scope = builtin_scope
+                        activate_func_entry.overloaded_alternatives = builtin_scope.entries['activate'].overloaded_alternatives
+                        activate_func_entry.overloaded_alternatives.append(activate_func_entry)
+                    else:
+                        activate_func_entry = builtin_scope.declare(EncodedString('activate'), 'activate', activate_func_type, None, 'extern')
+                    activate_func_entry.is_variable = activate_func_entry.is_cfunction = 1
+
         if self.is_cpp_class_scope:
             entry.type.namespace = self.outer_scope.lookup(self.name).type
         return entry
@@ -3278,6 +3292,25 @@ class CConstOrVolatileScope(Scope):
             self.cached_const_or_volatile_entries[name] = entry
             return entry
 
+
+class QualifiedCypclassScope(Scope):
+
+    def __init__(self, base_type_scope, qualifier):
+        Scope.__init__(
+            self,
+            'cyp_qual_' + base_type_scope.name,
+            base_type_scope.outer_scope,
+            base_type_scope.parent_scope)
+        self.base_type_scope = base_type_scope
+        self.qualifier = qualifier
+        self.cached_qualified_entries = {}
+
+    def lookup_here(self, name):
+        try:
+            return self.cached_qualified_entries[name]
+        except KeyError:
+            # TODO
+            pass
 
 class TemplateScope(Scope):
     def __init__(self, name, outer_scope):

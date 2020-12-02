@@ -152,7 +152,7 @@ def test_acthon_chain(n):
         after_sync1 = ActivityCounterSync(sync1)
     obj = A()
     with wlocked obj:
-        obj_actor = obj.__activate__()
+        obj_actor = activate(obj)
         with wlocked obj_actor, wlocked sync1, wlocked after_sync1:
             # Pushing things in the queue
             obj_actor.setter(sync1, n)

@@ -450,6 +450,15 @@
         }
 
         /*
+            * Activate a passive Cyobject.
+            */
+        template <typename T>
+        static inline typename T::Activated * activate(T * ob) {
+            static_assert(std::is_convertible<T *, ActhonActivableClass *>::value, "wrong type for activate");
+            return ob->__activate__(NULL);
+        }
+
+        /*
             * Cast from CyObject to PyObject:
             *  - borrow an atomic reference
             *  - return a new Python reference

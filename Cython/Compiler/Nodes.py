@@ -1348,6 +1348,19 @@ class CConstOrVolatileTypeNode(CBaseTypeNode):
         return PyrexTypes.c_const_or_volatile_type(base, self.is_const, self.is_volatile)
 
 
+class QualifiedCypclassNode(CBaseTypeNode):
+    # base_type     CBaseTypeNode
+    # qualifier     string
+    child_attrs = ["base_type"]
+
+    def analyse(self, env, could_be_name=False):
+        base = self.base_type.analyse(env, could_be_name)
+        if not base.is_cyp_class:
+            error(self.pos, "Qualifier '%s' can only apply to cypclass types" % self.qualifier)
+            return base
+        return PyrexTypes.cyp_class_qualified_type(base, self.qualifier)
+
+
 class CVarDefNode(StatNode):
     #  C variable definition or forward/extern function declaration.
     #

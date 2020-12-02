@@ -4785,13 +4785,12 @@ class QualifiedCypclassType(BaseType):
         self.qualifier = qualifier
 
         if qualifier == 'active':
+            # TODO: raise a proper compilation error.
             assert base_type.activable
-            # For now just redirect to the nested "Activated" cypclass scope
-            self.scope = self.qual_base_type.scope.lookup_here("Activated").type.scope
 
-        elif base_type.has_attributes and base_type.scope is not None:
-            from .Symtab import QualifiedCypclassScope
-            self.scope = QualifiedCypclassScope(base_type.scope, qualifier)
+        if base_type.scope is not None:
+            from .Symtab import qualified_cypclass_scope
+            self.scope = qualified_cypclass_scope(base_type.scope, qualifier)
 
     def __repr__(self):
         return "<QualifiedCypclassType %s%r>" % self.qual_base_type
@@ -4804,10 +4803,12 @@ class QualifiedCypclassType(BaseType):
             decl = self.qual_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex, template_params, deref)
             return "%s %s" % (self.qualifier, decl)
         if self.qualifier == 'active':
-            decl_type = self.qual_base_type.scope.lookup_here("Activated").type
+            if not deref:
+                entity_code = "*%s" % entity_code
+            namespace_decl = namespace_declaration_code(self.qual_base_type)
+            return "%s::Activated %s" % (namespace_decl, entity_code)
         else:
-            decl_type = self.qual_base_type
-        return decl_type.declaration_code(entity_code, for_display, dll_linkage, pyrex, template_params, deref)
+            return self.qual_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex, template_params, deref)
 
     def empty_declaration_code(self):
         if self._empty_declaration is None:

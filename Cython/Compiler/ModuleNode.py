@@ -968,8 +968,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         """
             Generate activate function for activable cypclass entries.
         """
-
-        active_self_entry = entry.type.scope.lookup_here("<active_self>")
+        activate_class_decl = "%s::Activated" % entry.type.empty_declaration_code()
         dunder_activate_entry = entry.type.scope.lookup_here("__activate__")
         # Here we generate the function header like Nodes.CFuncDefNode would do,
         # but we streamline the process because we know the exact prototype.
@@ -985,30 +984,30 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("if (%s->%sn <= %s) {" %
                         (Naming.optional_args_cname,
                         Naming.pyrex_prefix, i))
-            code.putln("activated_instance = new %s::Activated(%s);" %
-                        (entry.type.empty_declaration_code(),
+            code.putln("activated_instance = new %s(%s);" %
+                        (activate_class_decl,
                         ", ".join(activated_class_constructor_optargs_list + activated_class_constructor_defaultargs_list[i:])))
             code.putln("} else {")
             activated_class_constructor_optargs_list.append("%s->%s" %
                                                             (Naming.optional_args_cname,
                                                             dunder_activate_entry.type.opt_arg_cname(arg.name)))
         # We're in the final else clause, corresponding to all optional arguments specified)
-        code.putln("activated_instance = new %s::Activated(%s);" %
-                    (entry.type.empty_declaration_code(),
+        code.putln("activated_instance = new %s(%s);" %
+                    (activate_class_decl,
                     ", ".join(activated_class_constructor_optargs_list)))
         for _ in dunder_activate_entry.type.args:
             code.putln("}")
         code.putln("}")
         code.putln("else {")
-        code.putln("if (this->%s == NULL) {" % active_self_entry.cname)
-        code.putln("this->%s = new %s::Activated(this, %s);" %
-                    (active_self_entry.cname,
-                    entry.type.empty_declaration_code(),
+        code.putln("if (this->%s == NULL) {" % Naming.cypclass_active_self_cname)
+        code.putln("this->%s = new %s(this, %s);" %
+                    (Naming.cypclass_active_self_cname,
+                    activate_class_decl,
                     ", ".join(activated_class_constructor_defaultargs_list))
                     )
         code.putln("}")
-        code.putln("Cy_INCREF(this->%s);" % active_self_entry.cname)
-        code.putln("activated_instance = this->%s;" % active_self_entry.cname)
+        code.putln("Cy_INCREF((%s *)(this->%s));" % (activate_class_decl, Naming.cypclass_active_self_cname))
+        code.putln("activated_instance = (%s *)(this->%s);" % (activate_class_decl, Naming.cypclass_active_self_cname))
         code.putln("}")
         code.putln("return activated_instance;")
         code.putln("}")
@@ -1051,8 +1050,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                         passive_self_attr_cname
                         )
         ))
-        for reifying_class_entry in entry.type.scope.reifying_entries:
-            reified_function_entry = reifying_class_entry.reified_entry
+        for reified_function_entry in entry.type.scope.reified_entries:
+            reifying_class_name = "%s%s" % (Naming.cypclass_reified_prefix, reified_function_entry.name)
+            reifying_class_full_name = "%s::%s" % (PyrexTypes.namespace_declaration_code(entry.type), reifying_class_name)
+
             code.putln("// generating reified of %s" % reified_function_entry.name)
             reified_arg_cname_list = []
             reified_arg_decl_list = []
@@ -1075,9 +1076,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             message_constructor_args_list = ["this->%s" % passive_self_attr_cname, "sync_object", "result_object"] + reified_arg_cname_list
             message_constructor_args_code = ", ".join(message_constructor_args_list)
-            code.putln("%s = new %s(%s);" % (
-                reifying_class_entry.type.declaration_code("message"),
-                reifying_class_entry.type.empty_declaration_code(),
+            code.putln("%s * message = new %s(%s);" % (
+                reifying_class_full_name,
+                reifying_class_full_name,
                 message_constructor_args_code
             ))
 
@@ -1147,9 +1148,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 else:
                     code.decrease_indent()
 
-        for reifying_class_entry in entry.type.scope.reifying_entries:
-            reified_function_entry = reifying_class_entry.reified_entry
-            reifying_class_full_name = reifying_class_entry.type.empty_declaration_code()
+        for reified_function_entry in entry.type.scope.reified_entries:
+            reifying_class_name = "%s%s" % (Naming.cypclass_reified_prefix, reified_function_entry.name)
+            reifying_class_full_name = "%s::%s" % (PyrexTypes.namespace_declaration_code(entry.type), reifying_class_name)
             class_name = reifying_class_full_name.split('::')[-1]
             code.putln("struct %s : public %s {" % (reifying_class_full_name, message_base_type.empty_declaration_code()))
             # Declaring target object & reified method arguments
@@ -1622,8 +1623,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             constructor = None
             destructor = None
             if entry.type.is_cyp_class and entry.type.activable:
-                activated_class_entry = scope.lookup_here("Activated")
-                code.putln("struct %s;" % activated_class_entry.cname)
+                code.putln("struct Activated;")
                 dunder_activate_entry = scope.lookup_here("__activate__")
                 code.putln("%s;" % dunder_activate_entry.type.declaration_code(dunder_activate_entry.cname))
             for attr in scope.var_entries:
@@ -1651,8 +1651,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             is_implementing = 'init_module' in code.globalstate.parts
 
-            for reified in scope.reifying_entries:
-                code.putln("struct %s;" % reified.cname)
+            for reified in scope.reified_entries:
+                reifying_class_name = "%s%s" % (Naming.cypclass_reified_prefix, reified.name)
+                code.putln("struct %s;" % reifying_class_name)
 
             def generate_cpp_constructor_code(arg_decls, arg_names, is_implementing, py_attrs, constructor):
                 if is_implementing:

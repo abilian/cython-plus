@@ -177,6 +177,8 @@ class Entry(object):
     # static_cname     string     The cname of a static method in a cypclass
     #
     # original_name    string     The original name of a cpp or cypclass method
+    #
+    # is_asyncable     boolean    Is a cypclass method that can be called asynchronously
 
     # TODO: utility_code and utility_code_definition serves the same purpose...
 
@@ -254,6 +256,7 @@ class Entry(object):
     from_type = None
     static_cname = None
     original_name = None
+    is_asyncable = False
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name
@@ -869,18 +872,13 @@ class Scope(object):
 
                 if entry.type.activable:
                     # === Acthon ===
-                    # Declare activated class
                     act_scope = CppClassScope("Activated", scope)
                     act_type = PyrexTypes.CypClassType(
                         EncodedString("Activated"), act_scope, "Activated", None, templates = templates, lock_mode=entry.type.lock_mode)
                     act_type.set_scope(act_scope)
                     act_type.namespace = entry.type
-                    #scope.declare_cpp_class("Activated", act_scope, pos)
-                    act_entry = scope.declare(EncodedString("Activated"), "Activated", act_type, pos, visibility)
-                    act_entry.is_type = 1
-                    # Declaring active_self member and activate function (its definition is generated automatically)
-                    act_attr_name = EncodedString(Naming.builtin_prefix + "_active_self")
-                    scope.declare_var(EncodedString("<active_self>"), act_type, pos, cname=act_attr_name)
+
+                    # Declare dunder activate method (its definition is generated automatically)
                     from . import Builtin
                     queue_type = Builtin.acthon_queue_type
                     result_type = Builtin.acthon_result_type
@@ -919,6 +917,7 @@ class Scope(object):
                     activate_entry.is_variable = activate_entry.is_cfunction = 1
                     activate_entry.func_cname = "%s::%s" % (entry.type.empty_declaration_code(), "__activate__")
 
+                    # Declare 'activate' function for this class
                     activate_func_arg = PyrexTypes.CFuncTypeArg(EncodedString("o"), entry.type, pos)
                     activate_func_return = PyrexTypes.cyp_class_qualified_type(entry.type, 'active')
                     activate_func_type = PyrexTypes.CFuncType(activate_func_return, [activate_func_arg], nogil = 1)
@@ -2806,7 +2805,7 @@ class CppClassScope(Scope):
         self.directives = outer_scope.directives
         self.inherited_var_entries = []
         self.inherited_type_entries = []
-        self.reifying_entries = []
+        self.reified_entries = []
         if templates is not None:
             for T in templates:
                 template_entry = self.declare(
@@ -2865,38 +2864,8 @@ class CppClassScope(Scope):
     def reify_method(self, entry):
         if entry.type.has_varargs:
             error(entry.pos, "Could not reify method with ellipsis (you can use optional arguments)")
-        # Create the reifying class
-        reified_name = EncodedString("reified_" + entry.name)
-        reified_cname = Naming.builtin_prefix + reified_name
-        scope = CppClassScope(reified_name, self)
-        reified_type = PyrexTypes.CypClassType(reified_name, scope, reified_cname, None, templates = None, lock_mode="nolock")
-        reified_type.namespace = self.type
-        #reify_base_classes = ()
-        reifying_entry = self.declare(reified_name, reified_cname, reified_type, entry.pos, 'extern')  # FIXME: visibility
-        #reified_entry.is_cpp_class = 1
-        reifying_entry.reified_entry = entry
-        self.reifying_entries.append(reifying_entry)
-        # Add the base method to the Activated member class
-        from . import Builtin
-        activated_class_entry = self.lookup_here("Activated")
-        result_type = Builtin.acthon_result_type
-        sync_type = Builtin.acthon_sync_type
-
-        activated_method_sync_attr_type = PyrexTypes.CFuncTypeArg(
-            "sync_method", PyrexTypes.CConstOrVolatileType(sync_type, is_const=1), entry.pos, "sync_method")
-
-        activated_method_type = PyrexTypes.CFuncType(result_type,
-            [activated_method_sync_attr_type] + entry.type.args, nogil=entry.type.nogil,
-            has_varargs = entry.type.has_varargs,
-            optional_arg_count = entry.type.optional_arg_count)
-        if hasattr(entry.type, 'op_arg_struct'):
-            activated_method_type.op_arg_struct = entry.type.op_arg_struct
-
-        activated_method_entry = activated_class_entry.type.scope.declare(entry.name, entry.cname,
-            activated_method_type, entry.pos, 'extern')
-        activated_method_entry.is_cfunction = 1
-        activated_method_entry.is_variable = 1
-
+        self.reified_entries.append(entry)
+        entry.is_asyncable = True
 
     # Return the type declaration string if stripped_name corresponds to a known type, None otherwise.
     # The returned string is intended to be used to build an operator of the form "operator <type name>".
@@ -3298,7 +3267,7 @@ class QualifiedCypclassScope(Scope):
     def __init__(self, base_type_scope, qualifier):
         Scope.__init__(
             self,
-            'cyp_qual_' + base_type_scope.name,
+            '%s_' % qualifier + base_type_scope.name,
             base_type_scope.outer_scope,
             base_type_scope.parent_scope)
         self.base_type_scope = base_type_scope
@@ -3309,8 +3278,54 @@ class QualifiedCypclassScope(Scope):
         try:
             return self.cached_qualified_entries[name]
         except KeyError:
-            # TODO
-            pass
+            entry = self.resolve(name)
+            self.cached_qualified_entries[name] = entry
+            return entry
+
+    def resolve(self, name):
+        return None
+
+
+def qualified_cypclass_scope(base_type_scope, qualifier):
+    if qualifier == 'active':
+        return ActiveCypclassScope(base_type_scope)
+    else:
+        return QualifiedCypclassScope(base_type_scope, qualifier)
+
+
+class ActiveCypclassScope(QualifiedCypclassScope):
+    def __init__(self, base_type_scope):
+        QualifiedCypclassScope.__init__(self, base_type_scope, 'active')
+
+    def resolve(self, name):
+        base_entry = self.base_type_scope.lookup_here(name)
+        if base_entry is None or not base_entry.is_asyncable:
+            return None
+        from . import Builtin
+        result_type = Builtin.acthon_result_type
+        sync_type = Builtin.acthon_sync_type
+        activated_method_sync_attr_type = PyrexTypes.CFuncTypeArg(
+            EncodedString("sync_method"),
+            PyrexTypes.CConstOrVolatileType(sync_type, is_const=1),
+            base_entry.pos,
+            "sync_method",
+        )
+        activated_method_type = PyrexTypes.CFuncType(
+            result_type,
+            [activated_method_sync_attr_type] + base_entry.type.args,
+            nogil=base_entry.type.nogil,
+            has_varargs = base_entry.type.has_varargs,
+            optional_arg_count = base_entry.type.optional_arg_count,
+        )
+        if hasattr(base_entry.type, 'op_arg_struct'):
+            activated_method_type.op_arg_struct = base_entry.type.op_arg_struct
+        activated_method_entry = Entry(base_entry.name, base_entry.cname, activated_method_type, base_entry.pos)
+        activated_method_entry.visibility = 'extern'
+        activated_method_entry.scope = self
+        activated_method_entry.is_cfunction = 1
+        activated_method_entry.is_variable = 1
+        return activated_method_entry
+
 
 class TemplateScope(Scope):
     def __init__(self, name, outer_scope):

@@ -362,6 +362,7 @@
 
         struct ActhonActivableClass : public CyObject {
             ActhonQueueInterface *_active_queue_class = NULL;
+            void *_active_self = NULL;
             ActhonResultInterface *(*_active_result_class)(void);
             ActhonActivableClass(){} // Used in Activated classes inheritance chain (base Activated calls this, derived calls the 2 args version below)
             ActhonActivableClass(ActhonQueueInterface * queue_object, ActhonResultInterface *(*result_constructor)(void));

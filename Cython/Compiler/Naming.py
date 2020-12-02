@@ -170,6 +170,10 @@ api_name        = pyrex_prefix + "capi__"
 # cname for the type that defines the essential memory layout of a cypclass wrapper.
 cypclass_wrapper_layout_type = "CyPyObject"
 
+# active cypclass
+cypclass_reified_prefix = builtin_prefix + 'active_'
+cypclass_active_self_cname = "_active_self"
+
 # the h and api guards get changed to:
 #  __PYX_HAVE__FILENAME (for ascii filenames)
 #  __PYX_HAVE_U_PUNYCODEFILENAME (for non-ascii filenames)

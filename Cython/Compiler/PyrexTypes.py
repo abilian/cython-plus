@@ -4802,13 +4802,7 @@ class QualifiedCypclassType(BaseType):
         if for_display:
             decl = self.qual_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex, template_params, deref)
             return "%s %s" % (self.qualifier, decl)
-        if self.qualifier == 'active':
-            if not deref:
-                entity_code = "*%s" % entity_code
-            namespace_decl = namespace_declaration_code(self.qual_base_type)
-            return "%s::Activated %s" % (namespace_decl, entity_code)
-        else:
-            return self.qual_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex, template_params, deref)
+        return self.qual_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex, template_params, deref)
 
     def empty_declaration_code(self):
         if self._empty_declaration is None:

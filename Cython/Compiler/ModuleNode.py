@@ -934,8 +934,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 if entry.type.activable:
                     # Generate acthon-specific classes
                     self.generate_cyp_class_reifying_entries(entry, code)
-                    self.generate_cyp_class_activated_class(entry, code)
-                    self.generate_cyp_class_activate_function(entry, code)
+                    self.generate_cyp_class_activated_methods(entry, code)
                 # Generate cypclass attr destructor
                 self.generate_cyp_class_attrs_destructor_definition(entry, code)
                 # Generate wrapper constructor
@@ -964,29 +963,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.putln("Cy_XDECREF(this->%s);" % attr.cname)
             code.putln("}")
 
-    def generate_cyp_class_activate_function(self, entry, code):
+    def generate_cyp_class_activated_methods(self, entry, code):
         """
-            Generate activate function for activable cypclass entries.
-        """
-        class_decl = entry.type.empty_declaration_code()
-        activated_class_decl = "%s::Activated" % class_decl
-        code.putln("%s *%s::__activate__() {" % (activated_class_decl, class_decl))
-        code.putln("if (this->%s == NULL) {" % Naming.cypclass_active_self_cname)
-        code.putln("this->%s = new %s(this, %s);" % (
-                    Naming.cypclass_active_self_cname,
-                    activated_class_decl,
-                    ", ".join(["this->_active_queue_class", "this->_active_result_class"])
-            )
-        )
-        code.putln("}")
-        code.putln("Cy_INCREF((%s *)(this->%s));" % (activated_class_decl, Naming.cypclass_active_self_cname))
-        code.putln("return (%s *)(this->%s);" % (activated_class_decl, Naming.cypclass_active_self_cname))
-        code.putln("}")
-
-
-    def generate_cyp_class_activated_class(self, entry, code):
-        """
-            Generate activated cypclass.
+            Generate activated cypclass methods.
         """
 
         from . import Builtin
@@ -996,31 +975,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
         result_attr_cname = "_active_result_class"
         queue_attr_cname = "_active_queue_class"
-        passive_self_attr_cname = Naming.builtin_prefix + entry.type.empty_declaration_code().replace('::', '__') + "_passive_self"
 
-        activable_bases_cnames = [base.cname for base in entry.type.base_classes if base.activable]
-        activable_bases_inheritance_list = ["public %s::Activated" % cname for cname in activable_bases_cnames]
-        if activable_bases_cnames:
-            base_classes_code = ", ".join(activable_bases_inheritance_list)
-            initialize_code = ", ".join([
-                "%s::Activated(passive_object, active_queue, active_result_constructor)" % cname
-                for cname in activable_bases_cnames
-            ])
-        else:
-            base_classes_code = "public ActhonActivableClass"
-            initialize_code = "ActhonActivableClass(active_queue, active_result_constructor)"
-        code.putln("struct %s::Activated : %s {" % (entry.type.empty_declaration_code(), base_classes_code))
-        code.putln("%s;" % entry.type.declaration_code(passive_self_attr_cname))
-        result_constructor_type = PyrexTypes.CPtrType(PyrexTypes.CFuncType(result_interface_type, [], nogil = 1))
-        code.putln(("Activated(%s * passive_object, %s, %s)"
-                    ": %s, %s(passive_object){} // Used by _passive_self.__activate__()" % (
-                        entry.type.empty_declaration_code(),
-                        queue_interface_type.declaration_code("active_queue"),
-                        result_constructor_type.declaration_code("active_result_constructor"),
-                        initialize_code,
-                        passive_self_attr_cname
-                    )
-        ))
         for reified_function_entry in entry.type.scope.reified_entries:
             reifying_class_name = "%s%s" % (Naming.cypclass_reified_prefix, reified_function_entry.name)
             reifying_class_full_name = "%s::%s" % (PyrexTypes.namespace_declaration_code(entry.type), reifying_class_name)
@@ -1040,12 +995,13 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 reified_arg_decl_list.append(reified_function_entry.type.op_arg_struct.declaration_code(opt_cname))
 
             activated_method_arg_decl_code = ", ".join([sync_interface_type.declaration_code("sync_object")] + reified_arg_decl_list)
-            function_header = reified_function_entry.type.function_header_code(reified_function_entry.cname, activated_method_arg_decl_code)
+            active_entry = reified_function_entry.active_entry
+            function_header = active_entry.type.function_header_code(active_entry.func_cname, activated_method_arg_decl_code)
             function_code = result_interface_type.declaration_code(function_header)
             code.putln("%s {" % function_code)
             code.putln("%s = this->%s();" % (result_interface_type.declaration_code("result_object"), result_attr_cname))
 
-            message_constructor_args_list = ["this->%s" % passive_self_attr_cname, "sync_object", "result_object"] + reified_arg_cname_list
+            message_constructor_args_list = ["this", "sync_object", "result_object"] + reified_arg_cname_list
             message_constructor_args_code = ", ".join(message_constructor_args_list)
             code.putln("%s * message = new %s(%s);" % (
                 reifying_class_full_name,
@@ -1066,7 +1022,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln("/* Return result object */")
             code.putln("return result_object;")
             code.putln("}")
-        code.putln("};")
 
     def generate_cyp_class_reifying_entries(self, entry, code):
         """
@@ -1593,9 +1548,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             has_virtual_methods = False
             constructor = None
             destructor = None
-            if entry.type.is_cyp_class and entry.type.activable:
-                code.putln("struct Activated;")
-                code.putln("%s::Activated *__activate__();" % entry.type.empty_declaration_code())
+
             for attr in scope.var_entries:
                 cname = attr.cname
                 if attr.is_mutable:
@@ -1622,8 +1575,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             is_implementing = 'init_module' in code.globalstate.parts
 
             for reified in scope.reified_entries:
+                # declare message class
                 reifying_class_name = "%s%s" % (Naming.cypclass_reified_prefix, reified.name)
                 code.putln("struct %s;" % reifying_class_name)
+                # declare active method
+                code.putln("virtual %s;" % reified.active_entry.type.declaration_code(reified.active_entry.cname))
 
             def generate_cpp_constructor_code(arg_decls, arg_names, is_implementing, py_attrs, constructor):
                 if is_implementing:
@@ -1751,6 +1707,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                  or e.static_cname is not None)  # mro-resolve the virtual methods used to dispatch static methods
             and not e.type.has_varargs  # avoid dealing with varargs for now (is this ever required anyway ?)
         ]
+        inherited_activated_methods = [e.active_entry for e in inherited_methods if e.active_entry is not None]
+        inherited_methods.extend(inherited_activated_methods)
         if inherited_methods:
             code.putln("")
             code.putln("/* make all inherited (non overriden) methods resolve correctly according to the MRO */")

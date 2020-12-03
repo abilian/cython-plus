@@ -362,7 +362,6 @@
 
         struct ActhonActivableClass : public CyObject {
             ActhonQueueInterface *_active_queue_class = NULL;
-            void *_active_self = NULL;
             ActhonResultInterface *(*_active_result_class)(void);
             ActhonActivableClass(){} // Used in Activated classes inheritance chain (base Activated calls this, derived calls the 2 args version below)
             ActhonActivableClass(ActhonQueueInterface * queue_object, ActhonResultInterface *(*result_constructor)(void));
@@ -454,9 +453,10 @@
             * Activate a passive Cyobject.
             */
         template <typename T>
-        static inline typename T::Activated * activate(T * ob) {
+        static inline T * activate(T * ob) {
             static_assert(std::is_convertible<T *, ActhonActivableClass *>::value, "wrong type for activate");
-            return ob->__activate__();
+            Cy_INCREF(ob);
+            return ob;
         }
 
         /*

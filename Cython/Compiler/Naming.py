@@ -172,6 +172,7 @@ cypclass_wrapper_layout_type = "CyPyObject"
 
 # active cypclass
 cypclass_reified_prefix = builtin_prefix + 'active_'
+cypclass_active_func_prefix = func_prefix + 'active_'
 cypclass_active_self_cname = "_active_self"
 
 # the h and api guards get changed to:

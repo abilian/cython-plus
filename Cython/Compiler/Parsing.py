@@ -309,6 +309,8 @@ def _p_factor(s):
             return p_typecast(s)
         elif sy == 'IDENT' and s.systring == "sizeof":
             return p_sizeof(s)
+        elif sy == 'IDENT' and s.systring == "consume":
+            return p_consume(s)
     return p_power(s)
 
 def p_typecast(s):
@@ -356,6 +358,13 @@ def p_sizeof(s):
             base_type = base_type, declarator = declarator)
     s.expect(')')
     return node
+
+def p_consume(s):
+    # s.sy == ident "consume"
+    pos = s.position()
+    s.next()
+    operand = p_factor(s)
+    return ExprNodes.ConsumeNode(pos, operand = operand)
 
 
 def p_yield_expression(s):
@@ -2535,7 +2544,7 @@ def p_c_simple_base_type(s, self_flag, nonempty, templates = None):
             base_type=base_type, is_const=is_const, is_volatile=is_volatile)
 
     # Handle cypclass qualifiers
-    if s.sy == 'IDENT' and s.systring in ('active',):
+    if s.sy == 'IDENT' and s.systring in ('active', 'iso'):
         qualifier = s.systring
         s.next()
         base_type = p_c_base_type(s, self_flag=self_flag, nonempty=nonempty, templates=templates)

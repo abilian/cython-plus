@@ -538,6 +538,8 @@ def simply_type(result_type, pos):
         result_type = result_type.ref_base_type
     if result_type.is_cv_qualified:
         result_type = result_type.cv_base_type
+    if result_type.is_qualified_cyp_class and result_type.qualifier == 'iso~':
+        result_type = PyrexTypes.cyp_class_qualified_type(result_type.qual_base_type, 'iso')
     if result_type.is_cpp_class:
         result_type.check_nullary_constructor(pos)
     if result_type.is_array:

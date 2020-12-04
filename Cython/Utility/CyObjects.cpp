@@ -439,7 +439,7 @@
 
         /*
             * Check whether a CyObject is an instance of a given type.
-            * 
+            *
             * template:
             *  - T: the type
             */
@@ -463,7 +463,7 @@
             * Cast from CyObject to PyObject:
             *  - borrow an atomic reference
             *  - return a new Python reference
-            * 
+            *
             * Note: an optimisation could be to steal a reference but only decrement
             * when Python already has a reference, because calls to this function
             * are likely (certain even?) to be followed by a Cy_DECREF; stealing the
@@ -488,11 +488,11 @@
             * Cast from PyObject to CyObject:
             *  - borrow an Python reference
             *  - return a new atomic reference
-            * 
+            *
             * In case of conversion failure:
             *  - raise an exception
             *  - return NULL
-            * 
+            *
             * template:
             *  - U: the type of the underlying cypclass
             */
@@ -791,7 +791,7 @@ void CyLock::unwlock() {
 /*
  * Atomic counter increment and decrement implementation based on
  * @source: https://www.boost.org/doc/libs/1_73_0/doc/html/atomic/usage_examples.html
- */ 
+ */
 void CyObject::CyObject_INCREF() const
 {
     this->nogil_ob_refcnt.fetch_add(1, std::memory_order_relaxed);

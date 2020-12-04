@@ -1048,11 +1048,15 @@ class ExprNode(Node):
             src = CoerceToComplexNode(src, dst_type, env)
         else:
             # neither src nor dst are py types
+            # Qualified cypclass types can have nontrivial aliasing rules
+            # meaning type equality may not imply the coercion is valid.
+            if src_type.is_qualified_cyp_class and not dst_type.assignable_from(src_type):
+                self.fail_assignment(dst_type)
             # Added the string comparison, since for c types that
             # is enough, but Cython gets confused when the types are
             # in different pxi files.
             # TODO: Remove this hack and require shared declarations.
-            if not (src.type == dst_type or str(src.type) == str(dst_type) or dst_type.assignable_from(src_type)):
+            elif not (src.type == dst_type or str(src.type) == str(dst_type) or dst_type.assignable_from(src_type)):
                 self.fail_assignment(dst_type)
         return src
 
@@ -3945,8 +3949,8 @@ class IndexNode(_IndexingBaseNode):
         elif self.exception_check == '~':
             self.is_temp = True
         self.index = self.index.coerce_to(func_type.args[0].type, env)
-        self.type = func_type.return_type
-        if setting and not func_type.return_type.is_reference:
+        self.type = func_type.return_type.as_returned_type()
+        if setting and not self.type.is_reference:
             error(self.pos, "Can't set non-reference result '%s'" % self.type)
         return self
 
@@ -3979,7 +3983,7 @@ class IndexNode(_IndexingBaseNode):
             self.is_temp = True
 
         self.index = self.index.coerce_to(function.type.args[0].type, env)
-        self.type = func_type.return_type
+        self.type = func_type.return_type.as_returned_type()
         return self
 
     def analyse_cyp_class_setitem(self, env):
@@ -4019,7 +4023,7 @@ class IndexNode(_IndexingBaseNode):
             env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
 
         self.index = self.index.coerce_to(function.type.args[0].type, env)
-        self.type = func_type.return_type
+        self.type = func_type.return_type.as_returned_type()
         return self
 
     def analyse_as_c_function(self, env):
@@ -6234,7 +6238,7 @@ class SimpleCallNode(CallNode):
             else:
                 self.type = PyrexTypes.CPtrType(self.function.class_type)
         else:
-            self.type = func_type.return_type
+            self.type = func_type.return_type.as_returned_type()
 
         if self.function.is_name or self.function.is_attribute:
             func_entry = self.function.entry
@@ -6723,7 +6727,7 @@ class PythonCapiCallNode(SimpleCallNode):
 
     def __init__(self, pos, function_name, func_type,
                  utility_code = None, py_name=None, **kwargs):
-        self.type = func_type.return_type
+        self.type = func_type.return_type.as_returned_type()
         self.result_ctype = self.type
         self.function = PythonCapiFunctionNode(
             pos, py_name, function_name, func_type,
@@ -11346,6 +11350,78 @@ class SizeofVarNode(SizeofNode):
         pass
 
 
+class ConsumeNode(ExprNode):
+    #  Consume expression
+    #
+    #  operand   ExprNode
+
+    subexprs = ['operand']
+    generate_runtime_check = True
+    operand_is_named = True
+
+    def infer_type(self, env):
+        operand_type = self.operand.infer_type(env)
+        if operand_type.is_cyp_class:
+            return PyrexTypes.cyp_class_qualified_type(operand_type, 'iso~')
+        else:
+            return operand_type
+
+    def analyse_types(self, env):
+        self.operand = self.operand.analyse_types(env)
+        operand_type = self.operand.type
+        if not operand_type.is_cyp_class:
+            error(self.pos, "Can only consume cypclass")
+            self.type = PyrexTypes.error_type
+            return self
+        if self.operand.is_name or self.operand.is_attribute:
+            self.is_temp = self.operand_is_named = True
+            # We steal the reference of the operand.
+            self.use_managed_ref = False
+        if operand_type.is_qualified_cyp_class:
+            if operand_type.qualifier == 'iso!':
+                error(self.pos, "Cannot consume iso!")
+                self.type = PyrexTypes.error_type
+                return self
+            self.generate_runtime_check = operand_type.qualifier not in ('iso', 'iso~')
+            if operand_type.qualifier == 'iso~':
+                self.type = operand_type
+            else:
+                self.type = PyrexTypes.cyp_class_qualified_type(operand_type.qual_base_type, 'iso~')
+        else:
+            self.type = PyrexTypes.cyp_class_qualified_type(operand_type, 'iso~')
+        return self
+
+    def may_be_none(self):
+        return self.operand.may_be_none()
+
+    def is_simple(self):
+        return self.operand.is_simple()
+
+    def make_owned_reference(self, code):
+        # We steal the reference of the consumed operand.
+        pass
+
+    def calculate_result_code(self):
+        if self.generate_runtime_check:
+            # TODO: generate runtime check for isolation
+            return self.operand.result()
+        else:
+            return self.operand.result()
+
+    def generate_result_code(self, code):
+        if self.is_temp:
+            operand_result = self.operand.result()
+            code.putln("%s = %s;" % (self.result(), operand_result))
+            if self.generate_runtime_check:
+                # TODO: generate runtime check for isolation
+                pass
+            # We steal the reference of the operand.
+            code.putln("%s = NULL;" % operand_result)
+        if self.operand.is_temp:
+            # TODO: steal the reference of the operand instead
+            code.put_incref(self.result(), self.type)
+
+
 class TypeidNode(ExprNode):
     #  C++ typeid operator applied to a type or variable
     #
@@ -11634,7 +11710,7 @@ class BinopNode(ExprNode):
         else:
             self.operand1 = self.operand1.coerce_to(func_type.args[0].type, env)
             self.operand2 = self.operand2.coerce_to(func_type.args[1].type, env)
-        self.type = func_type.return_type
+        self.type = func_type.return_type.as_returned_type()
 
     def result_type(self, type1, type2, env):
         if self.is_pythran_operation_types(type1, type2, env):
@@ -13330,7 +13406,7 @@ class PrimaryCmpNode(ExprNode, CmpNode):
         else:
             self.operand1 = self.operand1.coerce_to(func_type.args[0].type, env)
             self.operand2 = self.operand2.coerce_to(func_type.args[1].type, env)
-        self.type = func_type.return_type
+        self.type = func_type.return_type.as_returned_type()
 
     def analyse_memoryviewslice_comparison(self, env):
         have_none = self.operand1.is_none or self.operand2.is_none

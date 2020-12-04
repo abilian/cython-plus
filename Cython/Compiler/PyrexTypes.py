@@ -228,6 +228,9 @@ class PyrexType(BaseType):
     #    Coerces array and C function types into pointer type for use as
     #    a formal argument type.
     #
+    #  as_returned_type():
+    #    Potentially annotates function call return types as pure rvalues.
+    #
 
     is_pyobject = 0
     is_unspecified = 0
@@ -314,6 +317,9 @@ class PyrexType(BaseType):
         return self.same_as(src_type)
 
     def as_argument_type(self):
+        return self
+
+    def as_returned_type(self):
         return self
 
     def is_complete(self):
@@ -647,6 +653,12 @@ class CheckedResultType(BaseType):
 
     def as_argument_type(self):
         return self.checked_base_type.as_argument_type()
+
+    def as_returned_type(self):
+        returned_base_type = self.checked_base_type.as_returned_type()
+        if returned_base_type.same_as(self.checked_base_type):
+            return self
+        return CheckedResultType(self.pos, returned_base_type)
 
     def cast_code(self, expr_code):
         return self.checked_base_type.cast_code(expr_code)
@@ -1263,6 +1275,9 @@ class BufferType(BaseType):
         return True
 
     def as_argument_type(self):
+        return self
+
+    def as_returned_type(self):
         return self
 
     def specialize(self, values):
@@ -1955,6 +1970,9 @@ class QualifiedMethodType(BaseType):
 
     def as_argument_type(self):
         return c_ptr_type(self)
+
+    def as_returned_type(self):
+        return self
 
     # All that follows is just to behave exactly like the underlying function type
 
@@ -2999,6 +3017,13 @@ class CReferenceType(BaseType):
             return self
         else:
             return type(self)(base_type)
+
+    def as_returned_type(self):
+        returned_base_type = self.ref_base_type.as_returned_type()
+        if returned_base_type == self.ref_base_type:
+            return self
+        else:
+            return CReferenceType(returned_base_type)
 
     def deduce_template_params(self, actual):
         return self.ref_base_type.deduce_template_params(actual)
@@ -4618,6 +4643,8 @@ class CypClassType(CppClassType):
     def assignable_from_resolved_type(self, other_type):
         if other_type.is_const_cyp_class:
             return 0
+        if other_type.is_qualified_cyp_class and other_type.qualifier != 'iso~':
+            return 0
         if other_type.is_ptr and other_type.base_type.is_cpp_class and other_type.base_type.is_subclass(self) or other_type.is_null_ptr:
             return 1
         return super(CypClassType, self).assignable_from_resolved_type(other_type)
@@ -4733,6 +4760,9 @@ class ConstCypclassType(BaseType):
     def as_argument_type(self):
         return self
 
+    def as_returned_type(self):
+        return self
+
     def deduce_template_params(self, actual):
         return self.const_base_type.deduce_template_params(actual)
 
@@ -4772,12 +4802,19 @@ class ConstCypclassType(BaseType):
 class QualifiedCypclassType(BaseType):
     "A qualified cypclass reference"
 
-    # qualifier     string      the qualifier keyword
+    # qualifier     string      the qualifier keyword: ('active' | 'iso' | 'iso~' | 'iso!' )
 
     subtypes = ['qual_base_type']
 
     is_cyp_class = 1
     is_qualified_cyp_class = 1
+
+    assignable_to = {
+        'active': ('active', 'iso~'),
+        'iso': ('iso~',),
+        'iso~': (),
+        'iso!': (),
+    }
 
     def __init__(self, base_type, qualifier):
         assert base_type.is_cyp_class
@@ -4830,6 +4867,11 @@ class QualifiedCypclassType(BaseType):
     def as_argument_type(self):
         return self
 
+    def as_returned_type(self):
+        if self.qualifier == 'iso':
+            return QualifiedCypclassType(self.qual_base_type, 'iso~')
+        return self
+
     def deduce_template_params(self, actual):
         return self.qual_base_type.deduce_template_params(actual)
 
@@ -4848,7 +4890,7 @@ class QualifiedCypclassType(BaseType):
         return self.assignable_from_resolved_type(src_type.resolve())
 
     def assignable_from_resolved_type(self, src_type):
-        if src_type.is_qualified_cyp_class and self.qualifier == src_type.qualifier:
+        if src_type.is_qualified_cyp_class and src_type.qualifier in self.assignable_to[self.qualifier]:
             return self.qual_base_type.assignable_from_resolved_type(src_type.qual_base_type)
         return 0
 

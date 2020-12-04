@@ -3272,6 +3272,8 @@ class QualifiedCypclassScope(Scope):
 def qualified_cypclass_scope(base_type_scope, qualifier):
     if qualifier == 'active':
         return ActiveCypclassScope(base_type_scope)
+    elif qualifier.startswith('iso'):
+        return IsoCypclassScope(base_type_scope)
     else:
         return QualifiedCypclassScope(base_type_scope, qualifier)
 
@@ -3291,6 +3293,61 @@ class ActiveCypclassScope(QualifiedCypclassScope):
             e.active_entry.overloaded_alternatives = active_alternatives
             active_alternatives.append(e.active_entry)
         return base_entry.active_entry
+
+
+class IsoCypclassScope(QualifiedCypclassScope):
+    def __init__(self, base_type_scope):
+        QualifiedCypclassScope.__init__(self, base_type_scope, 'iso')
+
+    def adapt(self, fieldtype, qualifier='iso'):
+        if fieldtype.is_qualified_cyp_class:
+            # attribute is sendable (either 'iso' or 'active')
+            return fieldtype
+        elif fieldtype.is_cyp_class:
+            # viewpoint adaptation
+            return PyrexTypes.cyp_class_qualified_type(fieldtype, qualifier)
+        else:
+            return fieldtype
+
+    def adapt_arg_type(self, arg):
+        arg = copy.copy(arg)
+        arg.type = self.adapt(arg.type)
+        return arg
+
+    def adapt_method_entry(self, base_entry):
+        iso_method_type = copy.copy(base_entry.type)
+        # The return type should be treated as 'iso' but cannot be consumed
+        return_type = self.adapt(base_entry.type.return_type, qualifier='iso!')
+        iso_method_type.return_type = return_type
+        iso_method_type.args = [self.adapt_arg_type(arg) for arg in base_entry.type.args]
+        if hasattr(base_entry.type, 'op_arg_struct'):
+            iso_method_type.op_arg_struct = entry.type.op_arg_struct
+        entry = copy.copy(base_entry)
+        entry.type = iso_method_type
+        return entry
+
+    def resolve(self, name):
+        base_entry = self.base_type_scope.lookup_here(name)
+        if base_entry is None:
+            return None
+        if base_entry.is_type:
+            return base_entry
+        if base_entry.is_cfunction:
+            iso_alternatives = []
+            for e in base_entry.all_alternatives():
+                iso_entry = self.adapt_method_entry(e)
+                iso_alternatives.append(iso_entry)
+                iso_entry.overloaded_alternatives = iso_alternatives
+            return iso_alternatives[0]
+        else:
+            base_entry_type = base_entry.type
+            adapted_type = self.adapt(base_entry_type)
+            if adapted_type is base_entry_type:
+                return base_entry
+            else:
+                entry = copy.copy(base_entry)
+                entry.type = adapted_type
+                return entry
 
 
 class TemplateScope(Scope):

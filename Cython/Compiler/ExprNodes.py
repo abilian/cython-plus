@@ -506,8 +506,8 @@ class ExprNode(Node):
             return self.calculate_result_code()
 
     def _make_move_result_rhs(self, result, allow_move=True):
-        if (self.is_temp and allow_move and
-                self.type.is_cpp_class and not self.type.is_reference):
+        if (self.is_temp and allow_move and self.type.is_cpp_class
+                and not self.type.is_cyp_class and not self.type.is_reference):
             self.has_temp_moved = True
             return "__PYX_STD_MOVE_IF_SUPPORTED({0})".format(result)
         else:
@@ -832,7 +832,7 @@ class ExprNode(Node):
                 # postponed from self.generate_evaluation_code()
                 self.generate_subexpr_disposal_code(code)
                 self.free_subexpr_temps(code)
-            if self.result() and not self.has_temp_moved:
+            if self.result():
                 if self.type.is_cyp_class:
                     code.put_xdecref_clear(self.result(), self.ctype(),
                                             have_gil=not self.in_nogil_context)
@@ -2961,7 +2961,7 @@ class CppIteratorNode(ExprNode):
                 code.putln("%s = %s%s;" % (self.cpp_sequence_cname,
                                            "&" if temp_type.is_ptr else "",
                                            self.sequence.move_result_rhs()))
-                if sequence_type.is_cyp_class and not self.sequence.has_temp_moved:
+                if sequence_type.is_cyp_class:
                     code.put_incref(self.cpp_sequence_cname, sequence_type)
                 code.putln("%s = %s%sbegin();" % (self.result(), self.cpp_sequence_cname,
                                                   self.cpp_attribute_op))
@@ -3007,7 +3007,7 @@ class CppIteratorNode(ExprNode):
             ExprNode.generate_subexpr_disposal_code(self, code)
             ExprNode.free_subexpr_temps(self, code)
             # Adapt relevant bits from ExprNode.generate_disposal_code
-            if self.result() and not self.has_temp_moved and self.type.is_cyp_class:
+            if self.result() and self.type.is_cyp_class:
                 code.put_xdecref_clear(self.result(), self.ctype(), have_gil=not self.in_nogil_context)
             if self.has_temp_moved:
                 code.globalstate.use_utility_code(
@@ -6284,10 +6284,7 @@ class SimpleCallNode(CallNode):
         if self.type.is_cyp_class and isinstance(self.function, NewExprNode):
             return "%s()" % self.function.result()
         for formal_arg, actual_arg in args[:expected_nargs]:
-            if formal_arg.type.is_cyp_class:
-                arg_code = actual_arg.result()
-            else:
-                arg_code = actual_arg.move_result_rhs_as(formal_arg.type)
+            arg_code = actual_arg.move_result_rhs_as(formal_arg.type)
             arg_list_code.append(arg_code)
 
         if func_type.is_overridable:

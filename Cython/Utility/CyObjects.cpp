@@ -13,9 +13,6 @@
 
 #ifdef __cplusplus
     #if __cplusplus >= 201103L
-        #include <atomic>
-        using namespace std;
-        #define CyObject_ATOMIC_REFCOUNT_TYPE atomic_int
         #define CyObject_NO_OWNER -1
         #define CyObject_MANY_OWNERS -2
 
@@ -24,12 +21,13 @@
 
         #define CyObject_RAISE_ON_CONTENTION 0
 
+        #include <atomic>
+
         #include <pthread.h>
-
         #include <sys/types.h>
-
         #include <unistd.h>
         #include <sys/syscall.h>
+
         #include <vector>
 
         #include <sstream>
@@ -38,15 +36,14 @@
 
         #include <type_traits>
 
-
         class CyLock {
             static pthread_mutex_t log_guard;
             protected:
                 pthread_mutex_t guard;
                 pthread_cond_t readers_have_left;
                 pthread_cond_t writer_has_left;
-                atomic<pid_t> owner_id;
-                atomic_int readers_nb;
+                std::atomic<pid_t> owner_id;
+                std::atomic_int readers_nb;
                 uint32_t write_count;
                 const char *owner_context;
             public:
@@ -78,22 +75,41 @@
             PyObject_HEAD
         };
 
+        /*
+         * Atomic counter increment and decrement implementation based on
+         * @source: https://www.boost.org/doc/libs/1_73_0/doc/html/atomic/usage_examples.html
+         */
         class CyObject : public CyPyObject {
             private:
-                mutable CyObject_ATOMIC_REFCOUNT_TYPE nogil_ob_refcnt;
+                mutable std::atomic_int nogil_ob_refcnt;
                 mutable CyLock ob_lock;
             public:
                 CyObject(): nogil_ob_refcnt(1) {}
                 virtual ~CyObject() {}
-                void CyObject_INCREF() const;
-                int CyObject_DECREF() const;
-                int CyObject_GETREF() const;
+
+                /* Locking methods */
                 void CyObject_RLOCK(const char * context) const;
                 void CyObject_WLOCK(const char * context) const;
                 void CyObject_UNRLOCK() const;
                 void CyObject_UNWLOCK() const;
                 int CyObject_TRYRLOCK() const;
                 int CyObject_TRYWLOCK() const;
+
+                /* Reference counting methods */
+                void CyObject_INCREF() const {
+                    this->nogil_ob_refcnt.fetch_add(1, std::memory_order_relaxed);
+                }
+                int CyObject_DECREF() const {
+                    if (this->nogil_ob_refcnt.fetch_sub(1, std::memory_order_release) == 1) {
+                        std::atomic_thread_fence(std::memory_order_acquire);
+                        delete this;
+                        return 1;
+                    }
+                    return 0;
+                }
+                int CyObject_GETREF() const {
+                    return this->nogil_ob_refcnt.load(std::memory_order_relaxed);
+                }
         };
 
         template <typename T, typename = void>
@@ -785,31 +801,6 @@ void CyLock::unwlock() {
         pthread_cond_broadcast(&this->writer_has_left);
     }
     pthread_mutex_unlock(&this->guard);
-}
-
-
-/*
- * Atomic counter increment and decrement implementation based on
- * @source: https://www.boost.org/doc/libs/1_73_0/doc/html/atomic/usage_examples.html
- */
-void CyObject::CyObject_INCREF() const
-{
-    this->nogil_ob_refcnt.fetch_add(1, std::memory_order_relaxed);
-}
-
-int CyObject::CyObject_DECREF() const
-{
-    if (this->nogil_ob_refcnt.fetch_sub(1, std::memory_order_release) == 1) {
-        std::atomic_thread_fence(std::memory_order_acquire);
-        delete this;
-        return 1;
-    }
-    return 0;
-}
-
-int CyObject::CyObject_GETREF() const
-{
-    return this->nogil_ob_refcnt;
 }
 
 void CyObject::CyObject_RLOCK(const char *context) const

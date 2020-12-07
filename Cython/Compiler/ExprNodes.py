@@ -1881,6 +1881,8 @@ class NewExprNode(AtomicExprNode):
             self.type = error_type
             return
         self.cpp_check(env)
+        if type.is_cyp_class:
+            type = PyrexTypes.cyp_class_qualified_type(type, 'iso~')
         constructor = type.get_constructor(self.pos)
         self.class_type = type
         self.entry = constructor

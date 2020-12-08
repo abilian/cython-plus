@@ -11357,6 +11357,7 @@ class ConsumeNode(ExprNode):
     #
     #  operand   ExprNode
     #
+    #  nogil                    boolean     used internally
     #  generate_runtime_check   boolean     used internally
     #  operand_is_named         boolean     used internally
 
@@ -11370,6 +11371,7 @@ class ConsumeNode(ExprNode):
             return operand_type
 
     def analyse_types(self, env):
+        self.nogil = env.nogil
         self.operand = self.operand.analyse_types(env)
         operand_type = self.operand.type
         if not operand_type.is_cyp_class:
@@ -11415,7 +11417,17 @@ class ConsumeNode(ExprNode):
             code.putln("%s = %s;" % (self.result(), operand_result))
             if self.generate_runtime_check:
                 code.putln("if (!%s->CyObject_iso()) {" % self.result())
-                code.putln("std::terminate();")
+                if self.nogil:
+                    code.putln("#ifdef WITH_THREAD")
+                    code.putln("PyGILState_STATE _save = PyGILState_Ensure();")
+                    code.putln("#endif")
+                code.putln("PyErr_SetString(PyExc_TypeError, \"'consume' operand is not isolated\");")
+                if self.nogil:
+                    code.putln("#ifdef WITH_THREAD")
+                    code.putln("PyGILState_Release(_save);")
+                    code.putln("#endif")
+                code.putln(
+                    code.error_goto(self.pos))
                 code.putln("}")
             # We steal the reference of the operand.
             code.putln("%s = NULL;" % operand_result)

@@ -94,8 +94,8 @@
                 virtual int CyObject_iso() const {
                     return this->nogil_ob_refcnt == 1;
                 }
-                virtual int CyObject_traverse_iso(void *(*visit)(const CyObject *o, void *arg), void *arg) const {
-                    return 0;
+                virtual void CyObject_traverse_iso(void (*visit)(const CyObject *o, void *arg), void *arg) const {
+                    return;
                 }
 
                 /* Locking methods */
@@ -489,28 +489,26 @@
         /*
             * Visit callback to collect reachable fields.
             */
-        static void *__Pyx_CyObject_visit_collect(const CyObject *ob, void *arg) {
+        static void __Pyx_CyObject_visit_collect(const CyObject *ob, void *arg) {
             if (!ob)
-                return 0;
+                return;
             if (ob->__refcnt)
-                return 0;
+                return;
             ob->__refcnt = ob->CyObject_GETREF();
             const CyObject *head = reinterpret_cast<CyObject *>(arg);
             const CyObject *tmp = head->__next;
             ob->__next = tmp;
             head->__next = ob;
-            return 0;
         }
 
         /*
             * Visit callback to decref reachable fields.
             */
-        static void *__Pyx_CyObject_visit_decref(const CyObject *ob, void *arg) {
+        static void __Pyx_CyObject_visit_decref(const CyObject *ob, void *arg) {
             (void) arg;
             if (!ob)
-                return 0;
+                return;
             ob->__refcnt -= 1;
-            return 0;
         }
 
         /*

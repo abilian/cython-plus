@@ -990,11 +990,10 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         namespace = entry.type.empty_declaration_code()
         if templates_code:
             code.putln(templates_code)
-        code.putln("int %s::CyObject_traverse_iso(void *(*visit)(const CyObject *o, void *arg), void *arg) const" % namespace)
+        code.putln("void %s::CyObject_traverse_iso(void (*visit)(const CyObject *o, void *arg), void *arg) const" % namespace)
         code.putln("{")
         for attr in check_cypclass_attrs:
-            code.putln("if (void *ret = visit(this->%s, arg)) return (int) (intptr_t) ret;" % attr.cname)
-        code.putln("return 0;")
+            code.putln("visit(this->%s, arg);" % attr.cname)
         code.putln("}")
         # isolation check method
         if templates_code:
@@ -1672,7 +1671,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 # Declare the method to check isolation
                 code.putln("virtual int CyObject_iso() const;")
                 # Declare the traverse method
-                code.putln("virtual int CyObject_traverse_iso(void *(*visit)(const CyObject *o, void *arg), void *arg) const;")
+                code.putln("virtual void CyObject_traverse_iso(void (*visit)(const CyObject *o, void *arg), void *arg) const;")
 
             if type.is_cyp_class and cypclass_attrs:
                 # Declaring a small destruction handler which will always try to Cy_XDECREF

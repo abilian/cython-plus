@@ -950,13 +950,17 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             Generate destructor definition for the given cypclass entry.
         """
 
-        scope = entry.type.scope
+        type = entry.type
+        scope = type.scope
         cypclass_attrs = [e for e in scope.var_entries
                         if e.type.is_cyp_class and not e.name == "this"
                         and not e.is_type]
         if cypclass_attrs:
             cypclass_attrs_destructor_name = "%s__cypclass_attrs_destructor__%s" % (Naming.func_prefix, entry.name)
-            destructor_with_namespace = "void %s::%s()" % (entry.type.empty_declaration_code(), cypclass_attrs_destructor_name)
+            destructor_with_namespace = "void %s::%s()" % (type.empty_declaration_code(), cypclass_attrs_destructor_name)
+            if type.templates:
+                templates_code = "template <typename %s>" % ", typename ".join(t.name for t in type.templates)
+                code.putln(templates_code)
             code.putln(destructor_with_namespace)
             code.putln("{")
             for attr in cypclass_attrs:

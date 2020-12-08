@@ -11356,10 +11356,11 @@ class ConsumeNode(ExprNode):
     #  Consume expression
     #
     #  operand   ExprNode
+    #
+    #  generate_runtime_check   boolean     used internally
+    #  operand_is_named         boolean     used internally
 
     subexprs = ['operand']
-    generate_runtime_check = True
-    operand_is_named = True
 
     def infer_type(self, env):
         operand_type = self.operand.infer_type(env)
@@ -11375,10 +11376,6 @@ class ConsumeNode(ExprNode):
             error(self.pos, "Can only consume cypclass")
             self.type = PyrexTypes.error_type
             return self
-        if self.operand.is_name or self.operand.is_attribute:
-            self.is_temp = self.operand_is_named = True
-            # We steal the reference of the operand.
-            self.use_managed_ref = False
         if operand_type.is_qualified_cyp_class:
             if operand_type.qualifier == 'iso!':
                 error(self.pos, "Cannot consume iso!")
@@ -11390,7 +11387,13 @@ class ConsumeNode(ExprNode):
             else:
                 self.type = PyrexTypes.cyp_class_qualified_type(operand_type.qual_base_type, 'iso~')
         else:
+            self.generate_runtime_check = True
             self.type = PyrexTypes.cyp_class_qualified_type(operand_type, 'iso~')
+        self.operand_is_named = self.operand.is_name or self.operand.is_attribute
+        self.is_temp = self.operand_is_named or self.generate_runtime_check
+        if self.is_temp:
+            # We steal the reference of the operand.
+            self.use_managed_ref = False
         return self
 
     def may_be_none(self):
@@ -11404,19 +11407,16 @@ class ConsumeNode(ExprNode):
         pass
 
     def calculate_result_code(self):
-        if self.generate_runtime_check:
-            # TODO: generate runtime check for isolation
-            return self.operand.result()
-        else:
-            return self.operand.result()
+        return self.operand.result()
 
     def generate_result_code(self, code):
         if self.is_temp:
             operand_result = self.operand.result()
             code.putln("%s = %s;" % (self.result(), operand_result))
             if self.generate_runtime_check:
-                # TODO: generate runtime check for isolation
-                pass
+                code.putln("if (!%s->CyObject_iso()) {" % self.result())
+                code.putln("std::terminate();")
+                code.putln("}")
             # We steal the reference of the operand.
             code.putln("%s = NULL;" % operand_result)
         if self.operand.is_temp:

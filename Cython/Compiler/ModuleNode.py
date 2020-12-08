@@ -937,6 +937,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     self.generate_cyp_class_activated_methods(entry, code)
                 # Generate cypclass attr destructor
                 self.generate_cyp_class_attrs_destructor_definition(entry, code)
+                # Generate cypclass traverse method and isolation check method
+                self.generate_cyp_class_traverse_and_iso_definition(entry, code)
                 # Generate wrapper constructor
                 wrapper = scope.lookup_here("<constructor>")
                 constructor = scope.lookup_here("<init>")
@@ -966,6 +968,41 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             for attr in cypclass_attrs:
                 code.putln("Cy_XDECREF(this->%s);" % attr.cname)
             code.putln("}")
+
+    def generate_cyp_class_traverse_and_iso_definition(self, entry, code):
+        """
+            Generate traverse method and isolation check method definition for the given cypclass entry.
+        """
+
+        scope = entry.type.scope
+        all_cypclass_attrs = [e for e in scope.entries.values()
+                                if e.type.is_cyp_class and not e.name == "this"
+                                and not e.is_type]
+        # potential template
+        if entry.type.templates:
+            templates_code = "template <typename %s>" % ", typename ".join(t.name for t in entry.type.templates)
+        else:
+            templates_code = None
+        # traverse method
+        namespace = entry.type.empty_declaration_code()
+        if templates_code:
+            code.putln(templates_code)
+        code.putln("int %s::CyObject_traverse(void *(*visit)(const CyObject *o, void *arg), void *arg) const" % namespace)
+        code.putln("{")
+        for attr in all_cypclass_attrs:
+            code.putln("if (void *ret = visit(this->%s, arg)) return (int) (intptr_t) ret;" % attr.cname)
+        code.putln("return 0;")
+        code.putln("}")
+        # isolation check method
+        if templates_code:
+            code.putln(templates_code)
+        code.putln("int %s::CyObject_iso() const" % namespace)
+        code.putln("{")
+        if all_cypclass_attrs:
+            code.putln("return __Pyx_CyObject_owning(this) == 1;")
+        else:
+            code.putln("return this->CyObject_GETREF() == 1;")
+        code.putln("}")
 
     def generate_cyp_class_activated_methods(self, entry, code):
         """
@@ -1459,10 +1496,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln("Py_TYPE(wrapper) = %s;" % wrapper_type.typeptr_cname)
         code.putln("}")
 
-
-
-
-
     def generate_typedef(self, entry, code):
         base_type = entry.type.typedef_base_type
         enclosing_scope = entry.scope
@@ -1631,6 +1664,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     arg_decls = ["void"]
                     arg_names = []
                     generate_cpp_constructor_code(arg_decls, arg_names, is_implementing, py_attrs, constructor)
+
+            if type.is_cyp_class:
+                # Declare the method to check isolation
+                code.putln("virtual int CyObject_iso() const;")
+                # Declare the traverse method
+                code.putln("virtual int CyObject_traverse(void *(*visit)(const CyObject *o, void *arg), void *arg) const;")
 
             if type.is_cyp_class and cypclass_attrs:
                 # Declaring a small destruction handler which will always try to Cy_XDECREF

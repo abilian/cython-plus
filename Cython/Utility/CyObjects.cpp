@@ -83,9 +83,20 @@
             private:
                 mutable std::atomic_int nogil_ob_refcnt;
                 mutable CyLock ob_lock;
+
             public:
-                CyObject(): nogil_ob_refcnt(1) {}
+                mutable const CyObject * __next;
+                mutable int __refcnt;
+                CyObject(): nogil_ob_refcnt(1), __next(NULL), __refcnt(0) {}
                 virtual ~CyObject() {}
+
+                /* Object graph inspection methods */
+                virtual int CyObject_iso() const {
+                    return this->nogil_ob_refcnt == 1;
+                }
+                virtual int CyObject_traverse(void *(*visit)(const CyObject *o, void *arg), void *arg) const {
+                    return 0;
+                }
 
                 /* Locking methods */
                 void CyObject_RLOCK(const char * context) const;
@@ -473,6 +484,67 @@
             static_assert(std::is_convertible<T *, ActhonActivableClass *>::value, "wrong type for activate");
             Cy_INCREF(ob);
             return ob;
+        }
+
+        /*
+            * Visit callback to collect reachable fields.
+            */
+        static void *__Pyx_CyObject_visit_collect(const CyObject *ob, void *arg) {
+            if (!ob)
+                return 0;
+            if (ob->__refcnt)
+                return 0;
+            ob->__refcnt = ob->CyObject_GETREF();
+            const CyObject *head = reinterpret_cast<CyObject *>(arg);
+            const CyObject *tmp = head->__next;
+            ob->__next = tmp;
+            head->__next = ob;
+            return 0;
+        }
+
+        /*
+            * Visit callback to decref reachable fields.
+            */
+        static void *__Pyx_CyObject_visit_decref(const CyObject *ob, void *arg) {
+            (void) arg;
+            if (!ob)
+                return 0;
+            ob->__refcnt -= 1;
+            return 0;
+        }
+
+        /*
+            * Check if a CyObject is owning.
+            */
+        static inline int __Pyx_CyObject_owning(const CyObject *root) {
+            const CyObject *current;
+            bool owning = true;
+            int owners;
+            /* Mark the root as already visited */
+            root->__refcnt = root->CyObject_GETREF();
+            /* Collect the reachable objects */
+            for(current = root; current != NULL; current = current->__next) {
+                current->CyObject_traverse(__Pyx_CyObject_visit_collect, (void*)current);
+            }
+            /* Decref the reachable objects */
+            for(current = root; current != NULL; current = current->__next) {
+                current->CyObject_traverse(__Pyx_CyObject_visit_decref, (void*)current);
+            }
+            /* Search for externally reachable object */
+            for(current = root->__next; current != NULL; current = current->__next) {
+                if (current->__refcnt)
+                    owning = false;
+            }
+            /* Count external potential owners */
+            owners = root->__refcnt;
+            /* Cleanup */
+            for(current = root; current != NULL;) {
+                current->__refcnt = 0;
+                const CyObject *next = current->__next;
+                current->__next = NULL;
+                current = next;
+            }
+            return owning ? owners : 0;
         }
 
         /*

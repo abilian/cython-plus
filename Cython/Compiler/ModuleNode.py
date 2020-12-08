@@ -1002,6 +1002,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             active_entry = reified_function_entry.active_entry
             function_header = active_entry.type.function_header_code(active_entry.func_cname, activated_method_arg_decl_code)
             function_code = result_interface_type.declaration_code(function_header)
+            if entry.type.templates:
+                templates_code = "template <typename %s>" % ", typename ".join(t.name for t in entry.type.templates)
+                code.putln(templates_code)
             code.putln("%s {" % function_code)
             code.putln("%s = this->%s();" % (result_interface_type.declaration_code("result_object"), result_attr_cname))
 
@@ -1080,8 +1083,11 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
         for reified_function_entry in entry.type.scope.reified_entries:
             reifying_class_name = "%s%s" % (Naming.cypclass_reified_prefix, reified_function_entry.name)
-            reifying_class_full_name = "%s::%s" % (PyrexTypes.namespace_declaration_code(entry.type), reifying_class_name)
+            reifying_class_full_name = "%s::%s" % (entry.type.empty_declaration_code(), reifying_class_name)
             class_name = reifying_class_full_name.split('::')[-1]
+            if entry.type.templates:
+                templates_code = "template <typename %s>" % ", typename ".join(t.name for t in entry.type.templates)
+                code.putln(templates_code)
             code.putln("struct %s : public %s {" % (reifying_class_full_name, message_base_type.empty_declaration_code()))
             # Declaring target object & reified method arguments
             code.putln("%s;" % target_object_code)

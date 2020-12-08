@@ -1124,14 +1124,18 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             reifying_class_name = "%s%s" % (Naming.cypclass_reified_prefix, reified_function_entry.name)
             reifying_class_full_name = "%s::%s" % (entry.type.empty_declaration_code(), reifying_class_name)
             class_name = reifying_class_full_name.split('::')[-1]
+            if reified_function_entry.type.is_const_method:
+                qualified_target_object_code = "const %s" % target_object_code
+            else:
+                qualified_target_object_code = target_object_code
             if entry.type.templates:
                 templates_code = "template <typename %s>" % ", typename ".join(t.name for t in entry.type.templates)
                 code.putln(templates_code)
             code.putln("struct %s : public %s {" % (reifying_class_full_name, message_base_type.empty_declaration_code()))
             # Declaring target object & reified method arguments
-            code.putln("%s;" % target_object_code)
+            code.putln("%s;" % qualified_target_object_code)
             constructor_args_decl_list = [
-                target_object_code,
+                qualified_target_object_code,
                 sync_type.declaration_code(sync_arg_name),
                 result_type.declaration_code(result_arg_name)
             ]

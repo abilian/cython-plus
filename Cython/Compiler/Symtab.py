@@ -2821,25 +2821,22 @@ class CppClassScope(Scope):
         if entry.type.has_varargs:
             error(entry.pos, "Could not reify method with ellipsis (you can use optional arguments)")
         self.reified_entries.append(entry)
-        # create corresponding active entry
+        # create the corresponding active type and entry
         from . import Builtin
         result_type = Builtin.acthon_result_type
         sync_type = Builtin.acthon_sync_type
+        # create the sync argument type
         activated_method_sync_attr_type = PyrexTypes.CFuncTypeArg(
             EncodedString("sync_method"),
             PyrexTypes.CConstOrVolatileType(sync_type, is_const=1),
             entry.pos,
             "sync_method",
         )
-        activated_method_type = PyrexTypes.CFuncType(
-            result_type,
-            [activated_method_sync_attr_type] + entry.type.args,
-            nogil=entry.type.nogil,
-            has_varargs = entry.type.has_varargs,
-            optional_arg_count = entry.type.optional_arg_count,
-        )
-        if hasattr(entry.type, 'op_arg_struct'):
-            activated_method_type.op_arg_struct = entry.type.op_arg_struct
+        # create the active method type
+        activated_method_type = copy.copy(entry.type)
+        activated_method_type.return_type = result_type
+        activated_method_type.args = [activated_method_sync_attr_type] + entry.type.args
+        # create the active method entry
         activated_method_cname = "%s%s" % (Naming.cypclass_active_func_prefix, entry.cname)
         activated_method_entry = Entry(entry.name, activated_method_cname, activated_method_type, entry.pos)
         activated_method_entry.func_cname = "%s::%s" % (self.type.empty_declaration_code(), activated_method_cname)
@@ -2847,6 +2844,7 @@ class CppClassScope(Scope):
         activated_method_entry.scope = self
         activated_method_entry.is_cfunction = 1
         activated_method_entry.is_variable = 1
+        # associate the active entry to the passive entry
         entry.active_entry = activated_method_entry
 
 

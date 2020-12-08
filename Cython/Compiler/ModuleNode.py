@@ -975,9 +975,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         """
 
         scope = entry.type.scope
-        all_cypclass_attrs = [e for e in scope.entries.values()
-                                if e.type.is_cyp_class and not e.name == "this"
-                                and not e.is_type]
+        check_cypclass_attrs = [
+            e
+            for e in scope.entries.values()
+            if e.type.is_cyp_class and e.name != "this" and not e.is_type
+                and not e.type.is_qualified_cyp_class
+        ]
         # potential template
         if entry.type.templates:
             templates_code = "template <typename %s>" % ", typename ".join(t.name for t in entry.type.templates)
@@ -987,9 +990,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         namespace = entry.type.empty_declaration_code()
         if templates_code:
             code.putln(templates_code)
-        code.putln("int %s::CyObject_traverse(void *(*visit)(const CyObject *o, void *arg), void *arg) const" % namespace)
+        code.putln("int %s::CyObject_traverse_iso(void *(*visit)(const CyObject *o, void *arg), void *arg) const" % namespace)
         code.putln("{")
-        for attr in all_cypclass_attrs:
+        for attr in check_cypclass_attrs:
             code.putln("if (void *ret = visit(this->%s, arg)) return (int) (intptr_t) ret;" % attr.cname)
         code.putln("return 0;")
         code.putln("}")
@@ -998,7 +1001,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             code.putln(templates_code)
         code.putln("int %s::CyObject_iso() const" % namespace)
         code.putln("{")
-        if all_cypclass_attrs:
+        if check_cypclass_attrs:
             code.putln("return __Pyx_CyObject_owning(this) == 1;")
         else:
             code.putln("return this->CyObject_GETREF() == 1;")
@@ -1669,7 +1672,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 # Declare the method to check isolation
                 code.putln("virtual int CyObject_iso() const;")
                 # Declare the traverse method
-                code.putln("virtual int CyObject_traverse(void *(*visit)(const CyObject *o, void *arg), void *arg) const;")
+                code.putln("virtual int CyObject_traverse_iso(void *(*visit)(const CyObject *o, void *arg), void *arg) const;")
 
             if type.is_cyp_class and cypclass_attrs:
                 # Declaring a small destruction handler which will always try to Cy_XDECREF

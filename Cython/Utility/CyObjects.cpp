@@ -94,7 +94,7 @@
                 virtual int CyObject_iso() const {
                     return this->nogil_ob_refcnt == 1;
                 }
-                virtual int CyObject_traverse(void *(*visit)(const CyObject *o, void *arg), void *arg) const {
+                virtual int CyObject_traverse_iso(void *(*visit)(const CyObject *o, void *arg), void *arg) const {
                     return 0;
                 }
 
@@ -524,11 +524,11 @@
             root->__refcnt = root->CyObject_GETREF();
             /* Collect the reachable objects */
             for(current = root; current != NULL; current = current->__next) {
-                current->CyObject_traverse(__Pyx_CyObject_visit_collect, (void*)current);
+                current->CyObject_traverse_iso(__Pyx_CyObject_visit_collect, (void*)current);
             }
             /* Decref the reachable objects */
             for(current = root; current != NULL; current = current->__next) {
-                current->CyObject_traverse(__Pyx_CyObject_visit_decref, (void*)current);
+                current->CyObject_traverse_iso(__Pyx_CyObject_visit_decref, (void*)current);
             }
             /* Search for externally reachable object */
             for(current = root->__next; current != NULL; current = current->__next) {

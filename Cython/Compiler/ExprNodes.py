@@ -11414,9 +11414,10 @@ class ConsumeNode(ExprNode):
     def generate_result_code(self, code):
         if self.is_temp:
             operand_result = self.operand.result()
-            code.putln("%s = %s;" % (self.result(), operand_result))
+            result_code = self.result()
+            code.putln("%s = %s;" % (result_code, operand_result))
             if self.generate_runtime_check:
-                code.putln("if (!%s->CyObject_iso()) {" % self.result())
+                code.putln("if (%s != NULL && !%s->CyObject_iso()) {" % (result_code, result_code))
                 if self.nogil:
                     code.putln("#ifdef WITH_THREAD")
                     code.putln("PyGILState_STATE _save = PyGILState_Ensure();")

@@ -4894,6 +4894,8 @@ class QualifiedCypclassType(BaseType):
         return self.assignable_from_resolved_type(src_type.resolve())
 
     def assignable_from_resolved_type(self, src_type):
+        if src_type.is_null_ptr:
+            return 1
         if src_type.is_qualified_cyp_class and src_type.qualifier in self.assignable_to[self.qualifier]:
             return self.qual_base_type.assignable_from_resolved_type(src_type.qual_base_type)
         return 0

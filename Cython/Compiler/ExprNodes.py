@@ -11375,7 +11375,7 @@ class ConsumeNode(ExprNode):
         self.operand = self.operand.analyse_types(env)
         operand_type = self.operand.type
         if not operand_type.is_cyp_class:
-            error(self.pos, "Can only consume cypclass")
+            error(self.pos, "Can only consume cypclass (not '%s')" % operand_type)
             self.type = PyrexTypes.error_type
             return self
         if operand_type.is_qualified_cyp_class:

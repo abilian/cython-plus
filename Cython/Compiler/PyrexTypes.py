@@ -4809,6 +4809,9 @@ class QualifiedCypclassType(BaseType):
     is_cyp_class = 1
     is_qualified_cyp_class = 1
 
+    to_py_function = None
+    from_py_function = None
+
     assignable_to = {
         'active': ('active', 'iso~'),
         'iso': ('iso~',),
@@ -4876,15 +4879,16 @@ class QualifiedCypclassType(BaseType):
         return self.qual_base_type.deduce_template_params(actual)
 
     def can_coerce_to_pyobject(self, env):
-        return self.qual_base_type.can_coerce_to_pyobject(env)
+        return False
 
     def can_coerce_from_pyobject(self, env):
-        return self.qual_base_type.can_coerce_from_pyobject(env)
+        return False
 
     def create_to_py_utility_code(self, env):
-        if self.qual_base_type.create_to_py_utility_code(env):
-            self.to_py_function = self.qual_base_type.to_py_function
-            return True
+        return False
+
+    def create_from_py_utility_code(self, env):
+        return False
 
     def assignable_from(self, src_type):
         return self.assignable_from_resolved_type(src_type.resolve())

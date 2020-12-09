@@ -4802,7 +4802,7 @@ class ConstCypclassType(BaseType):
 class QualifiedCypclassType(BaseType):
     "A qualified cypclass reference"
 
-    # qualifier     string      the qualifier keyword: ('active' | 'iso' | 'iso~' | 'iso!' )
+    # qualifier     string      the qualifier keyword: ('active' | 'iso' | 'iso~' | 'iso&' )
 
     subtypes = ['qual_base_type']
 
@@ -4813,7 +4813,7 @@ class QualifiedCypclassType(BaseType):
         'active': ('active', 'iso~'),
         'iso': ('iso~',),
         'iso~': (),
-        'iso!': (),
+        'iso&': ('iso~',),
     }
 
     def __init__(self, base_type, qualifier):
@@ -5822,6 +5822,14 @@ def qualified_method_type(base_type, const, volatile):
         return error_type
     else:
         return QualifiedMethodType(base_type, const, volatile)
+
+def viewpoint_adaptation(base_type, qualifier = 'iso&'):
+    # Perform viewpoint adaptation for cypclass types.
+    if base_type.is_qualified_cyp_class:
+        return base_type
+    if base_type.is_cyp_class:
+        return QualifiedCypclassType(base_type, qualifier)
+    return base_type
 
 def same_type(type1, type2):
     return type1.same_as(type2)

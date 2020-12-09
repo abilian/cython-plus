@@ -17,7 +17,8 @@ from .Errors import warning, error, InternalError
 from .StringEncoding import EncodedString
 from . import Options, Naming
 from . import PyrexTypes
-from .PyrexTypes import py_object_type, cy_object_type, unspecified_type
+from .PyrexTypes import (
+    py_object_type, cy_object_type, unspecified_type, viewpoint_adaptation)
 from .TypeSlots import (
     pyfunction_signature, pymethod_signature, richcmp_special_methods,
     get_special_method_signature, get_property_accessor_signature)
@@ -3297,25 +3298,14 @@ class IsoCypclassScope(QualifiedCypclassScope):
     def __init__(self, base_type_scope):
         QualifiedCypclassScope.__init__(self, base_type_scope, 'iso')
 
-    def adapt(self, fieldtype, qualifier='iso'):
-        if fieldtype.is_qualified_cyp_class:
-            # attribute is sendable (either 'iso' or 'active')
-            return fieldtype
-        elif fieldtype.is_cyp_class:
-            # viewpoint adaptation
-            return PyrexTypes.cyp_class_qualified_type(fieldtype, qualifier)
-        else:
-            return fieldtype
-
     def adapt_arg_type(self, arg):
         arg = copy.copy(arg)
-        arg.type = self.adapt(arg.type)
+        arg.type = viewpoint_adaptation(arg.type)
         return arg
 
     def adapt_method_entry(self, base_entry):
         iso_method_type = copy.copy(base_entry.type)
-        # The return type should be treated as 'iso' but cannot be consumed
-        return_type = self.adapt(base_entry.type.return_type, qualifier='iso!')
+        return_type = viewpoint_adaptation(base_entry.type.return_type)
         iso_method_type.return_type = return_type
         iso_method_type.args = [self.adapt_arg_type(arg) for arg in base_entry.type.args]
         if hasattr(base_entry.type, 'op_arg_struct'):
@@ -3339,7 +3329,7 @@ class IsoCypclassScope(QualifiedCypclassScope):
             return iso_alternatives[0]
         else:
             base_entry_type = base_entry.type
-            adapted_type = self.adapt(base_entry_type)
+            adapted_type = viewpoint_adaptation(base_entry_type)
             if adapted_type is base_entry_type:
                 return base_entry
             else:

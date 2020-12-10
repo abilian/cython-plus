@@ -5530,6 +5530,19 @@ def best_match(arg_types, functions, pos=None, env=None, args=None, throw=False)
                         score[6] += src_type.base_type.subclass_dist(dst_type.base_type)
                     else:
                         score[5] += 1
+                elif src_type.is_cyp_class:
+                    if dst_type.is_cyp_class:
+                        if src_type.is_subclass(dst_type):
+                            score[6] += src_type.subclass_dist(dst_type)
+                        else:
+                            score[5] += 1
+                    elif dst_type.is_ptr:
+                        if src_type.is_subclass(dst_type.base_type):
+                            score[6] += src_type.subclass_dist(dst_type.base_type)
+                        elif dst_type.base_type == c_void_type:
+                            score[4] += 1
+                        else:
+                            score[5] += 1
                 elif not src_type.is_pyobject:
                     score[1] += 1
                 else:

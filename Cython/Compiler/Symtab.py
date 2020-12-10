@@ -3245,8 +3245,10 @@ class CConstOrVolatileScope(Scope):
 
 
 class QualifiedCypclassScope(Scope):
+    qualifier = 'qual'
 
-    def __init__(self, base_type_scope, qualifier):
+    def __init__(self, base_type_scope, qualifier = None):
+        qualifier = qualifier or self.qualifier
         Scope.__init__(
             self,
             '%s_' % qualifier + base_type_scope.name,
@@ -3265,6 +3267,19 @@ class QualifiedCypclassScope(Scope):
             return entry
 
     def resolve(self, name):
+        base_entry = self.base_type_scope.lookup_here(name)
+        if base_entry is None:
+            return None
+        alternatives = []
+        for e in base_entry.all_alternatives():
+            entry = self.adapt(e)
+            if entry is None:
+                continue
+            entry.overloaded_alternatives = alternatives
+            alternatives.append(entry)
+        return alternatives[0]
+
+    def adapt(self, base_entry):
         return None
 
 
@@ -3278,25 +3293,14 @@ def qualified_cypclass_scope(base_type_scope, qualifier):
 
 
 class ActiveCypclassScope(QualifiedCypclassScope):
-    def __init__(self, base_type_scope):
-        QualifiedCypclassScope.__init__(self, base_type_scope, 'active')
+    qualifier = 'active'
 
-    def resolve(self, name):
-        base_entry = self.base_type_scope.lookup_here(name)
-        if base_entry is None or base_entry.active_entry is None:
-            return None
-        active_alternatives = []
-        for e in base_entry.all_alternatives():
-            # all alternatives should be equally activable
-            assert e.active_entry is not None
-            e.active_entry.overloaded_alternatives = active_alternatives
-            active_alternatives.append(e.active_entry)
+    def adapt(self, base_entry):
         return base_entry.active_entry
 
 
 class IsoCypclassScope(QualifiedCypclassScope):
-    def __init__(self, base_type_scope):
-        QualifiedCypclassScope.__init__(self, base_type_scope, 'iso')
+    qualifier = 'iso'
 
     def adapt_arg_type(self, arg):
         arg = copy.copy(arg)
@@ -3308,25 +3312,15 @@ class IsoCypclassScope(QualifiedCypclassScope):
         return_type = viewpoint_adaptation(base_entry.type.return_type)
         iso_method_type.return_type = return_type
         iso_method_type.args = [self.adapt_arg_type(arg) for arg in base_entry.type.args]
-        if hasattr(base_entry.type, 'op_arg_struct'):
-            iso_method_type.op_arg_struct = entry.type.op_arg_struct
         entry = copy.copy(base_entry)
         entry.type = iso_method_type
         return entry
 
-    def resolve(self, name):
-        base_entry = self.base_type_scope.lookup_here(name)
-        if base_entry is None:
-            return None
+    def adapt(self, base_entry):
         if base_entry.is_type:
             return base_entry
         if base_entry.is_cfunction:
-            iso_alternatives = []
-            for e in base_entry.all_alternatives():
-                iso_entry = self.adapt_method_entry(e)
-                iso_alternatives.append(iso_entry)
-                iso_entry.overloaded_alternatives = iso_alternatives
-            return iso_alternatives[0]
+            return self.adapt_method_entry(base_entry)
         else:
             base_entry_type = base_entry.type
             adapted_type = viewpoint_adaptation(base_entry_type)

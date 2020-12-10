@@ -4650,7 +4650,16 @@ class CypClassType(CppClassType):
     def is_subclass(self, other_type):
         if other_type.is_const_cyp_class:
             other_type = other_type.const_base_type
+        elif other_type.is_qualified_cyp_class:
+            other_type = other_type.qual_base_type
         return super(CypClassType, self).is_subclass(other_type)
+
+    def subclass_dist(self, super_type):
+        if super_type.is_const_cyp_class:
+            super_type = super_type.const_base_type
+        elif super_type.is_qualified_cyp_class:
+            super_type = super_type.qual_base_type
+        return super(CypClassType, self).subclass_dist(super_type)
 
     def get_constructor(self, pos):
         # This is (currently) only called by new statements.
@@ -4910,6 +4919,12 @@ class QualifiedCypclassType(BaseType):
         if other_type.is_qualified_cyp_class and self.qualifier == other_type.qualifier:
             return self.qual_base_type.same_as_resolved_type(other_type.qual_base_type)
         return 0
+
+    def is_subclass(self, other_type):
+        return self.qual_base_type.is_subclass(other_type)
+
+    def subclass_dist(self, super_type):
+        return self.qual_base_type.subclass_dist(super_type)
 
     def __getattr__(self, name):
         return getattr(self.qual_base_type, name)

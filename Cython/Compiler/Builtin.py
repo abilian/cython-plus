@@ -606,7 +606,7 @@ def inject_acthon_interfaces(self):
     activable_scope.var_entries.append(activable_result_attr_entry)
 
     activable_queue_attr_entry = activable_scope.declare("_active_queue_class", "_active_queue_class",
-        queue_type, None, "extern")
+        PyrexTypes.cyp_class_qualified_type(queue_type, 'locked'), None, "extern")
     activable_queue_attr_entry.is_variable = 1
     activable_scope.var_entries.append(activable_queue_attr_entry)
 

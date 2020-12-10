@@ -134,7 +134,7 @@ cdef cypclass A activable:
     __init__(self):
         self.a = 0
         self._active_result_class = WaitResult.construct
-        self._active_queue_class = BasicQueue()
+        self._active_queue_class = consume BasicQueue()
     int getter(const self):
         return self.a
     void setter(self, int a):
@@ -146,19 +146,19 @@ def test_acthon_chain(n):
     42
     """
     cdef ActhonResultInterface res
-    cdef ActhonQueueInterface queue
+    cdef locked ActhonQueueInterface queue
     sync1 = ActivityCounterSync()
     after_sync1 = ActivityCounterSync(sync1)
 
     obj = A()
-    obj_actor = activate(obj)
+    queue = obj._active_queue_class
+    obj_actor = activate(consume obj)
 
     # Pushing things in the queue
     obj_actor.setter(sync1, n)
     res = obj_actor.getter(after_sync1)
 
     # Processing the queue
-    queue = obj._active_queue_class
     while not queue.is_empty():
         queue.activate()
     print <int> res

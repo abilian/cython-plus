@@ -875,7 +875,8 @@ class Scope(object):
                     # === Acthon ===
 
                     # Declare 'activate' function for this class
-                    activate_func_arg = PyrexTypes.CFuncTypeArg(EncodedString("o"), entry.type, pos)
+                    activate_func_arg_type = PyrexTypes.cyp_class_qualified_type(entry.type, 'iso')
+                    activate_func_arg = PyrexTypes.CFuncTypeArg(EncodedString("o"), activate_func_arg_type, pos)
                     activate_func_return = PyrexTypes.cyp_class_qualified_type(entry.type, 'active')
                     activate_func_type = PyrexTypes.CFuncType(activate_func_return, [activate_func_arg], nogil = 1)
                     builtin_scope = scope.builtin_scope()
@@ -2836,7 +2837,9 @@ class CppClassScope(Scope):
         # create the active method type
         activated_method_type = copy.copy(entry.type)
         activated_method_type.return_type = result_type
-        activated_method_type.args = [activated_method_sync_attr_type] + entry.type.args
+        copied_args = (copy.copy(arg) for arg in entry.type.args)
+        sendable_args = [setattr(arg, 'type', viewpoint_adaptation(arg.type)) or arg for arg in copied_args]
+        activated_method_type.args = [activated_method_sync_attr_type] + sendable_args
         # create the active method entry
         activated_method_cname = "%s%s" % (Naming.cypclass_active_func_prefix, entry.cname)
         activated_method_entry = Entry(entry.name, activated_method_cname, activated_method_type, entry.pos)

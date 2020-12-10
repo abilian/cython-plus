@@ -2544,7 +2544,7 @@ def p_c_simple_base_type(s, self_flag, nonempty, templates = None):
             base_type=base_type, is_const=is_const, is_volatile=is_volatile)
 
     # Handle cypclass qualifiers
-    if s.sy == 'IDENT' and s.systring in ('active', 'iso'):
+    if s.sy == 'IDENT' and s.systring in ('active', 'iso', 'locked'):
         qualifier = s.systring
         s.next()
         base_type = p_c_base_type(s, self_flag=self_flag, nonempty=nonempty, templates=templates)
@@ -3864,10 +3864,8 @@ def p_cpp_class_definition(s, pos,  ctx):
     if s.sy == '[':
         error(s.position(), "Name options not allowed for C++ class")
     nogil = p_nogil(s) or cypclass
-    lock_mode = None
     activable = False
     if cypclass:
-        lock_mode = p_cypclass_lock_mode(s)
         activable = p_cypclass_activable(s)
     if s.sy == ':':
         s.next()
@@ -3897,7 +3895,7 @@ def p_cpp_class_definition(s, pos,  ctx):
         visibility = ctx.visibility,
         in_pxd = ctx.level == 'module_pxd',
         attributes = attributes,
-        templates = templates, cypclass=cypclass, lock_mode=lock_mode, activable=activable)
+        templates = templates, cypclass=cypclass, activable=activable)
 
 def p_cpp_class_attribute(s, ctx):
     decorators = None
@@ -3922,14 +3920,6 @@ def p_cpp_class_attribute(s, ctx):
                 s.error("Decorators can only be followed by functions or classes")
             node.decorators = decorators
         return node
-
-def p_cypclass_lock_mode(s):
-    if s.sy == 'IDENT' and s.systring in ('nolock', 'checklock', 'autolock'):
-        mode = s.systring
-        s.next()
-        return mode
-    else:
-        return None
 
 def p_cypclass_activable(s):
     if s.sy == 'IDENT' and s.systring == 'activable':

@@ -1559,7 +1559,6 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
     #  templates     [(string, bool)] or None
     #  decorators    [DecoratorNode] or None
     #  cypclass      boolean
-    #  lock_mode     'nolock', 'checklock', 'autolock', or None
     #  activable     boolean
 
     decorators = None
@@ -1584,7 +1583,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         self.entry = env.declare_cpp_class(
             self.name, None, self.pos, self.cname,
             base_classes=[], visibility=self.visibility, templates=template_types,
-            cypclass=self.cypclass, lock_mode=self.lock_mode, activable=self.activable)
+            cypclass=self.cypclass, activable=self.activable)
 
     def analyse_declarations(self, env):
         if self.templates is None:
@@ -1642,7 +1641,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         self.entry = env.declare_cpp_class(
             self.name, scope, self.pos,
             self.cname, base_class_types, visibility=self.visibility, templates=template_types,
-            cypclass=self.cypclass, lock_mode=self.lock_mode, activable=self.activable)
+            cypclass=self.cypclass, activable=self.activable)
         if self.entry is None:
             return
         self.entry.is_cpp_class = 1
@@ -8615,8 +8614,11 @@ class LockCypclassNode(StatNode):
         self.obj.analyse_declarations(env)
 
     def analyse_expressions(self, env):
-        self.obj = self.obj.analyse_types(env)
+        self.obj = obj = self.obj.analyse_types(env)
         self.body = self.body.analyse_expressions(env)
+        if not obj.type.is_cyp_class:
+            error(obj.pos, "Locking non-cypclass reference")
+            return self
         return self
 
     def generate_execution_code(self, code):

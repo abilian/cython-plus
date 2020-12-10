@@ -4243,7 +4243,7 @@ class CppClassType(CType):
             CppClassType(self.name, None, self.cname, [], template_values, template_type=self)\
             if not self.is_cyp_class else\
             CypClassType(self.name, None, self.cname, [], template_values, template_type=self,
-                lock_mode=self.lock_mode, activable=self.activable)
+                activable=self.activable)
         # Need to do these *after* self.specializations[key] is set
         # to avoid infinite recursion on circular references.
         specialized.base_classes = [b.specialize(values) for b in self.base_classes]
@@ -4538,7 +4538,6 @@ def compute_mro_generic(cls):
     return mro_C3_merge(inputs)
 
 class CypClassType(CppClassType):
-    #  lock_mode          string (tri-state: "nolock"/"checklock"/"autolock")
     #  _mro               [CppClassType] or None       the Method Resolution Order of this cypclass according to Python
     #  support_wrapper    boolean                      whether this cypclass will be wrapped
     #  wrapper_type       PyExtensionType or None      the type of the cclass wrapper
@@ -4547,9 +4546,8 @@ class CypClassType(CppClassType):
     to_py_function = None
     from_py_function = None
 
-    def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0, lock_mode=None, activable=False):
+    def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0, activable=False):
         CppClassType.__init__(self, name, scope, cname, base_classes, templates, template_type, nogil)
-        self.lock_mode = lock_mode if lock_mode else "autolock"
         self.activable = activable
         self._mro = None
         self.support_wrapper = False
@@ -4817,6 +4815,7 @@ class QualifiedCypclassType(BaseType):
         'iso': ('iso~',),
         'iso~': (),
         'iso&': ('iso~',),
+        'locked': ('locked', 'iso~'),
     }
 
     def __init__(self, base_type, qualifier):

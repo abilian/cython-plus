@@ -1209,13 +1209,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 reified_call_args_list.append(Naming.optional_args_cname)
 
             # Locking CyObjects
-            # Here we completely ignore the lock mode (nolock/checklock/autolock)
-            # because the mode is used for direct calls, when the user have the possibility
-            # to manually lock or let the compiler handle it.
-            # Here, the user cannot lock manually, so we're taking the lock automatically.
-            #put_cypclass_op_on_narg_optarg(lambda arg: "Cy_RLOCK" if arg.type.is_const else "Cy_WLOCK",
-            #                               reified_function_entry.type, Naming.optional_args_cname, code)
-
             func_type = reified_function_entry.type
             opt_arg_name = Naming.optional_args_cname
             trylock_result = "trylock_result"

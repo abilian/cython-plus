@@ -7310,6 +7310,7 @@ class AttributeNode(ExprNode):
         return node
 
     def analyse_types(self, env, target = 0):
+        self.is_target = target
         self.initialized_check = env.directives['initializedcheck']
         node = self.analyse_as_cimported_attribute_node(env, target)
         if node is None and not target:
@@ -14261,10 +14262,10 @@ class CoerceToTempNode(CoercionNode):
 class CoerceToLockedNode(CoercionNode):
     # This node is used to lock a node of cypclass type around the evaluation of its subexpressions.
 
-    # rlock_only    boolean
+    # exclusive    boolean
 
-    def __init__(self, arg, env=None, rlock_only=False):
-        self.rlock_only = rlock_only
+    def __init__(self, arg, env=None, exclusive=True):
+        self.exclusive = exclusive
         self.type = arg.type
         arg = arg.coerce_to_temp(env)
         arg.postpone_subexpr_disposal = True
@@ -14295,13 +14296,13 @@ class CoerceToLockedNode(CoercionNode):
         # Create a scope to use scope bound resource management (RAII).
         code.putln("{")
 
-        # Since each lock guard has its onw scope,
+        # Since each lock guard has its own scope,
         # a prefix is enough to prevent name collisions.
         guard_code = "%sguard" % Naming.cypclass_lock_guard_prefix
-        if self.rlock_only:
-            code.putln("Cy_rlock_guard %s(%s, %s);" % (guard_code, self.result(), context))
-        else:
+        if self.exclusive:
             code.putln("Cy_wlock_guard %s(%s, %s);" % (guard_code, self.result(), context))
+        else:
+            code.putln("Cy_rlock_guard %s(%s, %s);" % (guard_code, self.result(), context))
 
     def generate_disposal_code(self, code):
         # Close the scope to release the lock.

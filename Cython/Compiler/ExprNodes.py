@@ -10951,6 +10951,9 @@ class TypecastNode(ExprNode):
                 self.op_func_type = entry.type
             if self.type.is_cyp_class:
                 self.is_temp = self.overloaded
+                if self.type.is_qualified_cyp_class:
+                    if not self.type.assignable_from(self.operand.type):
+                        error(self.pos, "Cannot cast %s to %s" % (self.operand.type, self.type))
         if self.type.is_ptr and self.type.base_type.is_cfunction and self.type.base_type.nogil:
             op_type = self.operand.type
             if op_type.is_ptr:

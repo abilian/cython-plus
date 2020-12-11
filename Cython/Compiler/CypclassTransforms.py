@@ -302,6 +302,10 @@ def NAME(ARGDECLS):
 
         method_type = method_entry.type
 
+        if method_type.self_qualifier:
+            # skip methods with qualified self
+            return
+
         if method_type.optional_arg_count:
             # for now skip methods with optional arguments
             return

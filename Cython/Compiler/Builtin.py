@@ -4,7 +4,7 @@
 
 from __future__ import absolute_import
 
-from .Symtab import BuiltinScope, StructOrUnionScope, Scope
+from .Symtab import BuiltinScope, StructOrUnionScope, CppClassScope
 from .Code import UtilityCode
 from .TypeSlots import Signature
 from . import PyrexTypes
@@ -387,7 +387,7 @@ def inject_cy_object(self):
         scope.inherited_var_entries = []
         scope.inherited_type_entries = []
 
-    cy_object_scope = Scope("CyObject", self, None)
+    cy_object_scope = CppClassScope("CyObject", self, None)
     init_scope(cy_object_scope)
     cy_object_type = PyrexTypes.cy_object_type
     cy_object_scope.type = PyrexTypes.cy_object_type
@@ -411,7 +411,7 @@ def inject_acthon_interfaces(self):
     #     int getIntResult(){}
     #     operator int() { return this->getIntResult(); }
 
-    result_scope = Scope("ActhonResultInterface", self, None)
+    result_scope = CppClassScope("ActhonResultInterface", self, None)
     init_scope(result_scope)
     acthon_result_type = result_type = PyrexTypes.CypClassType(
                 "ActhonResultInterface", result_scope, "ActhonResultInterface", (PyrexTypes.cy_object_type,),
@@ -470,7 +470,7 @@ def inject_acthon_interfaces(self):
 
     # cypclass ActhonMessageInterface
 
-    message_scope = Scope("ActhonMessageInterface", self, None)
+    message_scope = CppClassScope("ActhonMessageInterface", self, None)
     init_scope(message_scope)
     acthon_message_type = message_type = PyrexTypes.CypClassType(
                 "ActhonMessageInterface", message_scope, "ActhonMessageInterface", (PyrexTypes.cy_object_type,),
@@ -484,7 +484,7 @@ def inject_acthon_interfaces(self):
     #     void insertActivity(ActhonMessageInterface msg){}
     #     void removeActivity(ActhonMessageInterface msg){}
 
-    sync_scope = Scope("ActhonSyncInterface", self, None)
+    sync_scope = CppClassScope("ActhonSyncInterface", self, None)
     init_scope(sync_scope)
     acthon_sync_type = sync_type = PyrexTypes.CypClassType(
                 "ActhonSyncInterface", sync_scope, "ActhonSyncInterface", (PyrexTypes.cy_object_type,),
@@ -553,7 +553,7 @@ def inject_acthon_interfaces(self):
     #     void push(ActhonMessageInterface message){}
     #     bool activate(){}
 
-    queue_scope = Scope("ActhonQueueInterface", self, None)
+    queue_scope = CppClassScope("ActhonQueueInterface", self, None)
     init_scope(queue_scope)
     acthon_queue_type = queue_type = PyrexTypes.CypClassType(
                 "ActhonQueueInterface", queue_scope, "ActhonQueueInterface", (PyrexTypes.cy_object_type,),
@@ -590,7 +590,7 @@ def inject_acthon_interfaces(self):
     #     ResultInterface (*_active_result_class)()
     #     QueueInterface _active_queue_class
 
-    activable_scope = Scope("ActhonActivableClass", self, None)
+    activable_scope = CppClassScope("ActhonActivableClass", self, None)
     init_scope(activable_scope)
     acthon_activable_type = activable_type = PyrexTypes.CypClassType(
                 "ActhonActivableClass", activable_scope, "ActhonActivableClass", (PyrexTypes.cy_object_type,),

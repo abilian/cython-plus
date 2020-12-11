@@ -3071,6 +3071,7 @@ class CFuncType(CType):
     #  is_const_method  boolean
     #  is_static_method boolean
     #  is_cyp_class_method boolean
+    #  self_qualifier   string
 
     is_cfunction = 1
     original_sig = None
@@ -3078,6 +3079,7 @@ class CFuncType(CType):
     from_fused = False
     is_const_method = False
     is_cyp_class_method = False
+    self_qualifier = None
 
     subtypes = ['return_type', 'args']
 
@@ -3085,7 +3087,7 @@ class CFuncType(CType):
             exception_value = None, exception_check = 0, calling_convention = "",
             nogil = 0, with_gil = 0, is_overridable = 0, optional_arg_count = 0,
             is_const_method = False, is_static_method=False, is_cyp_class_method=False,
-            templates = None, is_strict_signature = False):
+            self_qualifier = None, templates = None, is_strict_signature = False):
         self.return_type = return_type
         self.args = args
         self.has_varargs = has_varargs
@@ -3099,6 +3101,7 @@ class CFuncType(CType):
         self.is_const_method = is_const_method
         self.is_static_method = is_static_method
         self.is_cyp_class_method = is_cyp_class_method
+        self.self_qualifier = self_qualifier
         self.templates = templates
         self.is_strict_signature = is_strict_signature
 

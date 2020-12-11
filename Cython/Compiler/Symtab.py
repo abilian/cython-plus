@@ -382,6 +382,7 @@ class Scope(object):
     nogil = 0
     fused_to_specific = None
     return_type = None
+    directives = {}
 
     def __init__(self, name, outer_scope, parent_scope):
         # The outer_scope is the next scope in the lookup chain.
@@ -1185,6 +1186,8 @@ class Scope(object):
         # (even if mangling should give us something else).
         # This is to support things like global __foo which makes a declaration for __foo
         return self.entries.get(name, None)
+
+    lookup_here_unfiltered = lookup_here
 
     def lookup_here_unmangled(self, name):
         return self.entries.get(name, None)
@@ -2894,7 +2897,7 @@ class CppClassScope(Scope):
         # Remember the original name because it might change
         original_name = name
 
-        reify = self.type.is_cyp_class and self.type.activable
+        reify = self.type.is_cyp_class and self.type.activable and type.self_qualifier is None
         class_name = self.name.split('::')[-1]
         if name in (class_name, '__init__') and cname is None:
             reify = False
@@ -3119,7 +3122,7 @@ class CppClassScope(Scope):
 
         return scope
 
-    def lookup_here(self, name):
+    def adapt_name_lookup(self, name):
         if name == "__init__":
             name = "<init>"
         elif name == "__dealloc__":
@@ -3137,7 +3140,17 @@ class CppClassScope(Scope):
                 as_operator_name = self._as_type_operator(stripped_name)
                 if as_operator_name:
                     name = 'operator ' + as_operator_name
-        return super(CppClassScope,self).lookup_here(name)
+        return name
+
+    def lookup_here(self, name):
+        entry = super(CppClassScope,self).lookup_here(self.adapt_name_lookup(name))
+        if entry and self.is_cyp_class_scope and entry.is_cfunction and entry.type.self_qualifier:
+            # Cannot access self-qualified methods from unqualified cypclass.
+            return None
+        return entry
+
+    def lookup_here_unfiltered(self, name):
+        return super(CppClassScope,self).lookup_here(self.adapt_name_lookup(name))
 
 
 class CppScopedEnumScope(Scope):
@@ -3270,7 +3283,7 @@ class QualifiedCypclassScope(Scope):
             return entry
 
     def resolve(self, name):
-        base_entry = self.base_type_scope.lookup_here(name)
+        base_entry = self.base_type_scope.lookup_here_unfiltered(name)
         if base_entry is None:
             return None
         alternatives = []
@@ -3280,7 +3293,7 @@ class QualifiedCypclassScope(Scope):
                 continue
             entry.overloaded_alternatives = alternatives
             alternatives.append(entry)
-        return alternatives[0]
+        return alternatives[0] if alternatives else None
 
     def adapt(self, base_entry):
         return None
@@ -3290,7 +3303,7 @@ def qualified_cypclass_scope(base_type_scope, qualifier):
     if qualifier == 'active':
         return ActiveCypclassScope(base_type_scope)
     elif qualifier.startswith('iso'):
-        return IsoCypclassScope(base_type_scope)
+        return IsoCypclassScope(base_type_scope, qualifier)
     elif qualifier == 'locked':
         return IsoCypclassScope(base_type_scope, 'locked')
     else:
@@ -3301,6 +3314,8 @@ class ActiveCypclassScope(QualifiedCypclassScope):
     qualifier = 'active'
 
     def adapt(self, base_entry):
+        if base_entry.is_cfunction and base_entry.type.self_qualifier == 'active':
+            return base_entry
         return base_entry.active_entry
 
 
@@ -3313,10 +3328,16 @@ class IsoCypclassScope(QualifiedCypclassScope):
         return arg
 
     def adapt_method_entry(self, base_entry):
-        iso_method_type = copy.copy(base_entry.type)
-        return_type = viewpoint_adaptation(base_entry.type.return_type)
+        base_type = base_entry.type
+        if base_type.self_qualifier:
+            if self.qualifier in PyrexTypes.QualifiedCypclassType.assignable_to[base_type.self_qualifier]:
+                return base_entry
+            else:
+                return None
+        iso_method_type = copy.copy(base_type)
+        return_type = viewpoint_adaptation(base_type.return_type)
         iso_method_type.return_type = return_type
-        iso_method_type.args = [self.adapt_arg_type(arg) for arg in base_entry.type.args]
+        iso_method_type.args = [self.adapt_arg_type(arg) for arg in base_type.args]
         entry = copy.copy(base_entry)
         entry.type = iso_method_type
         return entry

@@ -11379,6 +11379,8 @@ class ConsumeNode(ExprNode):
     def infer_type(self, env):
         operand_type = self.operand.infer_type(env)
         if operand_type.is_cyp_class:
+            if operand_type.is_qualified_cyp_class:
+                operand_type = operand_type.qual_base_type
             return PyrexTypes.cyp_class_qualified_type(operand_type, 'iso~')
         else:
             return operand_type

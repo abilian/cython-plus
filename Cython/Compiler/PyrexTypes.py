@@ -4538,9 +4538,10 @@ def compute_mro_generic(cls):
     return mro_C3_merge(inputs)
 
 class CypClassType(CppClassType):
-    #  _mro               [CppClassType] or None       the Method Resolution Order of this cypclass according to Python
-    #  support_wrapper    boolean                      whether this cypclass will be wrapped
-    #  wrapper_type       PyExtensionType or None      the type of the cclass wrapper
+    #  _mro               [CppClassType] or None            the Method Resolution Order of this cypclass
+    #  support_wrapper    boolean                           whether this cypclass will be wrapped
+    #  wrapper_type       PyExtensionType or None           the type of the cclass wrapper
+    #  _qualified_types   {string: QualifiedCypclassType}   a cache of qualified versions of this type
 
     is_cyp_class = 1
     to_py_function = None
@@ -4553,6 +4554,7 @@ class CypClassType(CppClassType):
         self.support_wrapper = False
         self.wrapper_type = None
         self._wrapped_base_type = None
+        self._qualified_types = {}
 
     # iterate over the direct bases that support wrapping
     def iter_wrapped_base_types(self):
@@ -4826,6 +4828,18 @@ class QualifiedCypclassType(BaseType):
         'iso->': ('iso~',),
         'locked': ('locked', 'iso~'),
     }
+
+    def __new__(cls, base_type, qualifier):
+        # The qualified type is cached in the unqualified type to avoid duplicates.
+        try:
+            return base_type._qualified_types[qualifier]
+        except KeyError:
+            if base_type.is_qualified_cyp_class:
+                base_type = base_type.qual_base_type
+            qualified_type = BaseType.__new__(cls)
+            qualified_type.__init__(base_type, qualifier)
+            base_type._qualified_types[qualifier] = qualified_type
+            return qualified_type
 
     def __init__(self, base_type, qualifier):
         assert base_type.is_cyp_class

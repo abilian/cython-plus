@@ -3219,6 +3219,8 @@ class CFuncType(CType):
             return 0
         if self.has_varargs != other_type.has_varargs:
             return 0
+        if self.self_qualifier != other_type.self_qualifier:
+            return 0
         self_minargs = len(self.args) - self.optional_arg_count
         if self_minargs > len(other_type.args):
             return 0
@@ -3254,6 +3256,8 @@ class CFuncType(CType):
             if not self.args[i].type.same_as(other_type.args[i].type):
                 return 0
         if self.has_varargs != other_type.has_varargs:
+            return 0
+        if self.self_qualifier != other_type.self_qualifier:
             return 0
         return 1
 
@@ -3313,6 +3317,29 @@ class CFuncType(CType):
                     return 0
         if self.has_varargs != other_type.has_varargs:
             return 0
+        if self.self_qualifier != other_type.self_qualifier:
+            return 0
+        if self.optional_arg_count != other_type.optional_arg_count:
+            return 0
+        return 1
+
+    def same_args_without_qualifiers_with(self, other_type, as_cmethod = 0):
+        return self.same_args_without_qualifiers_with_resolved_type(other_type.resolve(), as_cmethod)
+
+    def same_args_without_qualifiers_with_resolved_type(self, other_type, as_cmethod = 0):
+        if other_type is error_type:
+            return 1
+        if not other_type.is_cfunction:
+            return 0
+        nargs = len(self.args)
+        if nargs != len(other_type.args):
+            return 0
+        for i in range(as_cmethod, nargs):
+            if not same_without_qualifier(self.args[i].type, other_type.args[i].type):
+                if not self.args[i].type.same_as(other_type.args[i].type):
+                    return 0
+        if self.has_varargs != other_type.has_varargs:
+            return 0
         if self.optional_arg_count != other_type.optional_arg_count:
             return 0
         return 1
@@ -3333,6 +3360,8 @@ class CFuncType(CType):
                 if not ptr_to_subtype_of(other_type.args[i].type, self.args[i].type):
                     return 0
         if self.has_varargs != other_type.has_varargs:
+            return 0
+        if self.self_qualifier != other_type.self_qualifier:
             return 0
         if self.optional_arg_count != other_type.optional_arg_count:
             return 0
@@ -3356,6 +3385,8 @@ class CFuncType(CType):
             if not ptr_to_subtype_of(self.args[i].type, other_type.args[i].type):
                 return 0
         if self.has_varargs != other_type.has_varargs:
+            return 0
+        if self.self_qualifier != other_type.self_qualifier:
             return 0
         if self.optional_arg_count != other_type.optional_arg_count:
             return 0
@@ -3396,7 +3427,7 @@ class CFuncType(CType):
 
     def same_as_resolved_type(self, other_type, as_cmethod=False):
         return self.same_c_signature_as_resolved_type(other_type, as_cmethod=as_cmethod) \
-            and self.nogil == other_type.nogil
+            and self.nogil == other_type.nogil and self.self_qualifier == other_type.self_qualifier
 
     def pointer_assignable_from_resolved_type(self, rhs_type):
         # Accept compatible exception/nogil declarations for the RHS.
@@ -5910,6 +5941,15 @@ def ptr_to_same_without_cv(type1, type2):
             type1 = type1.base_type
         if type2.is_cv_qualified:
             type2 = type2.base_type
+        return same_type(type1, type2)
+    return 0
+
+def same_without_qualifier(type1, type2):
+    if type1.is_cyp_class and type2.is_cyp_class:
+        if type1.is_qualified_cyp_class:
+            type1 = type1.qual_base_type
+        if type2.is_qualified_cyp_class:
+            type2 = type2.qual_base_type
         return same_type(type1, type2)
     return 0
 

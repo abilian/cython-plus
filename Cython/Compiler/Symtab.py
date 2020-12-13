@@ -543,7 +543,13 @@ class Scope(object):
                     for index, alt_entry in enumerate(old_entry.all_alternatives()):
                         alt_type = alt_entry.type
 
-                        if type.compatible_arguments_with(alt_type):
+                        if type.self_qualifier != alt_type.self_qualifier:
+                            error(pos, "Cannot overload on 'self' qualifier")
+                            if alt_entry.pos is not None:
+                                error(alt_entry.pos, "Conflicting method is defined here")
+                            break
+
+                        elif type.compatible_arguments_with(alt_type):
                             cpp_override_allowed = False
 
                             # allow default constructor or __alloc__ to be redeclared by user
@@ -575,13 +581,13 @@ class Scope(object):
                                                 alt_type.declaration_code(name, for_display = 1).strip()))
                                     )
                                     if alt_entry.pos is not None:
-                                            error(alt_entry.pos, "Conflicting method is defined here")
+                                        error(alt_entry.pos, "Conflicting method is defined here")
 
                                 # the return type must be covariant
                                 elif not type.return_type.subtype_of_resolved_type(alt_type.return_type):
                                     error(pos, "Cypclass method overrides another with incompatible return type")
                                     if alt_entry.pos is not None:
-                                            error(alt_entry.pos, "Conflicting method is defined here")
+                                        error(alt_entry.pos, "Conflicting method is defined here")
 
                                 previous_alternative_indices.append(index)
                                 cpp_override_allowed = True
@@ -594,6 +600,13 @@ class Scope(object):
                         elif type.same_ptr_args_without_cv_with(alt_type):
                             error(pos, "Cypclass method const-overloads another method: not supported yet")
 
+                        # Disallow qualifier overloads
+                        elif type.same_args_without_qualifiers_with(alt_type):
+                            error(pos, "Cannot overload on cypclass qualifiers")
+                            if alt_entry.pos is not None:
+                                error(alt_entry.pos, "Conflicting method is defined here")
+                            break
+
                         # if an overloaded alternative has narrower argument types than another, then the method
                         # actually called will depend on the static type of the arguments
                         # we actually also disallow methods where each argument is either narrower or larger
@@ -601,6 +614,7 @@ class Scope(object):
                             error(pos, "Cypclass overloaded method with narrower or larger arguments")
                             if alt_entry.pos is not None:
                                 error(alt_entry.pos, "Conflicting method is defined here")
+                            break
 
                 # normal cpp case
                 else:

@@ -3346,6 +3346,8 @@ class IsoCypclassScope(QualifiedCypclassScope):
         if base_type.self_qualifier:
             if self.qualifier in PyrexTypes.QualifiedCypclassType.assignable_to[base_type.self_qualifier]:
                 return base_entry
+            elif base_type.self_qualifier[-1] == '&' and self.qualifier.startswith(base_type.self_qualifier[:-1]):
+                return base_entry
             else:
                 return None
         iso_method_type = copy.copy(base_type)

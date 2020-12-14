@@ -4850,7 +4850,8 @@ class QualifiedCypclassType(BaseType):
         'iso': ('iso~',),
         'iso~': (),
         'iso->': ('iso~',),
-        'locked': ('locked', 'iso~'),
+        'locked': ('locked', 'locked&', 'iso~'),
+        'locked&': ('locked&', 'iso~'),
     }
 
     def __new__(cls, base_type, qualifier):

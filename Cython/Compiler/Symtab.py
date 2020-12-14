@@ -3318,8 +3318,8 @@ def qualified_cypclass_scope(base_type_scope, qualifier):
         return ActiveCypclassScope(base_type_scope)
     elif qualifier.startswith('iso'):
         return IsoCypclassScope(base_type_scope, qualifier)
-    elif qualifier == 'locked':
-        return IsoCypclassScope(base_type_scope, 'locked')
+    elif qualifier.startswith('locked'):
+        return IsoCypclassScope(base_type_scope, qualifier)
     else:
         return QualifiedCypclassScope(base_type_scope, qualifier)
 
@@ -3345,6 +3345,8 @@ class IsoCypclassScope(QualifiedCypclassScope):
         base_type = base_entry.type
         if base_type.self_qualifier:
             if self.qualifier in PyrexTypes.QualifiedCypclassType.assignable_to[base_type.self_qualifier]:
+                return base_entry
+            elif base_type.self_qualifier == 'locked&' and self.qualifier == 'locked':
                 return base_entry
             else:
                 return None

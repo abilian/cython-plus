@@ -321,7 +321,8 @@ def p_typecast(s):
     is_memslice = isinstance(base_type, Nodes.MemoryViewSliceTypeNode)
     is_template = isinstance(base_type, Nodes.TemplatedTypeNode)
     is_const_volatile = isinstance(base_type, Nodes.CConstOrVolatileTypeNode)
-    if not is_memslice and not is_template and not is_const_volatile and base_type.name is None:
+    is_qualified = isinstance(base_type, Nodes.QualifiedCypclassNode)
+    if not is_memslice and not is_template and not is_const_volatile and not is_qualified and base_type.name is None:
         s.error("Unknown type")
     declarator = p_c_declarator(s, empty = 1)
     if s.sy == '?':
@@ -2544,7 +2545,7 @@ def p_c_simple_base_type(s, self_flag, nonempty, templates = None):
             base_type=base_type, is_const=is_const, is_volatile=is_volatile)
 
     # Handle cypclass qualifiers
-    if s.sy == 'IDENT' and s.systring in ('active', 'iso'):
+    if s.sy == 'IDENT' and s.systring in ('active', 'iso', 'locked'):
         qualifier = s.systring
         s.next()
         base_type = p_c_base_type(s, self_flag=self_flag, nonempty=nonempty, templates=templates)
@@ -3864,10 +3865,8 @@ def p_cpp_class_definition(s, pos,  ctx):
     if s.sy == '[':
         error(s.position(), "Name options not allowed for C++ class")
     nogil = p_nogil(s) or cypclass
-    lock_mode = None
     activable = False
     if cypclass:
-        lock_mode = p_cypclass_lock_mode(s)
         activable = p_cypclass_activable(s)
     if s.sy == ':':
         s.next()
@@ -3897,7 +3896,7 @@ def p_cpp_class_definition(s, pos,  ctx):
         visibility = ctx.visibility,
         in_pxd = ctx.level == 'module_pxd',
         attributes = attributes,
-        templates = templates, cypclass=cypclass, lock_mode=lock_mode, activable=activable)
+        templates = templates, cypclass=cypclass, activable=activable)
 
 def p_cpp_class_attribute(s, ctx):
     decorators = None
@@ -3922,14 +3921,6 @@ def p_cpp_class_attribute(s, ctx):
                 s.error("Decorators can only be followed by functions or classes")
             node.decorators = decorators
         return node
-
-def p_cypclass_lock_mode(s):
-    if s.sy == 'IDENT' and s.systring in ('nolock', 'checklock', 'autolock'):
-        mode = s.systring
-        s.next()
-        return mode
-    else:
-        return None
 
 def p_cypclass_activable(s):
     if s.sy == 'IDENT' and s.systring == 'activable':

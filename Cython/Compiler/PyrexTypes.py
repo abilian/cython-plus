@@ -3071,6 +3071,7 @@ class CFuncType(CType):
     #  is_const_method  boolean
     #  is_static_method boolean
     #  is_cyp_class_method boolean
+    #  self_qualifier   string
 
     is_cfunction = 1
     original_sig = None
@@ -3078,6 +3079,7 @@ class CFuncType(CType):
     from_fused = False
     is_const_method = False
     is_cyp_class_method = False
+    self_qualifier = None
 
     subtypes = ['return_type', 'args']
 
@@ -3085,7 +3087,7 @@ class CFuncType(CType):
             exception_value = None, exception_check = 0, calling_convention = "",
             nogil = 0, with_gil = 0, is_overridable = 0, optional_arg_count = 0,
             is_const_method = False, is_static_method=False, is_cyp_class_method=False,
-            templates = None, is_strict_signature = False):
+            self_qualifier = None, templates = None, is_strict_signature = False):
         self.return_type = return_type
         self.args = args
         self.has_varargs = has_varargs
@@ -3099,6 +3101,7 @@ class CFuncType(CType):
         self.is_const_method = is_const_method
         self.is_static_method = is_static_method
         self.is_cyp_class_method = is_cyp_class_method
+        self.self_qualifier = self_qualifier
         self.templates = templates
         self.is_strict_signature = is_strict_signature
 
@@ -4243,7 +4246,7 @@ class CppClassType(CType):
             CppClassType(self.name, None, self.cname, [], template_values, template_type=self)\
             if not self.is_cyp_class else\
             CypClassType(self.name, None, self.cname, [], template_values, template_type=self,
-                lock_mode=self.lock_mode, activable=self.activable)
+                activable=self.activable)
         # Need to do these *after* self.specializations[key] is set
         # to avoid infinite recursion on circular references.
         specialized.base_classes = [b.specialize(values) for b in self.base_classes]
@@ -4538,23 +4541,23 @@ def compute_mro_generic(cls):
     return mro_C3_merge(inputs)
 
 class CypClassType(CppClassType):
-    #  lock_mode          string (tri-state: "nolock"/"checklock"/"autolock")
-    #  _mro               [CppClassType] or None       the Method Resolution Order of this cypclass according to Python
-    #  support_wrapper    boolean                      whether this cypclass will be wrapped
-    #  wrapper_type       PyExtensionType or None      the type of the cclass wrapper
+    #  _mro               [CppClassType] or None            the Method Resolution Order of this cypclass
+    #  support_wrapper    boolean                           whether this cypclass will be wrapped
+    #  wrapper_type       PyExtensionType or None           the type of the cclass wrapper
+    #  _qualified_types   {string: QualifiedCypclassType}   a cache of qualified versions of this type
 
     is_cyp_class = 1
     to_py_function = None
     from_py_function = None
 
-    def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0, lock_mode=None, activable=False):
+    def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0, activable=False):
         CppClassType.__init__(self, name, scope, cname, base_classes, templates, template_type, nogil)
-        self.lock_mode = lock_mode if lock_mode else "autolock"
         self.activable = activable
         self._mro = None
         self.support_wrapper = False
         self.wrapper_type = None
         self._wrapped_base_type = None
+        self._qualified_types = {}
 
     # iterate over the direct bases that support wrapping
     def iter_wrapped_base_types(self):
@@ -4652,7 +4655,16 @@ class CypClassType(CppClassType):
     def is_subclass(self, other_type):
         if other_type.is_const_cyp_class:
             other_type = other_type.const_base_type
+        elif other_type.is_qualified_cyp_class:
+            other_type = other_type.qual_base_type
         return super(CypClassType, self).is_subclass(other_type)
+
+    def subclass_dist(self, super_type):
+        if super_type.is_const_cyp_class:
+            super_type = super_type.const_base_type
+        elif super_type.is_qualified_cyp_class:
+            super_type = super_type.qual_base_type
+        return super(CypClassType, self).subclass_dist(super_type)
 
     def get_constructor(self, pos):
         # This is (currently) only called by new statements.
@@ -4802,19 +4814,35 @@ class ConstCypclassType(BaseType):
 class QualifiedCypclassType(BaseType):
     "A qualified cypclass reference"
 
-    # qualifier     string      the qualifier keyword: ('active' | 'iso' | 'iso~' | 'iso!' )
+    # qualifier     string      the qualifier keyword: ('active' | 'iso' | 'iso~' | 'iso->' )
 
     subtypes = ['qual_base_type']
 
     is_cyp_class = 1
     is_qualified_cyp_class = 1
 
+    to_py_function = None
+    from_py_function = None
+
     assignable_to = {
         'active': ('active', 'iso~'),
         'iso': ('iso~',),
         'iso~': (),
-        'iso!': (),
+        'iso->': ('iso~',),
+        'locked': ('locked', 'iso~'),
     }
+
+    def __new__(cls, base_type, qualifier):
+        # The qualified type is cached in the unqualified type to avoid duplicates.
+        try:
+            return base_type._qualified_types[qualifier]
+        except KeyError:
+            if base_type.is_qualified_cyp_class:
+                base_type = base_type.qual_base_type
+            qualified_type = BaseType.__new__(cls)
+            qualified_type.__init__(base_type, qualifier)
+            base_type._qualified_types[qualifier] = qualified_type
+            return qualified_type
 
     def __init__(self, base_type, qualifier):
         assert base_type.is_cyp_class
@@ -4876,20 +4904,25 @@ class QualifiedCypclassType(BaseType):
         return self.qual_base_type.deduce_template_params(actual)
 
     def can_coerce_to_pyobject(self, env):
-        return self.qual_base_type.can_coerce_to_pyobject(env)
+        return False
 
     def can_coerce_from_pyobject(self, env):
-        return self.qual_base_type.can_coerce_from_pyobject(env)
+        return False
 
     def create_to_py_utility_code(self, env):
-        if self.qual_base_type.create_to_py_utility_code(env):
-            self.to_py_function = self.qual_base_type.to_py_function
-            return True
+        return False
+
+    def create_from_py_utility_code(self, env):
+        return False
 
     def assignable_from(self, src_type):
         return self.assignable_from_resolved_type(src_type.resolve())
 
     def assignable_from_resolved_type(self, src_type):
+        if src_type is error_type:
+            return 1
+        if src_type.is_null_ptr:
+            return 1
         if src_type.is_qualified_cyp_class and src_type.qualifier in self.assignable_to[self.qualifier]:
             return self.qual_base_type.assignable_from_resolved_type(src_type.qual_base_type)
         return 0
@@ -4903,6 +4936,12 @@ class QualifiedCypclassType(BaseType):
         if other_type.is_qualified_cyp_class and self.qualifier == other_type.qualifier:
             return self.qual_base_type.same_as_resolved_type(other_type.qual_base_type)
         return 0
+
+    def is_subclass(self, other_type):
+        return self.qual_base_type.is_subclass(other_type)
+
+    def subclass_dist(self, super_type):
+        return self.qual_base_type.subclass_dist(super_type)
 
     def __getattr__(self, name):
         return getattr(self.qual_base_type, name)
@@ -5508,6 +5547,19 @@ def best_match(arg_types, functions, pos=None, env=None, args=None, throw=False)
                         score[6] += src_type.base_type.subclass_dist(dst_type.base_type)
                     else:
                         score[5] += 1
+                elif src_type.is_cyp_class:
+                    if dst_type.is_cyp_class:
+                        if src_type.is_subclass(dst_type):
+                            score[6] += src_type.subclass_dist(dst_type)
+                        else:
+                            score[5] += 1
+                    elif dst_type.is_ptr:
+                        if src_type.is_subclass(dst_type.base_type):
+                            score[6] += src_type.subclass_dist(dst_type.base_type)
+                        elif dst_type.base_type == c_void_type:
+                            score[4] += 1
+                        else:
+                            score[5] += 1
                 elif not src_type.is_pyobject:
                     score[1] += 1
                 else:
@@ -5822,6 +5874,14 @@ def qualified_method_type(base_type, const, volatile):
         return error_type
     else:
         return QualifiedMethodType(base_type, const, volatile)
+
+def viewpoint_adaptation(base_type, qualifier = 'iso->'):
+    # Perform viewpoint adaptation for cypclass types.
+    if base_type.is_qualified_cyp_class:
+        return base_type
+    if base_type.is_cyp_class:
+        return QualifiedCypclassType(base_type, qualifier)
+    return base_type
 
 def same_type(type1, type2):
     return type1.same_as(type2)

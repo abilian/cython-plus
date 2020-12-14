@@ -17,7 +17,8 @@ from .Errors import warning, error, InternalError
 from .StringEncoding import EncodedString
 from . import Options, Naming
 from . import PyrexTypes
-from .PyrexTypes import py_object_type, cy_object_type, unspecified_type
+from .PyrexTypes import (
+    py_object_type, cy_object_type, unspecified_type, viewpoint_adaptation)
 from .TypeSlots import (
     pyfunction_signature, pymethod_signature, richcmp_special_methods,
     get_special_method_signature, get_property_accessor_signature)
@@ -381,6 +382,7 @@ class Scope(object):
     nogil = 0
     fused_to_specific = None
     return_type = None
+    directives = {}
 
     def __init__(self, name, outer_scope, parent_scope):
         # The outer_scope is the next scope in the lookup chain.
@@ -780,7 +782,7 @@ class Scope(object):
 
     def declare_cpp_class(self, name, scope,
             pos, cname = None, base_classes = (),
-            visibility = 'extern', templates = None, cypclass=0, lock_mode=None, activable=False):
+            visibility = 'extern', templates = None, cypclass=0, activable=False):
         if cname is None:
             if self.in_cinclude or (visibility != 'private'):
                 cname = name
@@ -791,7 +793,7 @@ class Scope(object):
         if not entry:
             if cypclass:
                 type = PyrexTypes.CypClassType(
-                    name, scope, cname, base_classes, templates = templates, lock_mode=lock_mode, activable=activable)
+                    name, scope, cname, base_classes, templates = templates, activable = activable)
             else:
                 type = PyrexTypes.CppClassType(
                     name, scope, cname, base_classes, templates = templates)
@@ -874,7 +876,8 @@ class Scope(object):
                     # === Acthon ===
 
                     # Declare 'activate' function for this class
-                    activate_func_arg = PyrexTypes.CFuncTypeArg(EncodedString("o"), entry.type, pos)
+                    activate_func_arg_type = PyrexTypes.cyp_class_qualified_type(entry.type, 'iso')
+                    activate_func_arg = PyrexTypes.CFuncTypeArg(EncodedString("o"), activate_func_arg_type, pos)
                     activate_func_return = PyrexTypes.cyp_class_qualified_type(entry.type, 'active')
                     activate_func_type = PyrexTypes.CFuncType(activate_func_return, [activate_func_arg], nogil = 1)
                     builtin_scope = scope.builtin_scope()
@@ -1183,6 +1186,8 @@ class Scope(object):
         # (even if mangling should give us something else).
         # This is to support things like global __foo which makes a declaration for __foo
         return self.entries.get(name, None)
+
+    lookup_here_unfiltered = lookup_here
 
     def lookup_here_unmangled(self, name):
         return self.entries.get(name, None)
@@ -2821,25 +2826,24 @@ class CppClassScope(Scope):
         if entry.type.has_varargs:
             error(entry.pos, "Could not reify method with ellipsis (you can use optional arguments)")
         self.reified_entries.append(entry)
-        # create corresponding active entry
+        # create the corresponding active type and entry
         from . import Builtin
         result_type = Builtin.acthon_result_type
         sync_type = Builtin.acthon_sync_type
+        # create the sync argument type
         activated_method_sync_attr_type = PyrexTypes.CFuncTypeArg(
             EncodedString("sync_method"),
             PyrexTypes.CConstOrVolatileType(sync_type, is_const=1),
             entry.pos,
             "sync_method",
         )
-        activated_method_type = PyrexTypes.CFuncType(
-            result_type,
-            [activated_method_sync_attr_type] + entry.type.args,
-            nogil=entry.type.nogil,
-            has_varargs = entry.type.has_varargs,
-            optional_arg_count = entry.type.optional_arg_count,
-        )
-        if hasattr(entry.type, 'op_arg_struct'):
-            activated_method_type.op_arg_struct = entry.type.op_arg_struct
+        # create the active method type
+        activated_method_type = copy.copy(entry.type)
+        activated_method_type.return_type = result_type
+        copied_args = (copy.copy(arg) for arg in entry.type.args)
+        sendable_args = [setattr(arg, 'type', viewpoint_adaptation(arg.type)) or arg for arg in copied_args]
+        activated_method_type.args = [activated_method_sync_attr_type] + sendable_args
+        # create the active method entry
         activated_method_cname = "%s%s" % (Naming.cypclass_active_func_prefix, entry.cname)
         activated_method_entry = Entry(entry.name, activated_method_cname, activated_method_type, entry.pos)
         activated_method_entry.func_cname = "%s::%s" % (self.type.empty_declaration_code(), activated_method_cname)
@@ -2847,6 +2851,7 @@ class CppClassScope(Scope):
         activated_method_entry.scope = self
         activated_method_entry.is_cfunction = 1
         activated_method_entry.is_variable = 1
+        # associate the active entry to the passive entry
         entry.active_entry = activated_method_entry
 
 
@@ -2892,7 +2897,7 @@ class CppClassScope(Scope):
         # Remember the original name because it might change
         original_name = name
 
-        reify = self.type.is_cyp_class and self.type.activable
+        reify = self.type.is_cyp_class and self.type.activable and type.self_qualifier is None
         class_name = self.name.split('::')[-1]
         if name in (class_name, '__init__') and cname is None:
             reify = False
@@ -3117,7 +3122,7 @@ class CppClassScope(Scope):
 
         return scope
 
-    def lookup_here(self, name):
+    def adapt_name_lookup(self, name):
         if name == "__init__":
             name = "<init>"
         elif name == "__dealloc__":
@@ -3135,7 +3140,17 @@ class CppClassScope(Scope):
                 as_operator_name = self._as_type_operator(stripped_name)
                 if as_operator_name:
                     name = 'operator ' + as_operator_name
-        return super(CppClassScope,self).lookup_here(name)
+        return name
+
+    def lookup_here(self, name):
+        entry = super(CppClassScope,self).lookup_here(self.adapt_name_lookup(name))
+        if entry and self.is_cyp_class_scope and entry.is_cfunction and entry.type.self_qualifier:
+            # Cannot access self-qualified methods from unqualified cypclass.
+            return None
+        return entry
+
+    def lookup_here_unfiltered(self, name):
+        return super(CppClassScope,self).lookup_here(self.adapt_name_lookup(name))
 
 
 class CppScopedEnumScope(Scope):
@@ -3246,8 +3261,10 @@ class CConstOrVolatileScope(Scope):
 
 
 class QualifiedCypclassScope(Scope):
+    qualifier = 'qual'
 
-    def __init__(self, base_type_scope, qualifier):
+    def __init__(self, base_type_scope, qualifier = None):
+        qualifier = qualifier or self.qualifier
         Scope.__init__(
             self,
             '%s_' % qualifier + base_type_scope.name,
@@ -3266,6 +3283,19 @@ class QualifiedCypclassScope(Scope):
             return entry
 
     def resolve(self, name):
+        base_entry = self.base_type_scope.lookup_here_unfiltered(name)
+        if base_entry is None:
+            return None
+        alternatives = []
+        for e in base_entry.all_alternatives():
+            entry = self.adapt(e)
+            if entry is None:
+                continue
+            entry.overloaded_alternatives = alternatives
+            alternatives.append(entry)
+        return alternatives[0] if alternatives else None
+
+    def adapt(self, base_entry):
         return None
 
 
@@ -3273,75 +3303,53 @@ def qualified_cypclass_scope(base_type_scope, qualifier):
     if qualifier == 'active':
         return ActiveCypclassScope(base_type_scope)
     elif qualifier.startswith('iso'):
-        return IsoCypclassScope(base_type_scope)
+        return IsoCypclassScope(base_type_scope, qualifier)
+    elif qualifier == 'locked':
+        return IsoCypclassScope(base_type_scope, 'locked')
     else:
         return QualifiedCypclassScope(base_type_scope, qualifier)
 
 
 class ActiveCypclassScope(QualifiedCypclassScope):
-    def __init__(self, base_type_scope):
-        QualifiedCypclassScope.__init__(self, base_type_scope, 'active')
+    qualifier = 'active'
 
-    def resolve(self, name):
-        base_entry = self.base_type_scope.lookup_here(name)
-        if base_entry is None or base_entry.active_entry is None:
-            return None
-        active_alternatives = []
-        for e in base_entry.all_alternatives():
-            # all alternatives should be equally activable
-            assert e.active_entry is not None
-            e.active_entry.overloaded_alternatives = active_alternatives
-            active_alternatives.append(e.active_entry)
+    def adapt(self, base_entry):
+        if base_entry.is_cfunction and base_entry.type.self_qualifier == 'active':
+            return base_entry
         return base_entry.active_entry
 
 
 class IsoCypclassScope(QualifiedCypclassScope):
-    def __init__(self, base_type_scope):
-        QualifiedCypclassScope.__init__(self, base_type_scope, 'active')
-
-    def adapt(self, fieldtype, qualifier='iso'):
-        if fieldtype.is_qualified_cyp_class:
-            # attribute is sendable (either 'iso' or 'active')
-            return fieldtype
-        elif fieldtype.is_cyp_class:
-            # viewpoint adaptation
-            return PyrexTypes.cyp_class_qualified_type(fieldtype, qualifier)
-        else:
-            return fieldtype
+    qualifier = 'iso'
 
     def adapt_arg_type(self, arg):
         arg = copy.copy(arg)
-        arg.type = self.adapt(arg.type)
+        arg.type = viewpoint_adaptation(arg.type)
         return arg
 
     def adapt_method_entry(self, base_entry):
-        iso_method_type = copy.copy(base_entry.type)
-        # The return type should be treated as 'iso' but cannot be consumed
-        return_type = self.adapt(base_entry.type.return_type, qualifier='iso!')
+        base_type = base_entry.type
+        if base_type.self_qualifier:
+            if self.qualifier in PyrexTypes.QualifiedCypclassType.assignable_to[base_type.self_qualifier]:
+                return base_entry
+            else:
+                return None
+        iso_method_type = copy.copy(base_type)
+        return_type = viewpoint_adaptation(base_type.return_type)
         iso_method_type.return_type = return_type
-        iso_method_type.args = [self.adapt_arg_type(arg) for arg in base_entry.type.args]
-        if hasattr(base_entry.type, 'op_arg_struct'):
-            iso_method_type.op_arg_struct = entry.type.op_arg_struct
+        iso_method_type.args = [self.adapt_arg_type(arg) for arg in base_type.args]
         entry = copy.copy(base_entry)
         entry.type = iso_method_type
         return entry
 
-    def resolve(self, name):
-        base_entry = self.base_type_scope.lookup_here(name)
-        if base_entry is None:
-            return None
+    def adapt(self, base_entry):
         if base_entry.is_type:
             return base_entry
         if base_entry.is_cfunction:
-            iso_alternatives = []
-            for e in base_entry.all_alternatives():
-                iso_entry = self.adapt_method_entry(e)
-                iso_alternatives.append(iso_entry)
-                iso_entry.overloaded_alternatives = iso_alternatives
-            return iso_alternatives[0]
+            return self.adapt_method_entry(base_entry)
         else:
             base_entry_type = base_entry.type
-            adapted_type = self.adapt(base_entry_type)
+            adapted_type = viewpoint_adaptation(base_entry_type)
             if adapted_type is base_entry_type:
                 return base_entry
             else:

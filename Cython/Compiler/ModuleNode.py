@@ -937,6 +937,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     self.generate_cyp_class_activated_methods(entry, code)
                 # Generate cypclass attr destructor
                 self.generate_cyp_class_attrs_destructor_definition(entry, code)
+                # Generate cypclass traverse method and isolation check method
+                self.generate_cyp_class_traverse_and_iso_definition(entry, code)
                 # Generate wrapper constructor
                 wrapper = scope.lookup_here("<constructor>")
                 constructor = scope.lookup_here("<init>")
@@ -950,18 +952,59 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             Generate destructor definition for the given cypclass entry.
         """
 
-        scope = entry.type.scope
+        type = entry.type
+        scope = type.scope
         cypclass_attrs = [e for e in scope.var_entries
                         if e.type.is_cyp_class and not e.name == "this"
                         and not e.is_type]
         if cypclass_attrs:
             cypclass_attrs_destructor_name = "%s__cypclass_attrs_destructor__%s" % (Naming.func_prefix, entry.name)
-            destructor_with_namespace = "void %s::%s()" % (entry.type.empty_declaration_code(), cypclass_attrs_destructor_name)
+            destructor_with_namespace = "void %s::%s()" % (type.empty_declaration_code(), cypclass_attrs_destructor_name)
+            if type.templates:
+                templates_code = "template <typename %s>" % ", typename ".join(t.name for t in type.templates)
+                code.putln(templates_code)
             code.putln(destructor_with_namespace)
             code.putln("{")
             for attr in cypclass_attrs:
                 code.putln("Cy_XDECREF(this->%s);" % attr.cname)
             code.putln("}")
+
+    def generate_cyp_class_traverse_and_iso_definition(self, entry, code):
+        """
+            Generate traverse method and isolation check method definition for the given cypclass entry.
+        """
+
+        scope = entry.type.scope
+        check_cypclass_attrs = [
+            e
+            for e in scope.entries.values()
+            if e.type.is_cyp_class and e.name != "this" and not e.is_type
+                and not e.type.is_qualified_cyp_class
+        ]
+        # potential template
+        if entry.type.templates:
+            templates_code = "template <typename %s>" % ", typename ".join(t.name for t in entry.type.templates)
+        else:
+            templates_code = None
+        # traverse method
+        namespace = entry.type.empty_declaration_code()
+        if templates_code:
+            code.putln(templates_code)
+        code.putln("void %s::CyObject_traverse_iso(void (*visit)(const CyObject *o, void *arg), void *arg) const" % namespace)
+        code.putln("{")
+        for attr in check_cypclass_attrs:
+            code.putln("visit(this->%s, arg);" % attr.cname)
+        code.putln("}")
+        # isolation check method
+        if templates_code:
+            code.putln(templates_code)
+        code.putln("int %s::CyObject_iso() const" % namespace)
+        code.putln("{")
+        if check_cypclass_attrs:
+            code.putln("return __Pyx_CyObject_owning(this) == 1;")
+        else:
+            code.putln("return this->CyObject_GETREF() == 1;")
+        code.putln("}")
 
     def generate_cyp_class_activated_methods(self, entry, code):
         """
@@ -998,6 +1041,9 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             active_entry = reified_function_entry.active_entry
             function_header = active_entry.type.function_header_code(active_entry.func_cname, activated_method_arg_decl_code)
             function_code = result_interface_type.declaration_code(function_header)
+            if entry.type.templates:
+                templates_code = "template <typename %s>" % ", typename ".join(t.name for t in entry.type.templates)
+                code.putln(templates_code)
             code.putln("%s {" % function_code)
             code.putln("%s = this->%s();" % (result_interface_type.declaration_code("result_object"), result_attr_cname))
 
@@ -1076,13 +1122,20 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
         for reified_function_entry in entry.type.scope.reified_entries:
             reifying_class_name = "%s%s" % (Naming.cypclass_reified_prefix, reified_function_entry.name)
-            reifying_class_full_name = "%s::%s" % (PyrexTypes.namespace_declaration_code(entry.type), reifying_class_name)
+            reifying_class_full_name = "%s::%s" % (entry.type.empty_declaration_code(), reifying_class_name)
             class_name = reifying_class_full_name.split('::')[-1]
+            if reified_function_entry.type.is_const_method:
+                qualified_target_object_code = "const %s" % target_object_code
+            else:
+                qualified_target_object_code = target_object_code
+            if entry.type.templates:
+                templates_code = "template <typename %s>" % ", typename ".join(t.name for t in entry.type.templates)
+                code.putln(templates_code)
             code.putln("struct %s : public %s {" % (reifying_class_full_name, message_base_type.empty_declaration_code()))
             # Declaring target object & reified method arguments
-            code.putln("%s;" % target_object_code)
+            code.putln("%s;" % qualified_target_object_code)
             constructor_args_decl_list = [
-                target_object_code,
+                qualified_target_object_code,
                 sync_type.declaration_code(sync_arg_name),
                 result_type.declaration_code(result_arg_name)
             ]
@@ -1156,13 +1209,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 reified_call_args_list.append(Naming.optional_args_cname)
 
             # Locking CyObjects
-            # Here we completely ignore the lock mode (nolock/checklock/autolock)
-            # because the mode is used for direct calls, when the user have the possibility
-            # to manually lock or let the compiler handle it.
-            # Here, the user cannot lock manually, so we're taking the lock automatically.
-            #put_cypclass_op_on_narg_optarg(lambda arg: "Cy_RLOCK" if arg.type.is_const else "Cy_WLOCK",
-            #                               reified_function_entry.type, Naming.optional_args_cname, code)
-
             func_type = reified_function_entry.type
             opt_arg_name = Naming.optional_args_cname
             trylock_result = "trylock_result"
@@ -1449,10 +1495,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln("Py_TYPE(wrapper) = %s;" % wrapper_type.typeptr_cname)
         code.putln("}")
 
-
-
-
-
     def generate_typedef(self, entry, code):
         base_type = entry.type.typedef_base_type
         enclosing_scope = entry.scope
@@ -1621,6 +1663,12 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                     arg_decls = ["void"]
                     arg_names = []
                     generate_cpp_constructor_code(arg_decls, arg_names, is_implementing, py_attrs, constructor)
+
+            if type.is_cyp_class:
+                # Declare the method to check isolation
+                code.putln("virtual int CyObject_iso() const;")
+                # Declare the traverse method
+                code.putln("virtual void CyObject_traverse_iso(void (*visit)(const CyObject *o, void *arg), void *arg) const;")
 
             if type.is_cyp_class and cypclass_attrs:
                 # Declaring a small destruction handler which will always try to Cy_XDECREF

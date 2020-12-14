@@ -14,7 +14,7 @@ cdef extern from "<semaphore.h>" nogil:
   int sem_destroy(sem_t* sem)
 
 
-cdef cypclass BasicQueue(ActhonQueueInterface) checklock:
+cdef cypclass BasicQueue(ActhonQueueInterface):
   message_queue_t* _queue
 
   __init__(self):
@@ -53,7 +53,7 @@ cdef cypclass BasicQueue(ActhonQueueInterface) checklock:
       # Don't forget to incref to avoid premature deallocation
     return one_message_processed
 
-cdef cypclass NoneResult(ActhonResultInterface) checklock:
+cdef cypclass NoneResult(ActhonResultInterface):
   void pushVoidStarResult(self, void* result):
     pass
   void pushIntResult(self, int result):
@@ -63,7 +63,7 @@ cdef cypclass NoneResult(ActhonResultInterface) checklock:
   int getIntResult(const self):
     return 0
 
-cdef cypclass WaitResult(ActhonResultInterface) checklock:
+cdef cypclass WaitResult(ActhonResultInterface):
   union result_t:
     int int_val
     void* ptr
@@ -104,7 +104,7 @@ cdef cypclass WaitResult(ActhonResultInterface) checklock:
     res = self._getRawResult()
     return res.int_val
 
-cdef cypclass ActivityCounterSync(ActhonSyncInterface) checklock:
+cdef cypclass ActivityCounterSync(ActhonSyncInterface):
   int count
   ActivityCounterSync previous_sync
 
@@ -129,12 +129,12 @@ cdef cypclass ActivityCounterSync(ActhonSyncInterface) checklock:
         res = prev_sync.isCompleted()
     return res
 
-cdef cypclass A checklock activable:
+cdef cypclass A activable:
     int a
     __init__(self):
         self.a = 0
         self._active_result_class = WaitResult.construct
-        self._active_queue_class = BasicQueue()
+        self._active_queue_class = consume BasicQueue()
     int getter(const self):
         return self.a
     void setter(self, int a):
@@ -146,21 +146,19 @@ def test_acthon_chain(n):
     42
     """
     cdef ActhonResultInterface res
-    cdef ActhonQueueInterface queue
+    cdef locked ActhonQueueInterface queue
     sync1 = ActivityCounterSync()
-    with wlocked sync1:
-        after_sync1 = ActivityCounterSync(sync1)
+    after_sync1 = ActivityCounterSync(sync1)
+
     obj = A()
-    with wlocked obj:
-        obj_actor = activate(obj)
-        with wlocked obj_actor, wlocked sync1, wlocked after_sync1:
-            # Pushing things in the queue
-            obj_actor.setter(sync1, n)
-            res = obj_actor.getter(after_sync1)
+    queue = obj._active_queue_class
+    obj_actor = activate(consume obj)
+
+    # Pushing things in the queue
+    obj_actor.setter(sync1, n)
+    res = obj_actor.getter(after_sync1)
+
     # Processing the queue
-    with rlocked obj:
-        queue = obj._active_queue_class
-    with wlocked queue:
-        while not queue.is_empty():
-            queue.activate()
+    while not queue.is_empty():
+        queue.activate()
     print <int> res

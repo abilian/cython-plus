@@ -737,6 +737,11 @@ class ExprNode(Node):
         #  a subnode.
         return self.is_temp
 
+    def result_is_new_reference(self):
+        # Return true if the result is a new reference that is
+        # already incref-ed and will need to be decref-ed later.
+        return self.result_in_temp()
+
     def target_code(self):
         #  Return code fragment for use as LHS of a C assignment.
         return self.calculate_result_code()
@@ -786,7 +791,7 @@ class ExprNode(Node):
         Make sure we own a reference to result.
         If the result is in a temp, it is already a new reference.
         """
-        if not self.result_in_temp():
+        if not self.result_is_new_reference():
             # FIXME: is this verification really necessary ?
             if self.type.is_cyp_class and "NULL" in self.result():
                 pass
@@ -798,7 +803,7 @@ class ExprNode(Node):
         Make sure we own the reference to this memoryview slice.
         """
         # TODO ideally this would be shared with "make_owned_reference"
-        if not self.result_in_temp():
+        if not self.result_is_new_reference():
             code.put_incref_memoryviewslice(self.result(), self.type,
                                             have_gil=not self.in_nogil_context)
 
@@ -3771,7 +3776,14 @@ class IndexNode(_IndexingBaseNode):
             return py_object_type
 
     def analyse_types(self, env):
-        return self.analyse_base_and_index_types(env, getting=True)
+        index_node = self.analyse_base_and_index_types(env, getting=True)
+        if index_node.type.is_cyp_class:
+            # If a[b] is a cypclass, a new reference is returned.
+            # In that case it must be stored for later decref-ing.
+            # XXX: future optimisation: only coerce to temporary
+            # when the value is not already assigned to a variable.
+            return index_node.coerce_to_temp(env)
+        return index_node
 
     def analyse_target_types(self, env):
         node = self.analyse_base_and_index_types(env, setting=True)
@@ -4240,13 +4252,13 @@ class IndexNode(_IndexingBaseNode):
             temp.use_managed_ref = False
         return temp
 
-    def make_owned_reference(self, code):
+    def result_is_new_reference(self):
         if self.type.is_cyp_class and not (self.base.type.is_array or self.base.type.is_ptr):
             # This is already a new reference
             # either via cpp operator[]
             # or via cypclass __getitem__
-            return
-        ExprNode.make_owned_reference(self, code)
+            return True
+        return ExprNode.result_is_new_reference(self)
 
     gil_message = "Indexing Python object"
 
@@ -7298,6 +7310,7 @@ class AttributeNode(ExprNode):
         return node
 
     def analyse_types(self, env, target = 0):
+        self.is_target = target
         self.initialized_check = env.directives['initializedcheck']
         node = self.analyse_as_cimported_attribute_node(env, target)
         if node is None and not target:
@@ -8028,7 +8041,7 @@ class SequenceNode(ExprNode):
 
             for i in range(arg_count):
                 arg = self.args[i]
-                if c_mult or not arg.result_in_temp():
+                if c_mult or not arg.result_is_new_reference():
                     code.put_incref(arg.result(), arg.ctype())
                 arg.generate_giveref(code)
                 code.putln("%s(%s, %s, %s);" % (
@@ -10938,6 +10951,9 @@ class TypecastNode(ExprNode):
                 self.op_func_type = entry.type
             if self.type.is_cyp_class:
                 self.is_temp = self.overloaded
+                if self.type.is_qualified_cyp_class:
+                    if not self.type.assignable_from(self.operand.type):
+                        error(self.pos, "Cannot cast %s to %s" % (self.operand.type, self.type))
         if self.type.is_ptr and self.type.base_type.is_cfunction and self.type.base_type.nogil:
             op_type = self.operand.type
             if op_type.is_ptr:
@@ -11356,32 +11372,33 @@ class ConsumeNode(ExprNode):
     #  Consume expression
     #
     #  operand   ExprNode
+    #
+    #  nogil                    boolean     used internally
+    #  generate_runtime_check   boolean     used internally
+    #  operand_is_named         boolean     used internally
 
     subexprs = ['operand']
-    generate_runtime_check = True
-    operand_is_named = True
 
     def infer_type(self, env):
         operand_type = self.operand.infer_type(env)
         if operand_type.is_cyp_class:
+            if operand_type.is_qualified_cyp_class:
+                operand_type = operand_type.qual_base_type
             return PyrexTypes.cyp_class_qualified_type(operand_type, 'iso~')
         else:
             return operand_type
 
     def analyse_types(self, env):
+        self.nogil = env.nogil
         self.operand = self.operand.analyse_types(env)
         operand_type = self.operand.type
         if not operand_type.is_cyp_class:
-            error(self.pos, "Can only consume cypclass")
+            error(self.pos, "Can only consume cypclass (not '%s')" % operand_type)
             self.type = PyrexTypes.error_type
             return self
-        if self.operand.is_name or self.operand.is_attribute:
-            self.is_temp = self.operand_is_named = True
-            # We steal the reference of the operand.
-            self.use_managed_ref = False
         if operand_type.is_qualified_cyp_class:
-            if operand_type.qualifier == 'iso!':
-                error(self.pos, "Cannot consume iso!")
+            if operand_type.qualifier == 'iso->':
+                error(self.pos, "Cannot consume iso->")
                 self.type = PyrexTypes.error_type
                 return self
             self.generate_runtime_check = operand_type.qualifier not in ('iso', 'iso~')
@@ -11390,7 +11407,13 @@ class ConsumeNode(ExprNode):
             else:
                 self.type = PyrexTypes.cyp_class_qualified_type(operand_type.qual_base_type, 'iso~')
         else:
+            self.generate_runtime_check = True
             self.type = PyrexTypes.cyp_class_qualified_type(operand_type, 'iso~')
+        self.operand_is_named = self.operand.is_name or self.operand.is_attribute
+        self.is_temp = self.operand_is_named or self.generate_runtime_check
+        if self.is_temp:
+            # We steal the reference of the operand.
+            self.use_managed_ref = False
         return self
 
     def may_be_none(self):
@@ -11404,19 +11427,27 @@ class ConsumeNode(ExprNode):
         pass
 
     def calculate_result_code(self):
-        if self.generate_runtime_check:
-            # TODO: generate runtime check for isolation
-            return self.operand.result()
-        else:
-            return self.operand.result()
+        return self.operand.result()
 
     def generate_result_code(self, code):
         if self.is_temp:
             operand_result = self.operand.result()
-            code.putln("%s = %s;" % (self.result(), operand_result))
+            result_code = self.result()
+            code.putln("%s = %s;" % (result_code, operand_result))
             if self.generate_runtime_check:
-                # TODO: generate runtime check for isolation
-                pass
+                code.putln("if (%s != NULL && !%s->CyObject_iso()) {" % (result_code, result_code))
+                if self.nogil:
+                    code.putln("#ifdef WITH_THREAD")
+                    code.putln("PyGILState_STATE _save = PyGILState_Ensure();")
+                    code.putln("#endif")
+                code.putln("PyErr_SetString(PyExc_TypeError, \"'consume' operand is not isolated\");")
+                if self.nogil:
+                    code.putln("#ifdef WITH_THREAD")
+                    code.putln("PyGILState_Release(_save);")
+                    code.putln("#endif")
+                code.putln(
+                    code.error_goto(self.pos))
+                code.putln("}")
             # We steal the reference of the operand.
             code.putln("%s = NULL;" % operand_result)
         if self.operand.is_temp:
@@ -14236,14 +14267,19 @@ class CoerceToTempNode(CoercionNode):
 class CoerceToLockedNode(CoercionNode):
     # This node is used to lock a node of cypclass type around the evaluation of its subexpressions.
 
-    # rlock_only    boolean
+    # exclusive     boolean
+    # needs_decref  boolean     used internally
 
-    def __init__(self, arg, env=None, rlock_only=False):
-        self.rlock_only = rlock_only
+    def __init__(self, arg, env=None, exclusive=True):
+        self.exclusive = exclusive
         self.type = arg.type
-        arg = arg.coerce_to_temp(env)
-        arg.postpone_subexpr_disposal = True
-        super(CoerceToLockedNode,self).__init__(arg)
+        temp_arg = arg.coerce_to_temp(env)
+        temp_arg.postpone_subexpr_disposal = True
+        # Avoid incrementing the reference count when assigning to the temporary
+        # but ensure it will be decremented if it was already incremented previously.
+        self.needs_decref = not temp_arg.use_managed_ref
+        temp_arg.use_managed_ref = False
+        super(CoerceToLockedNode,self).__init__(temp_arg)
 
     def result(self):
         return self.arg.result()
@@ -14270,19 +14306,23 @@ class CoerceToLockedNode(CoercionNode):
         # Create a scope to use scope bound resource management (RAII).
         code.putln("{")
 
-        # Since each lock guard has its onw scope,
+        # Since each lock guard has its own scope,
         # a prefix is enough to prevent name collisions.
         guard_code = "%sguard" % Naming.cypclass_lock_guard_prefix
-        if self.rlock_only:
-            code.putln("Cy_rlock_guard %s(%s, %s);" % (guard_code, self.result(), context))
-        else:
+        if self.exclusive:
             code.putln("Cy_wlock_guard %s(%s, %s);" % (guard_code, self.result(), context))
+        else:
+            code.putln("Cy_rlock_guard %s(%s, %s);" % (guard_code, self.result(), context))
 
     def generate_disposal_code(self, code):
         # Close the scope to release the lock.
         code.putln("}")
-        # Dispose of subexpressions.
-        super(CoerceToLockedNode,self).generate_disposal_code(code)
+        # Dispose of and free subexpressions.
+        self.arg.generate_subexpr_disposal_code(code)
+        self.arg.free_subexpr_temps(code)
+        # Decref only if previously incref-ed.
+        if self.needs_decref:
+            code.put_xdecref_clear(self.result(), self.ctype(), have_gil=not self.in_nogil_context)
 
 
 class ProxyNode(CoercionNode):

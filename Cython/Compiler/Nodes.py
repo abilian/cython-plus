@@ -612,12 +612,14 @@ class CFuncDeclaratorNode(CDeclaratorNode):
     # nogil            boolean    Can be called without gil
     # with_gil         boolean    Acquire gil around function body
     # is_const_method  boolean    Whether this is a const method
+    # self_qualifier   string     The qualifier of 'self' argument, if any
 
     child_attrs = ["base", "args", "exception_value"]
 
     overridable = 0
     optional_arg_count = 0
     is_const_method = 0
+    self_qualifier = None
     templates = None
     skipped_self = None
 
@@ -685,6 +687,10 @@ class CFuncDeclaratorNode(CDeclaratorNode):
                     if type.is_const_cyp_class:
                         self.is_const_method = True
                         unqualified_type = type.const_base_type
+                    # Accept 'f(<qualifier> self, ...) syntax'
+                    if type.is_qualified_cyp_class:
+                        self.self_qualifier = type.qualifier
+                        unqualified_type = type.qual_base_type
                     # check that the type of self is correct:
                     if not unqualified_type.same_as(env.parent_type):
                         error(self.pos, "Wrong type for self argument - expected %s, got %s" % (env.parent_type, type))
@@ -784,6 +790,7 @@ class CFuncDeclaratorNode(CDeclaratorNode):
             nogil=self.nogil, with_gil=self.with_gil, is_overridable=self.overridable,
             is_const_method=self.is_const_method,
             is_cyp_class_method = env.is_cyp_class_scope,
+            self_qualifier = self.self_qualifier,
             templates=self.templates)
 
         if self.optional_arg_count:
@@ -913,6 +920,8 @@ class CArgDeclNode(Node):
             self_base_type = self.base_type
             if isinstance(self_base_type, CConstOrVolatileTypeNode):
                 self_base_type = self_base_type.base_type
+            if isinstance(self_base_type, QualifiedCypclassNode):
+                self_base_type = self_base_type.base_type
             self_base_type.is_self_arg = self.is_self_arg = True
         if self.type is None:
             # The parser may misinterpret names as types. We fix that here.
@@ -922,6 +931,9 @@ class CArgDeclNode(Node):
                 # XXX Generally, the code below assumes name_as_type is a CSimpleBaseTypeNode
                 # and crashes when that assumption is broken.
                 if isinstance(name_as_type, CConstOrVolatileTypeNode):
+                    name_as_type = name_as_type.base_type
+                 # Support syntax like '<qualifier> self'
+                if isinstance(name_as_type, QualifiedCypclassNode):
                     name_as_type = name_as_type.base_type
                 if nonempty:
                     if name_as_type.is_basic_c_type:
@@ -1559,7 +1571,6 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
     #  templates     [(string, bool)] or None
     #  decorators    [DecoratorNode] or None
     #  cypclass      boolean
-    #  lock_mode     'nolock', 'checklock', 'autolock', or None
     #  activable     boolean
 
     decorators = None
@@ -1584,7 +1595,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         self.entry = env.declare_cpp_class(
             self.name, None, self.pos, self.cname,
             base_classes=[], visibility=self.visibility, templates=template_types,
-            cypclass=self.cypclass, lock_mode=self.lock_mode, activable=self.activable)
+            cypclass=self.cypclass, activable=self.activable)
 
     def analyse_declarations(self, env):
         if self.templates is None:
@@ -1642,7 +1653,7 @@ class CppClassNode(CStructOrUnionDefNode, BlockNode):
         self.entry = env.declare_cpp_class(
             self.name, scope, self.pos,
             self.cname, base_class_types, visibility=self.visibility, templates=template_types,
-            cypclass=self.cypclass, lock_mode=self.lock_mode, activable=self.activable)
+            cypclass=self.cypclass, activable=self.activable)
         if self.entry is None:
             return
         self.entry.is_cpp_class = 1
@@ -8615,8 +8626,11 @@ class LockCypclassNode(StatNode):
         self.obj.analyse_declarations(env)
 
     def analyse_expressions(self, env):
-        self.obj = self.obj.analyse_types(env)
+        self.obj = obj = self.obj.analyse_types(env)
         self.body = self.body.analyse_expressions(env)
+        if not obj.type.is_cyp_class:
+            error(obj.pos, "Locking non-cypclass reference")
+            return self
         return self
 
     def generate_execution_code(self, code):

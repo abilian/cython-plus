@@ -2,7 +2,7 @@
 # tag: cpp, cpp11
 # cython: experimental_cpp_class_def=True, language_level=2
 
-cdef cypclass Refcounted nolock:
+cdef cypclass Refcounted:
     pass
 
 cdef int raises(Refcounted r) except 0:

@@ -429,7 +429,7 @@ class CypclassLockTransform(Visitor.EnvTransform):
             old_writing = self.writing
             self.writing = locally_writing
             self.visitchildren(node)
-            if field_access or method_call:
+            if field_access or (method_call and not nodetype.self_qualifier == 'locked'):
                 node.obj = ExprNodes.CoerceToLockedNode(node.obj, exclusive=self.writing)
             self.writing = old_writing
         elif objtype.is_cyp_class:

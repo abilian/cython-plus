@@ -11410,10 +11410,9 @@ class ConsumeNode(ExprNode):
             self.generate_runtime_check = True
             self.type = PyrexTypes.cyp_class_qualified_type(operand_type, 'iso~')
         self.operand_is_named = self.operand.is_name or self.operand.is_attribute
-        self.is_temp = self.operand_is_named or self.generate_runtime_check
-        if self.is_temp:
-            # We steal the reference of the operand.
-            self.use_managed_ref = False
+        self.is_temp = self.operand_is_named or (self.generate_runtime_check and not self.operand.is_temp)
+        if not self.operand_is_named and not self.generate_runtime_check:
+            return self.operand
         return self
 
     def may_be_none(self):
@@ -11429,30 +11428,32 @@ class ConsumeNode(ExprNode):
     def calculate_result_code(self):
         return self.operand.result()
 
+    def result_in_temp(self):
+        return self.is_temp or self.operand.result_in_temp()
+
     def generate_result_code(self, code):
+        result_code = self.result()
         if self.is_temp:
-            operand_result = self.operand.result()
-            result_code = self.result()
-            code.putln("%s = %s;" % (result_code, operand_result))
-            if self.generate_runtime_check:
-                code.putln("if (%s != NULL && !%s->CyObject_iso()) {" % (result_code, result_code))
-                if self.nogil:
-                    code.putln("#ifdef WITH_THREAD")
-                    code.putln("PyGILState_STATE _save = PyGILState_Ensure();")
-                    code.putln("#endif")
-                code.putln("PyErr_SetString(PyExc_TypeError, \"'consume' operand is not isolated\");")
-                if self.nogil:
-                    code.putln("#ifdef WITH_THREAD")
-                    code.putln("PyGILState_Release(_save);")
-                    code.putln("#endif")
-                code.putln(
-                    code.error_goto(self.pos))
-                code.putln("}")
-            # We steal the reference of the operand.
-            code.putln("%s = NULL;" % operand_result)
-        if self.operand.is_temp:
-            # TODO: steal the reference of the operand instead
-            code.put_incref(self.result(), self.type)
+            code.putln("%s = %s;" % (result_code, self.operand.result()))
+        if self.generate_runtime_check:
+            code.putln("if (%s != NULL && !%s->CyObject_iso()) {" % (result_code, result_code))
+            if self.nogil:
+                code.putln("#ifdef WITH_THREAD")
+                code.putln("PyGILState_STATE _save = PyGILState_Ensure();")
+                code.putln("#endif")
+            code.putln("PyErr_SetString(PyExc_TypeError, \"'consume' operand is not isolated\");")
+            if self.nogil:
+                code.putln("#ifdef WITH_THREAD")
+                code.putln("PyGILState_Release(_save);")
+                code.putln("#endif")
+            code.putln(
+                code.error_goto(self.pos))
+            code.putln("}")
+        if self.operand_is_named:
+            code.putln("%s = NULL;" % self.operand.result())
+
+    def generate_post_assignment_code(self, code):
+        self.operand.generate_post_assignment_code(code)
 
 
 class TypeidNode(ExprNode):

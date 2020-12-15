@@ -2991,6 +2991,11 @@ class CppClassScope(Scope):
         if (self.parent_type.is_cyp_class and type.is_static_method and name not in ("<alloc>", "__new__")):
             entry.static_cname = "%s__static__%s" % (Naming.func_prefix, cname or name)
 
+        if type.self_qualifier in ('locked&',):
+            reify = False
+        if any(arg.type.is_qualified_cyp_class and arg.type.qualifier in ('locked&',) for arg in type.args):
+            reify = False
+
         if reify:
             self.reify_method(entry)
         #if prev_entry and not defining:

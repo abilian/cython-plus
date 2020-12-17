@@ -2199,11 +2199,13 @@ class FuncDefNode(StatNode, BlockNode):
         is_cdef = isinstance(self, CFuncDefNode)
         for entry in lenv.arg_entries:
             if not entry.type.is_memoryviewslice:
-                if (acquire_gil or entry.cf_is_reassigned) and not entry.in_closure:
-                    if entry.type.is_cyp_class and entry.is_self_arg:
-                        pass
-                    else:
+                if entry.type.is_cyp_class:
+                    # CyObjects use another refcounting convention.
+                    # Except for the 'self' argument.
+                    if entry.is_self_arg and (entry.is_consumed or entry.cf_is_reassigned) and not entry.in_closure:
                         code.put_var_incref(entry)
+                elif (acquire_gil or entry.cf_is_reassigned) and not entry.in_closure:
+                    code.put_var_incref(entry)
             # Note: defaults are always incref-ed. For def functions, we
             #       we acquire arguments from object conversion, so we have
             #       new references. If we are a cdef function, we need to
@@ -2418,6 +2420,11 @@ class FuncDefNode(StatNode, BlockNode):
                 # functions, but not borrowed slices from cdef functions.
                 if is_cdef and not entry.cf_is_reassigned:
                     continue
+            elif entry.type.is_cyp_class:
+                # CyObject arguments are systematically decrefed.
+                # Except for the 'self' argument when it has not been reassigned or consumed.
+                if entry.is_self_arg and not (entry.is_consumed or entry.cf_is_reassigned):
+                    continue
             else:
                 if entry.in_closure:
                     continue
@@ -2425,11 +2432,8 @@ class FuncDefNode(StatNode, BlockNode):
                     continue
                 if entry.type.needs_refcounting:
                     assure_gil('success')
-            if entry.type.is_cyp_class and entry.is_self_arg:
-                pass
-            else:
-                # FIXME use entry.xdecref_cleanup - del arg seems to be the problem
-                code.put_var_xdecref(entry, have_gil=gil_owned['success'])
+            # FIXME use entry.xdecref_cleanup - del arg seems to be the problem
+            code.put_var_xdecref(entry, have_gil=gil_owned['success'])
         if self.needs_closure:
             assure_gil('success')
             code.put_decref(Naming.cur_scope_cname, lenv.scope_class.type)
@@ -3782,19 +3786,11 @@ class DefNodeWrapper(FuncDefNode):
         # ----- Non-error return cleanup
         code.put_label(code.return_label)
         for entry in lenv.var_entries:
-            if entry.is_arg:
-                # The conversion from PyObject to CyObject always creates a new CyObject reference.
-                # This decrements all arguments-as-variables converted straight from an actual argument.
-                # This includes CyObjects converted directly from a corresponding PyObject argument.
-                if entry.xdecref_cleanup or entry.type.is_cyp_class:
+            if entry.is_arg and not entry.type.is_cyp_class:
+                if entry.xdecref_cleanup:
                     code.put_var_xdecref(entry)
                 else:
                     code.put_var_decref(entry)
-        for entry in lenv.arg_entries:
-            if entry.type.is_cyp_class:
-                # The conversion from PyObject to CyObject always creates a new CyObject reference.
-                # This decrements CyObjects converted from generic PyObject args passed via tuple and kw dict.
-                code.put_var_xdecref(entry)
 
         code.put_finish_refcount_context()
         if not self.return_type.is_void:
@@ -6580,7 +6576,7 @@ class DelStatNode(StatNode):
                 arg.free_temps(code)
             elif arg.type.is_cyp_class:
                 arg.generate_evaluation_code(code)
-                code.put_decref_clear(arg.result(), arg.type)
+                code.put_xdecref_clear(arg.result(), arg.type)
                 arg.generate_disposal_code(code)
                 arg.free_temps(code)
             # else error reported earlier

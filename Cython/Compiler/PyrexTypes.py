@@ -3796,12 +3796,10 @@ class CFuncTypeArg(BaseType):
     accept_none = True
     accept_builtin_subtypes = False
     annotation = None
-    original_template = None
-    has_cypclass_specialisation = False
 
     subtypes = ['type']
 
-    def __init__(self, name, type, pos, cname=None, annotation=None, original_template=None):
+    def __init__(self, name, type, pos, cname=None, annotation=None):
         self.name = name
         if cname is not None:
             self.cname = cname
@@ -3812,8 +3810,6 @@ class CFuncTypeArg(BaseType):
         self.type = type
         self.pos = pos
         self.needs_type_test = False  # TODO: should these defaults be set in analyse_types()?
-        self.original_template = original_template or self
-        self.original_template.has_cypclass_specialisation = type.is_cyp_class
 
     def __repr__(self):
         return "%s:%s" % (self.name, repr(self.type))
@@ -3821,14 +3817,10 @@ class CFuncTypeArg(BaseType):
     def declaration_code(self, for_display = 0, pyrex = 0, cname = None):
         if cname is None:
             cname = self.cname
-        if self.type.is_template_typename and self.has_cypclass_specialisation:
-            base_code = "Cy_Raw<%s>" % self.type.empty_declaration_code()
-            return self.base_declaration_code(base_code, self.cname)
         return self.type.declaration_code(cname, for_display, pyrex)
 
     def specialize(self, values):
-        return CFuncTypeArg(self.name, self.type.specialize(values), self.pos, self.cname,
-            None, self.original_template)
+        return CFuncTypeArg(self.name, self.type.specialize(values), self.pos, self.cname)
 
 
 class ToPyStructUtilityCode(object):
@@ -4725,15 +4717,13 @@ class CypClassType(CppClassType):
         code.putln("Cy_DECREF(%s);" % cname)
 
     def generate_decref_clear(self, code, cname, **kwds):
-        code.putln("Cy_DECREF(%s);" % cname)
-        code.putln("%s = NULL;" % cname)
+        code.putln("Cy_DECREF(%s); %s = NULL;" % (cname, cname))
 
     def generate_xdecref(self, code, cname, **kwds):
         code.putln("Cy_XDECREF(%s);" % cname)
 
     def generate_xdecref_clear(self, code, cname, **kwds):
-        code.putln("Cy_XDECREF(%s);" % cname)
-        code.putln("%s = NULL;" % cname)
+        code.putln("Cy_XDECREF(%s); %s = NULL;" % (cname, cname))
 
     def generate_gotref(self, code, cname):
         code.putln("Cy_GOTREF(%s);" % cname)

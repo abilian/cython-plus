@@ -180,6 +180,8 @@ class Entry(object):
     # original_name    string     The original name of a cpp or cypclass method
     #
     # active_entry     Entry      Entry for the active version of an asyncable cypclass method
+    #
+    # is_consumed      boolean    The entry is the operand of a 'consume' expression.
 
     # TODO: utility_code and utility_code_definition serves the same purpose...
 
@@ -258,6 +260,7 @@ class Entry(object):
     static_cname = None
     original_name = None
     active_entry = None
+    is_consumed = False
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name

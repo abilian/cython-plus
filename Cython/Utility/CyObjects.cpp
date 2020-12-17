@@ -141,13 +141,7 @@
 
             constexpr Cy_Ref_impl() noexcept = default;
 
-            // constexpr Cy_Ref_impl(std::nullptr_t null) noexcept : uobj(null) {}
-
-            Cy_Ref_impl(T* const& uobj) : uobj(uobj) {
-                if (uobj != nullptr) {
-                    uobj->CyObject_INCREF();
-                }
-            }
+            constexpr Cy_Ref_impl(T* const& uobj) noexcept : uobj(uobj) {}
 
             constexpr Cy_Ref_impl(T* && uobj) noexcept : uobj(uobj) {}
 
@@ -280,6 +274,7 @@
             }
             template <typename U = T, typename std::enable_if<Cy_has_equality<U>::value, int>::type = 0>
             bool operator()(const Cy_Ref_impl<T>& lhs, const Cy_Ref_impl<T>& rhs) const {
+                Cy_INCREF(rhs.uobj);
                 return lhs.uobj->operator==(rhs.uobj);
             }
         };
@@ -420,6 +415,12 @@
             return ob->CyObject_GETREF();
         }
 
+        static inline int Cy_GETREF(const CyObject *ob) {
+            int refcnt = ob->CyObject_GETREF();
+            ob->CyObject_DECREF();
+            return refcnt;
+        }
+
         static inline void _Cy_RLOCK(const CyObject *ob, const char *context) {
             if (ob != NULL) {
                 ob->CyObject_RLOCK(context);
@@ -473,7 +474,9 @@
         template <typename T, typename O>
         static inline int isinstanceof(O ob) {
             static_assert(std::is_convertible<T, CyObject *>::value, "wrong type 'T' for isinstanceof[T]");
-            return dynamic_cast<const typename std::remove_pointer<T>::type *>(ob) != NULL;
+            bool result = dynamic_cast<const typename std::remove_pointer<T>::type *>(ob) != NULL;
+            Cy_DECREF(ob);
+            return result;
         }
 
         /*
@@ -482,7 +485,6 @@
         template <typename T>
         static inline T * activate(T * ob) {
             static_assert(std::is_convertible<T *, ActhonActivableClass *>::value, "wrong type for activate");
-            Cy_INCREF(ob);
             return ob;
         }
 
@@ -608,7 +610,6 @@
         /* Cast argument to CyObject* type. */
         #define _CyObject_CAST(ob) ob
 
-        #define Cy_GETREF(ob) (_Cy_GETREF(_CyObject_CAST(ob)))
         #define Cy_GOTREF(ob)
         #define Cy_XGOTREF(ob)
         #define Cy_GIVEREF(ob)

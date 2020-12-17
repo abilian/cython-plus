@@ -3966,6 +3966,8 @@ class IndexNode(_IndexingBaseNode):
         self.type = func_type.return_type.as_returned_type()
         if setting and not self.type.is_reference:
             error(self.pos, "Can't set non-reference result '%s'" % self.type)
+        if not setting and self.type.is_cyp_class:
+            self.is_temp = True
         return self
 
     def analyse_as_cyp_class(self, env, setting, deleting):
@@ -3996,8 +3998,13 @@ class IndexNode(_IndexingBaseNode):
         elif self.exception_check == '~':
             self.is_temp = True
 
-        self.index = self.index.coerce_to(function.type.args[0].type, env)
+        arg_type = function.type.args[0].type
+        self.index = self.index.coerce_to(arg_type, env)
+        if arg_type.is_cyp_class:
+            self.index = CoerceToArgAssmtNode(self.index, env)
         self.type = func_type.return_type.as_returned_type()
+        if self.type.is_cyp_class:
+            self.is_temp = True
         return self
 
     def analyse_cyp_class_setitem(self, env):
@@ -4016,7 +4023,10 @@ class IndexNode(_IndexingBaseNode):
         if self.exception_check == '+' and self.exception_value is None:
             env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
 
-        self.index = self.index.coerce_to(function.type.args[0].type, env)
+        arg_type = function.type.args[0].type
+        self.index = self.index.coerce_to(arg_type, env)
+        if arg_type.is_cyp_class:
+            self.index = CoerceToArgAssmtNode(self.index, env)
         self.type = func_type.args[1].type
         return self
 
@@ -4036,7 +4046,10 @@ class IndexNode(_IndexingBaseNode):
         if self.exception_check == '+' and self.exception_value is None:
             env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
 
-        self.index = self.index.coerce_to(function.type.args[0].type, env)
+        arg_type = function.type.args[0].type
+        self.index = self.index.coerce_to(arg_type, env)
+        if arg_type.is_cyp_class:
+            self.index = CoerceToArgAssmtNode(self.index, env)
         self.type = func_type.return_type.as_returned_type()
         return self
 
@@ -4243,23 +4256,6 @@ class IndexNode(_IndexingBaseNode):
                 # This is a bug
                 raise InternalError("Couldn't find the right signature")
 
-    def coerce_to_temp(self, env):
-        temp = ExprNode.coerce_to_temp(self, env)
-        if self.type.is_cyp_class and not (self.base.type.is_array or self.base.type.is_ptr):
-            # This is already a new reference
-            # either via cpp operator[]
-            # or via cypclass __getitem__
-            temp.use_managed_ref = False
-        return temp
-
-    def result_is_new_reference(self):
-        if self.type.is_cyp_class and not (self.base.type.is_array or self.base.type.is_ptr):
-            # This is already a new reference
-            # either via cpp operator[]
-            # or via cypclass __getitem__
-            return True
-        return ExprNode.result_is_new_reference(self)
-
     gil_message = "Indexing Python object"
 
     def calculate_result_code(self):
@@ -4355,7 +4351,7 @@ class IndexNode(_IndexingBaseNode):
             function = "__Pyx_GetItemInt_ByteArray"
             error_value = '-1'
             utility_code = UtilityCode.load_cached("GetItemIntByteArray", "StringTools.c")
-        elif not (self.base.type.is_cpp_class and self.exception_check in ('+', '~')):
+        elif not (self.base.type.is_cpp_class and (self.exception_check in ('+', '~') or self.type.is_cyp_class)):
             assert False, "unexpected type %s and base type %s for indexing" % (
                 self.type, self.base.type)
 
@@ -4381,6 +4377,8 @@ class IndexNode(_IndexingBaseNode):
                 exc_check_code = self.type.error_condition(self.result())
                 goto_error = code.error_goto_if(exc_check_code, self.pos)
                 code.putln("%s %s" % (evaluation_code, goto_error))
+            elif self.type.is_cyp_class:
+                code.putln("%s" % evaluation_code)
         else:
             error_check = '!%s' if error_value == 'NULL' else '%%s == %s' % error_value
             code.putln(
@@ -4456,6 +4454,9 @@ class IndexNode(_IndexingBaseNode):
                                  exception_check=None, exception_value=None):
         self.generate_subexpr_evaluation_code(code)
 
+        if self.type.is_cyp_class:
+            rhs.make_owned_reference(code)
+
         if self.type.is_pyobject:
             self.generate_setitem_code(rhs.py_result(), code)
         elif self.base.type.is_cyp_class:
@@ -4482,13 +4483,12 @@ class IndexNode(_IndexingBaseNode):
             code.putln(
                 "%s = %s;" % (self.result(), rhs.result()))
 
-        if (self.base.type.is_array or self.base.type.is_ptr) and self.type.is_cyp_class:
-            # XXX This is a good place for refcounting optimisation:
-            # if the rhs is a cypclass temporary we are doing an INCREF and a DECREF.
-            code.put_incref(self.result(), self.type)
         self.generate_subexpr_disposal_code(code)
         self.free_subexpr_temps(code)
-        rhs.generate_disposal_code(code)
+        if self.type.is_cyp_class:
+            rhs.generate_post_assignment_code(code)
+        else:
+            rhs.generate_disposal_code(code)
         rhs.free_temps(code)
 
     def _check_byte_value(self, code, rhs):
@@ -6174,7 +6174,11 @@ class SimpleCallNode(CallNode):
                 # C methods must do the None checks at *call* time
                 arg = arg.as_none_safe_node(
                     "cannot pass None into a C function argument that is declared 'not None'")
-            if arg.is_temp:
+            if arg.type.is_cyp_class:
+                if i > 0:
+                    some_args_in_temps = True
+                arg = CoerceToArgAssmtNode(arg, env)
+            elif arg.is_temp:
                 if i > 0:
                     # first argument in temp doesn't impact subsequent arguments
                     some_args_in_temps = True
@@ -6193,10 +6197,6 @@ class SimpleCallNode(CallNode):
                     if i > 0:  # first argument doesn't matter
                         some_args_in_temps = True
                     arg = arg.coerce_to_temp(env)
-            elif arg.type.is_cyp_class:
-                if i > 0:
-                    some_args_in_temps = True
-                arg = arg.coerce_to_temp(env)
             args[i] = arg
 
         # handle additional varargs parameters
@@ -11413,6 +11413,8 @@ class ConsumeNode(ExprNode):
             self.type = PyrexTypes.cyp_class_qualified_type(operand_type, 'iso~')
         self.operand_is_named = self.operand.is_name or self.operand.is_attribute
         self.is_temp = self.operand_is_named or (self.generate_runtime_check and not self.operand.is_temp)
+        if self.operand_is_named:
+            self.operand.entry.is_consumed = True
         if not self.operand_is_named and not self.generate_runtime_check:
             return self.operand
         return self
@@ -11746,6 +11748,8 @@ class BinopNode(ExprNode):
         else:
             self.operand1 = self.operand1.coerce_to(func_type.args[0].type, env)
             self.operand2 = self.operand2.coerce_to(func_type.args[1].type, env)
+        if self.operand2.type.is_cyp_class:
+            self.operand2 = CoerceToArgAssmtNode(self.operand2, env)
         self.type = func_type.return_type.as_returned_type()
         if self.type.is_cyp_class:
             self.is_temp = 1
@@ -13448,6 +13452,8 @@ class PrimaryCmpNode(ExprNode, CmpNode):
         else:
             self.operand1 = self.operand1.coerce_to(func_type.args[0].type, env)
             self.operand2 = self.operand2.coerce_to(func_type.args[1].type, env)
+        if self.operand2.type.is_cyp_class:
+            self.operand2 = CoerceToArgAssmtNode(self.operand2, env)
         self.type = func_type.return_type.as_returned_type()
         if self.type.is_cyp_class:
             self.is_temp = True
@@ -14279,17 +14285,12 @@ class CoerceToLockedNode(CoercionNode):
     # This node is used to lock a node of cypclass type around the evaluation of its subexpressions.
 
     # exclusive     boolean
-    # needs_decref  boolean     used internally
 
     def __init__(self, arg, env=None, exclusive=True):
         self.exclusive = exclusive
         self.type = arg.type
         temp_arg = arg.coerce_to_temp(env)
         temp_arg.postpone_subexpr_disposal = True
-        # Avoid incrementing the reference count when assigning to the temporary
-        # but ensure it will be decremented if it was already incremented previously.
-        self.needs_decref = not temp_arg.use_managed_ref
-        temp_arg.use_managed_ref = False
         super(CoerceToLockedNode,self).__init__(temp_arg)
 
     def result(self):
@@ -14331,9 +14332,43 @@ class CoerceToLockedNode(CoercionNode):
         # Dispose of and free subexpressions.
         self.arg.generate_subexpr_disposal_code(code)
         self.arg.free_subexpr_temps(code)
-        # Decref only if previously incref-ed.
-        if self.needs_decref:
-            code.put_xdecref_clear(self.result(), self.ctype(), have_gil=not self.in_nogil_context)
+
+
+class CoerceToArgAssmtNode(CoercionNode):
+    # This node is used to pass the result of a node as argument
+    # to a called function as if it were a simple assignment.
+    # In particular, temporaries are not decremented on disposal.
+
+    def __init__(self, arg, env=None):
+        CoercionNode.__init__(self, arg.coerce_to_simple(env))
+        self.type = self.arg.type.as_argument_type()
+
+    def analyse_types(self, env):
+        return self
+
+    def may_be_none(self):
+        return self.arg.may_be_none()
+
+    def is_simple(self):
+        return True
+
+    def result_in_temp(self):
+        return self.arg.result_in_temp()
+
+    def make_owned_reference(self, code):
+        pass
+
+    def calculate_result_code(self):
+        return self.arg.result()
+
+    def generate_result_code(self, code):
+        self.arg.make_owned_reference(code)
+
+    def generate_post_assignment_code(self, code):
+        self.arg.generate_post_assignment_code(code)
+
+    def generate_disposal_code(self, code):
+        self.arg.generate_post_assignment_code(code)
 
 
 class ProxyNode(CoercionNode):

@@ -10585,11 +10585,11 @@ class UnopNode(ExprNode):
         elif self.is_temp:
             if self.is_cpp_operation() and self.exception_check == '+':
                 translate_cpp_exception(code, self.pos,
-                    "%s = %s %s;" % (self.result(), self.operator, self.operand.result()),
+                    "%s = %s;" % (self.result(), self.calculate_operation_result_code(self.operator)),
                     self.result() if self.type.is_pyobject else None,
                     self.exception_value, self.in_nogil_context)
             else:
-                code.putln("%s = %s %s;" % (self.result(), self.operator, self.operand.result()))
+                code.putln("%s = %s;" % (self.result(), self.calculate_operation_result_code(self.operator)))
 
     def generate_py_operation_code(self, code):
         function = self.py_operation_function(code)
@@ -10620,6 +10620,8 @@ class UnopNode(ExprNode):
                 self.is_temp = True
                 if self.exception_value is None:
                     env.use_utility_code(UtilityCode.load_cached("CppExceptionConversion", "CppSupport.cpp"))
+            if self.op_func_type.return_type.is_cyp_class:
+                self.is_temp = True
         else:
             self.exception_check = ''
             self.exception_value = ''
@@ -11745,6 +11747,8 @@ class BinopNode(ExprNode):
             self.operand1 = self.operand1.coerce_to(func_type.args[0].type, env)
             self.operand2 = self.operand2.coerce_to(func_type.args[1].type, env)
         self.type = func_type.return_type.as_returned_type()
+        if self.type.is_cyp_class:
+            self.is_temp = 1
 
     def result_type(self, type1, type2, env):
         if self.is_pythran_operation_types(type1, type2, env):
@@ -13191,8 +13195,12 @@ class CmpNode(object):
                 common_type = PyrexTypes.widest_numeric_type(type1, type2)
             else:
                 common_type = type1
-            code1 = operand1.result_as(common_type)
-            code2 = operand2.result_as(common_type)
+            if type1.is_cyp_class and op not in ("is", "is_not"):
+                code1 = "(*%s)" % operand1.result()
+                code2 = operand2.result()
+            else:
+                code1 = operand1.result_as(common_type)
+                code2 = operand2.result_as(common_type)
             statement = "%s = %s(%s %s %s);" % (
                 result_code,
                 coerce_result,
@@ -13441,6 +13449,8 @@ class PrimaryCmpNode(ExprNode, CmpNode):
             self.operand1 = self.operand1.coerce_to(func_type.args[0].type, env)
             self.operand2 = self.operand2.coerce_to(func_type.args[1].type, env)
         self.type = func_type.return_type.as_returned_type()
+        if self.type.is_cyp_class:
+            self.is_temp = True
 
     def analyse_memoryviewslice_comparison(self, env):
         have_none = self.operand1.is_none or self.operand2.is_none

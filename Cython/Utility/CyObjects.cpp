@@ -320,6 +320,7 @@
                 ~Cy_rlock_guard() {
                     if (this->o != NULL) {
                         this->o->CyObject_UNRLOCK();
+                        this->o->CyObject_DECREF();
                     }
                     else {
                         fprintf(stderr, "ERROR: trying to unrlock NULL !\n");
@@ -341,6 +342,7 @@
                 ~Cy_wlock_guard() {
                     if (this->o != NULL) {
                         this->o->CyObject_UNWLOCK();
+                        this->o->CyObject_DECREF();
                     }
                     else {
                         fprintf(stderr, "ERROR: trying to unwlock NULL !\n");

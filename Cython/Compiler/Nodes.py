@@ -8630,7 +8630,8 @@ class LockCypclassNode(StatNode):
         self.obj.analyse_declarations(env)
 
     def analyse_expressions(self, env):
-        self.obj = obj = self.obj.analyse_types(env)
+        obj = self.obj.analyse_types(env)
+        self.obj = obj.coerce_to_temp(env)
         self.body = self.body.analyse_expressions(env)
         if not obj.type.is_cyp_class:
             error(obj.pos, "Locking non-cypclass reference")
@@ -8665,6 +8666,11 @@ class LockCypclassNode(StatNode):
 
         # Close the scope to release the lock.
         code.putln("}")
+
+        # Dispose of the temporary without decrefing.
+        self.obj.generate_post_assignment_code(code)
+        # Free the temporary.
+        self.obj.free_temps(code)
 
 
 def cython_view_utility_code():

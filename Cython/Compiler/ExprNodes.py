@@ -14329,9 +14329,8 @@ class CoerceToLockedNode(CoercionNode):
     def generate_disposal_code(self, code):
         # Close the scope to release the lock.
         code.putln("}")
-        # Dispose of and free subexpressions.
-        self.arg.generate_subexpr_disposal_code(code)
-        self.arg.free_subexpr_temps(code)
+        # Dispose of the temporary without decrefing.
+        self.arg.generate_post_assignment_code(code)
 
 
 class CoerceToArgAssmtNode(CoercionNode):

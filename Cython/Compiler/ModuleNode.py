@@ -1087,38 +1087,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         sync_attr_cname = message_base_type.scope.lookup_here("_sync_method").cname
         result_attr_cname = message_base_type.scope.lookup_here("_result").cname
 
-        def put_cypclass_op_on_narg_optarg(op_lbda, func_type, opt_arg_name, code):
-            opt_arg_count = func_type.optional_arg_count
-            narg_count = len(func_type.args) - opt_arg_count
-            for narg in func_type.args[:narg_count]:
-                if narg.type.is_cyp_class:
-                    code.putln("%s(this->%s);" % (op_lbda(narg), narg.cname))
-
-            if opt_arg_count:
-                opt_arg_guard = code.insertion_point()
-                code.increase_indent()
-                num_if = 0
-                for opt_idx, optarg in enumerate(func_type.args[narg_count:]):
-                    if optarg.type.is_cyp_class:
-                        code.putln("if (this->%s->%sn > %s) {" %
-                                        (opt_arg_name,
-                                        Naming.pyrex_prefix,
-                                        opt_idx
-                        ))
-                        code.putln("%s(this->%s->%s);" %
-                                        (op_lbda(optarg),
-                                        opt_arg_name,
-                                        func_type.opt_arg_cname(optarg.name)
-                        ))
-                        num_if += 1
-                for _ in range(num_if):
-                    code.putln("}")
-                if num_if:
-                    opt_arg_guard.putln("if (this->%s != NULL) {" % opt_arg_name)
-                    code.putln("}")
-                else:
-                    code.decrease_indent()
-
         for reified_function_entry in entry.type.scope.reified_entries:
             reifying_class_name = "%s%s" % (Naming.cypclass_reified_prefix, reified_function_entry.name)
             reifying_class_full_name = "%s::%s" % (entry.type.empty_declaration_code(), reifying_class_name)
@@ -1186,7 +1154,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 code.putln("}")
 
             # Acquire a ref on CyObject, as we don't know when the message will be processed
-            put_cypclass_op_on_narg_optarg(lambda _: "Cy_INCREF", reified_function_entry.type, Naming.optional_args_cname, code)
             code.putln("Cy_INCREF(this->%s);" % target_object_cname)
             code.putln("}")
 
@@ -1231,7 +1198,6 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             # Destructor
             code.putln("virtual ~%s() {" % class_name)
             code.putln("Cy_DECREF(this->%s);" % target_object_cname)
-            put_cypclass_op_on_narg_optarg(lambda _: "Cy_DECREF", reified_function_entry.type, Naming.optional_args_cname, code)
             if opt_arg_count:
                 code.putln("free(this->%s);" % Naming.optional_args_cname)
             code.putln("}")

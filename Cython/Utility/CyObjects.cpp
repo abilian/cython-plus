@@ -388,7 +388,6 @@
             ActhonQueueInterface *_active_queue_class = NULL;
             ActhonResultInterface *(*_active_result_class)(void);
             ActhonActivableClass(){} // Used in Activated classes inheritance chain (base Activated calls this, derived calls the 2 args version below)
-            ActhonActivableClass(ActhonQueueInterface * queue_object, ActhonResultInterface *(*result_constructor)(void));
             virtual ~ActhonActivableClass();
         };
 
@@ -909,7 +908,6 @@ void CyObject::CyObject_UNWLOCK() const
 ActhonMessageInterface::ActhonMessageInterface(ActhonSyncInterface* sync_method,
     ActhonResultInterface* result_object) : _sync_method(sync_method), _result(result_object)
 {
-    Cy_INCREF(this->_sync_method);
     Cy_INCREF(this->_result);
 }
 
@@ -917,12 +915,6 @@ ActhonMessageInterface::~ActhonMessageInterface()
 {
     Cy_XDECREF(this->_sync_method);
     Cy_XDECREF(this->_result);
-}
-
-ActhonActivableClass::ActhonActivableClass(ActhonQueueInterface * queue_object, ActhonResultInterface *(*result_constructor)(void))
-    : _active_queue_class(queue_object), _active_result_class(result_constructor)
-{
-    Cy_INCREF(this->_active_queue_class);
 }
 
 ActhonActivableClass::~ActhonActivableClass()

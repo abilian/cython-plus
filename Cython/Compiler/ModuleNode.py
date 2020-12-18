@@ -1301,9 +1301,29 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             self.generate_cypclass_wrapper_allocation(code, type.wrapper_type)
 
         if init_entry:
-            init_entry = PyrexTypes.best_match(wrapper_arg_types,
-            init_entry.all_alternatives(), None)
-        if init_entry and (is_new_return_type):
+            init_entry = PyrexTypes.best_match(wrapper_arg_types, init_entry.all_alternatives(), None)
+
+        refcnt_op = None
+        if new_entry and (init_entry and is_new_return_type):
+            refcnt_op = "Cy_INCREF"
+        elif not new_entry and not (init_entry and is_new_return_type):
+            refcnt_op = "Cy_DECREF"
+
+        if refcnt_op:
+            for arg in wrapper_type.args[:len(wrapper_type.args)-wrapper_type.optional_arg_count]:
+                if arg.type.is_cyp_class:
+                    code.putln("%s(%s);" % (refcnt_op, arg.cname))
+            if wrapper_type.optional_arg_count:
+                for i, arg in enumerate(wrapper_entry.type.args[wrapper_type.optional_arg_count:]):
+                    if arg.type.is_cyp_class:
+                        code.putln("%s(%s->%s);"
+                            % ( refcnt_op,
+                                Naming.optional_args_cname,
+                                wrapper_entry.type.op_arg_struct.base_type.scope.var_entries[i+1].cname)
+                        )
+
+        if init_entry and is_new_return_type:
+
             # Calling __init__
 
             max_init_nargs = len(init_entry.type.args)

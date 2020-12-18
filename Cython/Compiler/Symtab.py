@@ -2850,7 +2850,7 @@ class CppClassScope(Scope):
         # create the sync argument type
         activated_method_sync_attr_type = PyrexTypes.CFuncTypeArg(
             EncodedString("sync_method"),
-            PyrexTypes.CConstOrVolatileType(sync_type, is_const=1),
+            PyrexTypes.cyp_class_qualified_type(sync_type, 'locked'),
             entry.pos,
             "sync_method",
         )

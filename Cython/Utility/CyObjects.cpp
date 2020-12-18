@@ -364,8 +364,8 @@
         struct ActhonSyncInterface : public CyObject {
             virtual int isActivable() const = 0;
             virtual int isCompleted() const = 0;
-            virtual void insertActivity(ActhonMessageInterface* msg) = 0;
-            virtual void removeActivity(ActhonMessageInterface* msg) = 0;
+            virtual void insertActivity() = 0;
+            virtual void removeActivity() = 0;
         };
 
         struct ActhonMessageInterface : public CyObject {

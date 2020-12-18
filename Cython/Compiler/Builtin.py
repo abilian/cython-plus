@@ -510,9 +510,8 @@ def inject_acthon_interfaces(self):
     sync_isCompleted_entry.is_variable = 1
     sync_scope.var_entries.append(sync_isCompleted_entry)
 
-    sync_msg_arg = PyrexTypes.CFuncTypeArg("msg", message_type, None)
-    sync_insertActivity_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [sync_msg_arg], nogil = 1)
-    sync_removeActivity_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [sync_msg_arg], nogil = 1)
+    sync_insertActivity_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [], nogil = 1)
+    sync_removeActivity_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [], nogil = 1)
     sync_insertActivity_entry = sync_scope.declare("insertActivity", "insertActivity",
         sync_insertActivity_type, None, "extern")
     sync_insertActivity_entry.is_cfunction = 1
@@ -533,12 +532,12 @@ def inject_acthon_interfaces(self):
     message_entry.is_type = 1
 
     message_sync_attr_entry = message_scope.declare("_sync_method", "_sync_method",
-        sync_type, None, "extern")
+        PyrexTypes.cyp_class_qualified_type(sync_type, 'locked'), None, "extern")
     message_sync_attr_entry.is_variable = 1
     message_scope.var_entries.append(message_sync_attr_entry)
 
     message_result_attr_entry = message_scope.declare("_result", "_result",
-        result_type, None, "extern")
+        PyrexTypes.cyp_class_qualified_type(result_type, 'locked'), None, "extern")
     message_result_attr_entry.is_variable = 1
     message_scope.var_entries.append(message_result_attr_entry)
 
@@ -564,7 +563,7 @@ def inject_acthon_interfaces(self):
     queue_entry.is_type = 1
 
     queue_msg_arg = PyrexTypes.CFuncTypeArg("msg", message_type, None)
-    queue_push_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [queue_msg_arg], nogil = 1)
+    queue_push_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [queue_msg_arg], nogil = 1, self_qualifier = 'locked&')
     queue_push_entry = queue_scope.declare("push", "push", queue_push_type,
         None, "extern")
     queue_push_entry.is_cfunction = 1

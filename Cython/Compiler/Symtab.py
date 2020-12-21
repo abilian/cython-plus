@@ -182,6 +182,8 @@ class Entry(object):
     # active_entry     Entry      Entry for the active version of an asyncable cypclass method
     #
     # is_consumed      boolean    The entry is the operand of a 'consume' expression.
+    #
+    # is_specialised   boolean    The entry is a template specialisation.
 
     # TODO: utility_code and utility_code_definition serves the same purpose...
 
@@ -261,6 +263,7 @@ class Entry(object):
     original_name = None
     active_entry = None
     is_consumed = False
+    is_specialised = False
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name
@@ -3136,11 +3139,12 @@ class CppClassScope(Scope):
                                             e.cname,
                                             utility_code=e.utility_code)
             else:
-                scope.declare_var(entry.name,
+                e = scope.declare_var(entry.name,
                                   entry.type.specialize(values),
                                   entry.pos,
                                   entry.cname,
                                   entry.visibility)
+                e.is_specialised = True
 
         return scope
 

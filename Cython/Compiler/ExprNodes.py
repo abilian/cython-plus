@@ -7759,8 +7759,9 @@ class AttributeNode(ExprNode):
             elif self.type.is_cyp_class:
                 rhs.make_owned_reference(code)
                 rhs.generate_giveref(code)
-                code.put_gotref(select_code, self.type)
-                code.put_xdecref(select_code, self.type)
+                if not self.entry.is_specialised:
+                    code.put_gotref(select_code, self.type)
+                    code.put_xdecref(select_code, self.type)
 
             if not self.type.is_memoryviewslice:
                 code.putln(

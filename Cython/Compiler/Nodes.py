@@ -6022,7 +6022,12 @@ class SingleAssignmentNode(AssignmentNode):
                 not rhs.is_name and not rhs.is_literal and
                 (rhs.type.is_pyobject or rhs.type.is_cyp_class)):
             # things like (cdef) attribute access are not safe (traverses pointers)
-            rhs = rhs.coerce_to_temp(env)
+            if rhs.is_attribute and rhs.type.is_cyp_class and rhs.entry.is_specialised:
+                rhs = rhs.coerce_to_temp(env)
+                # cypclass fields specialised from a template do their own reference counting.
+                rhs.use_managed_ref = False
+            else:
+                rhs = rhs.coerce_to_temp(env)
         elif rhs.type.is_pyobject:
             rhs = rhs.coerce_to_simple(env)
         self.rhs = rhs
@@ -6576,7 +6581,10 @@ class DelStatNode(StatNode):
                 arg.free_temps(code)
             elif arg.type.is_cyp_class:
                 arg.generate_evaluation_code(code)
-                code.put_xdecref_clear(arg.result(), arg.type)
+                if arg.is_attribute and arg.entry.is_specialised:
+                    code.putln("%s = nullptr;" % arg.result())
+                else:
+                    code.put_xdecref_clear(arg.result(), arg.type)
                 arg.generate_disposal_code(code)
                 arg.free_temps(code)
             # else error reported earlier

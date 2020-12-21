@@ -6010,6 +6010,8 @@ def template_parameter_code(T, for_display = 0, pyrex = 0):
     Return the code string for a template parameter in a template instanciation.
     """
     if T.is_cyp_class and not for_display:
+        if T.is_qualified_cyp_class:
+            return "Cy_Ref<%s, true>" % T.empty_declaration_code()
         return "Cy_Ref<%s>" % T.empty_declaration_code()
     else:
         return T.declaration_code('', for_display, None, pyrex)

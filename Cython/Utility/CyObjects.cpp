@@ -135,7 +135,7 @@
         template <typename T>
         struct Cy_has_hash<T, typename std::enable_if<std::is_convertible<decltype( std::declval<T>().__hash__() ), std::size_t>::value>::type> : std::true_type {};
 
-        template <typename T>
+        template <typename T, bool iso = false>
         struct Cy_Ref_impl {
             T* uobj = nullptr;
 
@@ -151,8 +151,8 @@
                 }
             }
 
-            template<typename U, typename std::enable_if<std::is_convertible<U*, T*>::value, int>::type = 0>
-            Cy_Ref_impl(const Cy_Ref_impl<U>& rhs) : uobj(rhs.uobj) {
+            template<typename U, bool _iso, typename std::enable_if<std::is_convertible<U*, T*>::value, int>::type = 0>
+            Cy_Ref_impl(const Cy_Ref_impl<U, _iso>& rhs) : uobj(rhs.uobj) {
                 if (uobj != nullptr) {
                     uobj->CyObject_INCREF();
                 }
@@ -162,8 +162,8 @@
                 rhs.uobj = nullptr;
             }
 
-            template<typename U, typename std::enable_if<std::is_convertible<U*, T*>::value, int>::type = 0>
-            Cy_Ref_impl(Cy_Ref_impl<U>&& rhs) noexcept : uobj(rhs.uobj) {
+            template<typename U, bool _iso, typename std::enable_if<std::is_convertible<U*, T*>::value, int>::type = 0>
+            Cy_Ref_impl(Cy_Ref_impl<U, _iso>&& rhs) noexcept : uobj(rhs.uobj) {
                 rhs.uobj = nullptr;
             }
 
@@ -204,8 +204,8 @@
                 return obj;
             }
 
-            template <typename U>
-            bool operator==(const Cy_Ref_impl<U>& rhs) const noexcept {
+            template <typename U, bool _iso>
+            bool operator==(const Cy_Ref_impl<U, _iso>& rhs) const noexcept {
                 return uobj == rhs.uobj;
             }
 
@@ -215,7 +215,7 @@
             }
 
             template <typename U>
-            friend bool operator==(U* lhs, const Cy_Ref_impl<T>& rhs) noexcept {
+            friend bool operator==(U* lhs, const Cy_Ref_impl<T, iso>& rhs) noexcept {
                 return lhs == rhs.uobj;
             }
 
@@ -223,12 +223,12 @@
                 return uobj == nullptr;
             }
 
-            friend bool operator==(std::nullptr_t, const Cy_Ref_impl<T>& rhs) noexcept {
+            friend bool operator==(std::nullptr_t, const Cy_Ref_impl<T, iso>& rhs) noexcept {
                 return rhs.uobj == nullptr;
             }
 
-            template <typename U>
-            bool operator!=(const Cy_Ref_impl<U>& rhs) const noexcept {
+            template <typename U, bool _iso>
+            bool operator!=(const Cy_Ref_impl<U, _iso>& rhs) const noexcept {
                 return uobj != rhs.uobj;
             }
 
@@ -238,7 +238,7 @@
             }
 
             template <typename U>
-            friend bool operator!=(U* lhs, const Cy_Ref_impl<T>& rhs) noexcept {
+            friend bool operator!=(U* lhs, const Cy_Ref_impl<T, iso>& rhs) noexcept {
                 return lhs != rhs.uobj;
             }
 
@@ -246,52 +246,57 @@
                 return uobj != nullptr;
             }
 
-            friend bool operator!=(std::nullptr_t, const Cy_Ref_impl<T>& rhs) noexcept {
+            friend bool operator!=(std::nullptr_t, const Cy_Ref_impl<T, iso>& rhs) noexcept {
                 return rhs.uobj != nullptr;
             }
         };
 
         namespace std {
-        template <typename T>
-        struct hash<Cy_Ref_impl<T>> {
+        template <typename T, bool iso>
+        struct hash<Cy_Ref_impl<T, iso>> {
             template <typename U = T, typename std::enable_if<!Cy_has_hash<U>::value, int>::type = 0>
-            size_t operator()(const Cy_Ref_impl<T>& ref) const {
+            size_t operator()(const Cy_Ref_impl<T, iso>& ref) const {
                 static_assert(!Cy_has_equality<U>::value, "Cypclasses that define __eq__ must also define __hash__ to be hashable");
                 return std::hash<T*>()(ref.uobj);
             }
             template <typename U = T, typename std::enable_if<Cy_has_hash<U>::value, int>::type = 0>
-            size_t operator()(const Cy_Ref_impl<T>& ref) const {
+            size_t operator()(const Cy_Ref_impl<T, iso>& ref) const {
                 static_assert(Cy_has_equality<U>::value, "Cypclasses that define __hash__ must also define __eq__ to be hashable");
                 return ref.uobj->__hash__();
             }
         };
 
-        template <typename T>
-        struct equal_to<Cy_Ref_impl<T>> {
+        template <typename T, bool iso>
+        struct equal_to<Cy_Ref_impl<T, iso>> {
             template <typename U = T, typename std::enable_if<!Cy_has_equality<U>::value, int>::type = 0>
-            bool operator()(const Cy_Ref_impl<T>& lhs, const Cy_Ref_impl<T>& rhs) const {
+            bool operator()(const Cy_Ref_impl<T, iso>& lhs, const Cy_Ref_impl<T, iso>& rhs) const {
                 return lhs.uobj == rhs.uobj;
             }
             template <typename U = T, typename std::enable_if<Cy_has_equality<U>::value, int>::type = 0>
-            bool operator()(const Cy_Ref_impl<T>& lhs, const Cy_Ref_impl<T>& rhs) const {
+            bool operator()(const Cy_Ref_impl<T, iso>& lhs, const Cy_Ref_impl<T, iso>& rhs) const {
                 Cy_INCREF(rhs.uobj);
                 return lhs.uobj->operator==(rhs.uobj);
             }
         };
         }
 
-        template <typename T>
+        template <typename T, bool iso = false>
         struct Cy_Ref_t {
-            using type = Cy_Ref_impl<T>;
+            using type = Cy_Ref_impl<T, iso>;
         };
 
         template <typename T>
-        struct Cy_Ref_t<Cy_Ref_impl<T>> {
-            using type = Cy_Ref_impl<T>;
+        struct Cy_Ref_t<Cy_Ref_impl<T, false>> {
+            using type = Cy_Ref_impl<T, false>;
         };
 
         template <typename T>
-        using Cy_Ref = typename Cy_Ref_t<T>::type;
+        struct Cy_Ref_t<Cy_Ref_impl<T, true>> {
+            using type = Cy_Ref_impl<T, true>;
+        };
+
+        template <typename T, bool iso = false>
+        using Cy_Ref = typename Cy_Ref_t<T, iso>::type;
 
         template <typename T>
         struct Cy_Raw_t {
@@ -299,7 +304,12 @@
         };
 
         template <typename T>
-        struct Cy_Raw_t<Cy_Ref_impl<T>> {
+        struct Cy_Raw_t<Cy_Ref_impl<T, false>> {
+            using type = T*;
+        };
+
+        template <typename T>
+        struct Cy_Raw_t<Cy_Ref_impl<T, true>> {
             using type = T*;
         };
 
@@ -488,6 +498,25 @@
             static_assert(std::is_convertible<T *, ActhonActivableClass *>::value, "wrong type for activate");
             return ob;
         }
+
+        /*
+            * Traverse template fields.
+            */
+        template <typename T>
+        struct Cy_traverse_iso : std::false_type {};
+
+        template <typename T>
+        struct Cy_traverse_iso<Cy_Ref_impl<T, false>> : std::true_type {};
+
+        template <typename T, typename std::enable_if<!Cy_traverse_iso<T>::value, int>::type = 0>
+        static inline void __Pyx_CyObject_visit_template(void (*visit)(const CyObject *o, void*arg), const T& o, void *arg) {
+        }
+
+        template <typename T, typename std::enable_if<Cy_traverse_iso<T>::value, int>::type = 0>
+        static inline void __Pyx_CyObject_visit_template(void (*visit)(const CyObject *o, void*arg), const T& o, void *arg) {
+            visit(o.uobj, arg);
+        }
+
 
         /*
             * Visit callback to collect reachable fields.

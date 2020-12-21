@@ -975,12 +975,15 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         """
 
         scope = entry.type.scope
-        check_cypclass_attrs = [
-            e
-            for e in scope.entries.values()
-            if e.type.is_cyp_class and e.name != "this" and not e.is_type
-                and not e.type.is_qualified_cyp_class
-        ]
+        check_cypclass_attrs = []
+        check_template_attrs = []
+        for e in scope.entries.values():
+            if e.is_type or e.name == "this":
+                continue
+            elif e.type.is_cyp_class and not e.type.is_qualified_cyp_class:
+                check_cypclass_attrs.append(e)
+            elif e.type.is_template_typename:
+                check_template_attrs.append(e)
         # potential template
         if entry.type.templates:
             templates_code = "template <typename %s>" % ", typename ".join(t.name for t in entry.type.templates)
@@ -994,13 +997,15 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         code.putln("{")
         for attr in check_cypclass_attrs:
             code.putln("visit(this->%s, arg);" % attr.cname)
+        for attr in check_template_attrs:
+            code.putln("__Pyx_CyObject_visit_template(visit, this->%s, arg);" % attr.cname)
         code.putln("}")
         # isolation check method
         if templates_code:
             code.putln(templates_code)
         code.putln("int %s::CyObject_iso() const" % namespace)
         code.putln("{")
-        if check_cypclass_attrs:
+        if check_cypclass_attrs or check_template_attrs:
             code.putln("return __Pyx_CyObject_owning(this) == 1;")
         else:
             code.putln("return this->CyObject_GETREF() == 1;")

@@ -11378,6 +11378,7 @@ class ConsumeNode(ExprNode):
     #
     #  nogil                    boolean     used internally
     #  generate_runtime_check   boolean     used internally
+    #  check_refcount_only      boolean     used internally
     #  operand_is_named         boolean     used internally
 
     subexprs = ['operand']
@@ -11405,12 +11406,14 @@ class ConsumeNode(ExprNode):
                 self.type = PyrexTypes.error_type
                 return self
             self.generate_runtime_check = operand_type.qualifier not in ('iso', 'iso~')
+            self.check_refcount_only = operand_type.qualifier in ('active', 'locked')
             if operand_type.qualifier == 'iso~':
                 self.type = operand_type
             else:
                 self.type = PyrexTypes.cyp_class_qualified_type(operand_type.qual_base_type, 'iso~')
         else:
             self.generate_runtime_check = True
+            self.check_refcount_only = False
             self.type = PyrexTypes.cyp_class_qualified_type(operand_type, 'iso~')
         self.operand_is_named = self.operand.is_name or self.operand.is_attribute
         self.is_temp = self.operand_is_named or (self.generate_runtime_check and not self.operand.is_temp)
@@ -11441,7 +11444,10 @@ class ConsumeNode(ExprNode):
         if self.is_temp:
             code.putln("%s = %s;" % (result_code, self.operand.result()))
         if self.generate_runtime_check:
-            code.putln("if (%s != NULL && !%s->CyObject_iso()) {" % (result_code, result_code))
+            if self.check_refcount_only:
+                code.putln("if (%s != NULL && %s->CyObject_GETREF() != 1) {" % (result_code, result_code))
+            else:
+                code.putln("if (%s != NULL && !%s->CyObject_iso()) {" % (result_code, result_code))
             if self.nogil:
                 code.putln("#ifdef WITH_THREAD")
                 code.putln("PyGILState_STATE _save = PyGILState_Ensure();")

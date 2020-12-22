@@ -92,7 +92,7 @@
 
                 /* Object graph inspection methods */
                 virtual int CyObject_iso() const {
-                    return this->nogil_ob_refcnt == 1;
+                    return this->CyObject_GETREF() == 1;
                 }
                 virtual void CyObject_traverse_iso(void (*visit)(const CyObject *o, void *arg), void *arg) const {
                     return;

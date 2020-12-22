@@ -517,6 +517,52 @@
             visit(o.uobj, arg);
         }
 
+        /*
+            * Traverse generic containers.
+            */
+        template<typename... Ts> struct Cy_make_void { typedef void type;};
+        template<typename... Ts> using Cy_void_t = typename Cy_make_void<Ts...>::type; // C++11 compatible version of std::void_t
+
+        template <typename T, typename = void>
+        struct Cy_is_iterable : std::false_type {};
+
+        template <typename T>
+        struct Cy_is_iterable<
+            T, Cy_void_t<
+                decltype(std::begin(std::declval<T>()) != std::end(std::declval<T>())),
+                decltype(++std::begin(std::declval<T>())),
+                decltype(*std::begin(std::declval<T>()))
+            >
+        > : std::true_type {};
+
+        template <typename T>
+        struct Cy_is_pair: std::false_type {};
+
+        template <typename ... Ts>
+        struct Cy_is_pair<std::pair<Ts...>> : std::true_type {};
+
+        template <typename T, typename std::enable_if<Cy_traverse_iso<T>::value, int>::type = 0>
+        static inline void __Pyx_CyObject_visit_generic(void (*visit)(const CyObject *o, void*arg), const T& o, void *arg) {
+            visit(o.uobj, arg);
+        }
+
+        template <typename T, typename std::enable_if<Cy_is_iterable<T>::value, int>::type = 0>
+        static inline void __Pyx_CyObject_visit_generic(void (*visit)(const CyObject *o, void*arg), const T& o, void *arg) {
+            for (auto& e : o) {
+                __Pyx_CyObject_visit_generic(visit, e, arg);
+            }
+        }
+
+        template <typename T, typename std::enable_if<Cy_is_pair<T>::value, int>::type = 0>
+        static inline void __Pyx_CyObject_visit_generic(void (*visit)(const CyObject *o, void*arg), const T& o, void *arg) {
+            __Pyx_CyObject_visit_generic(visit, o.first, arg);
+            __Pyx_CyObject_visit_generic(visit, o.second, arg);
+        }
+
+        template <typename T, typename std::enable_if<
+            !Cy_is_pair<T>::value && !Cy_is_iterable<T>::value && !Cy_traverse_iso<T>::value, int
+        >::type = 0>
+        static inline void __Pyx_CyObject_visit_generic(void (*visit)(const CyObject *o, void*arg), const T& o, void *arg) {}
 
         /*
             * Visit callback to collect reachable fields.

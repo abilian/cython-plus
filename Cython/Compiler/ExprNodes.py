@@ -11460,7 +11460,10 @@ class ConsumeNode(ExprNode):
             code.putln("%s = NULL;" % self.operand.result())
 
     def generate_post_assignment_code(self, code):
-        self.operand.generate_post_assignment_code(code)
+        if self.is_temp:
+            ExprNode.generate_post_assignment_code(self, code)
+        else:
+            self.operand.generate_post_assignment_code(code)
 
 
 class TypeidNode(ExprNode):

@@ -11401,10 +11401,6 @@ class ConsumeNode(ExprNode):
             self.type = PyrexTypes.error_type
             return self
         if operand_type.is_qualified_cyp_class:
-            if operand_type.qualifier == 'iso->':
-                error(self.pos, "Cannot consume iso->")
-                self.type = PyrexTypes.error_type
-                return self
             self.generate_runtime_check = operand_type.qualifier not in ('iso', 'iso~')
             self.check_refcount_only = operand_type.qualifier in ('active', 'locked')
             if operand_type.qualifier == 'iso~':

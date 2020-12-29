@@ -4645,7 +4645,7 @@ class CypClassType(CppClassType):
     def declaration_code(self, entity_code,
             for_display = 0, dll_linkage = None, pyrex = 0,
             template_params = None, deref = 0):
-        if not deref:
+        if not deref and not for_display:
             entity_code = "*%s" % entity_code
         return super(CypClassType, self).declaration_code(entity_code,
                 for_display=for_display, dll_linkage=dll_linkage,

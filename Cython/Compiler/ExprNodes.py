@@ -10921,6 +10921,8 @@ class TypecastNode(ExprNode):
                 if self.operand.type.is_ptr:
                     if not (self.operand.type.base_type.is_void or self.operand.type.base_type.is_struct):
                         error(self.pos, "Python objects cannot be cast from pointers of primitive types")
+                elif self.operand.type.is_qualified_cyp_class:
+                    error(self.pos, "Cannot cast '%s' to '%s'" % (self.operand.type, self.type))
                 else:
                     # Should this be an error?
                     warning(self.pos, "No conversion from %s to %s, python object pointer used." % (
@@ -10954,9 +10956,10 @@ class TypecastNode(ExprNode):
                 self.op_func_type = entry.type
             if self.type.is_cyp_class:
                 self.is_temp = self.overloaded
-                if self.type.is_qualified_cyp_class:
-                    if not self.type.assignable_from(self.operand.type):
-                        error(self.pos, "Cannot cast %s to %s" % (self.operand.type, self.type))
+            if self.type.is_cyp_class and self.operand.type.is_cyp_class:
+                if self.operand.type.is_qualified_cyp_class or self.type.is_qualified_cyp_class:
+                    if not (self.type.same_as(self.operand.type) or self.type.assignable_from(self.operand.type)):
+                        error(self.pos, "Cannot cast '%s' to '%s'" % (self.operand.type, self.type))
         if self.type.is_ptr and self.type.base_type.is_cfunction and self.type.base_type.nogil:
             op_type = self.operand.type
             if op_type.is_ptr:

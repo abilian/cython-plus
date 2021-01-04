@@ -9,7 +9,7 @@ def test_name_aliasing():
     cdef iso A iso_a
     iso_a = consume A()
 
-    # Aliasing non-consumed to iso
+    # Aliasing to iso
     cdef iso A iso_b
     iso_b = iso_a
 
@@ -75,6 +75,37 @@ def test_field_aliasing():
     c = o.bar(consume Field())
 
 
+def test_typecast():
+    cdef iso A iso_a
+    iso_a = consume A()
+
+    # Casting to iso
+    cdef iso A iso_b
+    iso_b = <iso A> A()
+
+    cdef iso A iso_c
+    iso_c = <iso A> activate(consume A())
+
+    cdef iso A iso_d
+    iso_d = <iso A> <object> A()
+
+    # Casting from iso
+    cdef active A active_a
+    active_a = <active A> iso_a
+
+    cdef A ref_a
+    ref_a = <A> iso_a
+
+    cdef object py_a
+    py_a = <object> iso_a
+
+    cdef iso A iso_e
+    iso_e = <iso A> iso_a
+
+    cdef iso A iso_f
+    iso_f = consume <iso A> iso_a
+
+
 _ERRORS = u'''
 14:12: Cannot assign type 'iso A' to 'iso A'
 17:13: Cannot assign type 'A' to 'iso A'
@@ -89,4 +120,13 @@ _ERRORS = u'''
 66:13: Cannot assign type 'iso-> Field' to 'iso-> Field'
 72:15: Cannot assign type 'Field' to 'iso-> Field'
 75:13: Cannot assign type 'iso-> Field' to 'iso-> Field'
+84:12: Cannot assign type 'iso A' to 'iso A'
+84:12: Cannot cast 'A' to 'iso A'
+87:12: Cannot assign type 'iso A' to 'iso A'
+87:12: Cannot cast 'active A' to 'iso A'
+90:12: Cannot assign type 'iso A' to 'iso A'
+94:15: Cannot cast 'iso A' to 'active A'
+97:12: Cannot cast 'iso A' to 'A'
+100:11: Cannot cast 'iso A' to 'Python object'
+103:12: Cannot assign type 'iso A' to 'iso A'
 '''

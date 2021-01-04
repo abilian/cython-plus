@@ -19,6 +19,7 @@ cdef cypclass A activable:
 def test_aliasing():
     cdef active A active_a
 
+    # Aliasing from active
     cdef iso A iso_a
     iso_a = active_a
 
@@ -27,6 +28,17 @@ def test_aliasing():
 
     cdef A ref_a
     ref_a = active_a
+
+    # Aliasing to active
+    cdef active A active_b
+    active_b = A()
+
+    cdef active A active_c
+    active_c = consume A()
+
+    cdef active A active_d
+    active_d = <locked A> consume A()
+
 
 def test_calling():
     a = activate(consume A())
@@ -45,9 +57,41 @@ def test_calling():
     a.f_active(NULL, active_a)
 
 
+def test_typecast():
+    cdef active A active_a
+
+    # Casting from active
+    cdef iso A iso_a
+    iso_a = consume <iso A> active_a
+
+    cdef locked A locked_a
+    locked_a = <locked A> active_a
+
+    cdef A ref_a
+    ref_a = <A> active_a
+
+    # Casting to active
+    cdef active A active_b
+    active_b = <active A> A()
+
+    cdef active A active_c
+    active_c = <active A> <iso A> consume A()
+
+    cdef active A active_d
+    active_d = <active A> <locked A> consume A()
+
+
 _ERRORS = u'''
-23:12: Cannot assign type 'active A' to 'iso A'
-26:15: Cannot assign type 'active A' to 'locked A'
-29:12: Cannot assign type 'active A' to 'A'
-34:15: Cannot assign type 'A' to 'iso-> A'
+24:12: Cannot assign type 'active A' to 'iso A'
+27:15: Cannot assign type 'active A' to 'locked A'
+30:12: Cannot assign type 'active A' to 'A'
+34:16: Cannot assign type 'A' to 'active A'
+40:15: Cannot assign type 'locked A' to 'active A'
+46:15: Cannot assign type 'A' to 'iso-> A'
+65:20: Cannot cast 'active A' to 'iso A'
+68:15: Cannot cast 'active A' to 'locked A'
+71:12: Cannot cast 'active A' to 'A'
+75:15: Cannot cast 'A' to 'active A'
+78:15: Cannot cast 'iso A' to 'active A'
+81:15: Cannot cast 'locked A' to 'active A'
 '''

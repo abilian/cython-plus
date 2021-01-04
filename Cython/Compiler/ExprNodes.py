@@ -11410,8 +11410,6 @@ class ConsumeNode(ExprNode):
         self.is_temp = self.operand_is_named or (self.generate_runtime_check and not self.operand.is_temp)
         if self.operand_is_named:
             self.operand.entry.is_consumed = True
-        if not self.operand_is_named and not self.generate_runtime_check:
-            return self.operand
         return self
 
     def may_be_none(self):

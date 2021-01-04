@@ -11004,11 +11004,11 @@ class TypecastNode(ExprNode):
                     imag_part)
         else:
             operand_type = self.operand.type
-            if operand_type.is_cyp_class:
-                if self.overloaded:
+            if self.overloaded:
+                if operand_type.is_cyp_class:
                     operand_result = '(*%s)' % operand_result
-            # use dynamic cast when dowcasting from a base to a cypclass
-            if self.type.is_cyp_class and operand_type in self.type.mro() and not self.type.same_as(operand_type):
+            elif self.type.is_cyp_class and operand_type in self.type.mro() and not self.type.same_as(operand_type):
+                # use dynamic cast when dowcasting from a base to a cypclass
                 return self.type.dynamic_cast_code(operand_result)
             return self.type.cast_code(operand_result)
 
@@ -11033,22 +11033,17 @@ class TypecastNode(ExprNode):
                         self.operand.result()))
                 code.put_incref(self.result(), self.ctype())
             elif self.type.is_cyp_class:
-                star = "*" if self.overloaded else ""
-                operand_result = "%s%s" % (star, self.operand.result())
-                # use dynamic cast when dowcasting from a base to a cypclass
-                if self.operand.type in self.type.mro() and not self.type.same_as(self.operand.type):
-                    code.putln(
-                        "%s = dynamic_cast<%s>(%s);" % (
-                            self.result(),
-                            self.type.declaration_code(''),
-                            operand_result))
-                else:
-                    code.putln(
-                        "%s = (%s)(%s);" % (
-                            self.result(),
-                            self.type.declaration_code(''),
-                            operand_result))
-                code.put_incref(self.result(), self.type)
+                # self.overloaded is True
+                operand_type = self.operand.type
+                operand_result = self.operand.result()
+                if operand_type.is_cyp_class:
+                    operand_result = "*%s" % operand_result
+                code.putln(
+                    "%s = (%s)(%s);" % (
+                        self.result(),
+                        self.type.declaration_code(''),
+                        operand_result))
+                # the result is already a new reference
 
 
 ERR_START = "Start may not be given"

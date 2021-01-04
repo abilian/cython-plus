@@ -11378,6 +11378,7 @@ class ConsumeNode(ExprNode):
     #  generate_runtime_check   boolean     used internally
     #  check_refcount_only      boolean     used internally
     #  operand_is_named         boolean     used internally
+    #  solid_operand            ExprNode    used internally
 
     subexprs = ['operand']
 
@@ -11409,10 +11410,16 @@ class ConsumeNode(ExprNode):
             self.generate_runtime_check = True
             self.check_refcount_only = False
             self.type = PyrexTypes.cyp_class_qualified_type(operand_type, 'iso~')
-        self.operand_is_named = self.operand.is_name or self.operand.is_attribute
-        self.is_temp = self.operand_is_named or (self.generate_runtime_check and not self.operand.is_temp)
+        solid_operand = self.operand
+        while isinstance(solid_operand, TypecastNode) and not solid_operand.is_temp:
+            if not solid_operand.operand.type.is_cyp_class:
+                break
+            solid_operand = solid_operand.operand
+        self.operand_is_named = solid_operand.is_name or solid_operand.is_attribute
+        self.is_temp = self.operand_is_named or (self.generate_runtime_check and not solid_operand.is_temp)
+        self.solid_operand = solid_operand
         if self.operand_is_named:
-            self.operand.entry.is_consumed = True
+            solid_operand.entry.is_consumed = True
         return self
 
     def may_be_none(self):
@@ -11453,7 +11460,7 @@ class ConsumeNode(ExprNode):
                 code.error_goto(self.pos))
             code.putln("}")
         if self.operand_is_named:
-            code.putln("%s = NULL;" % self.operand.result())
+            code.putln("%s = NULL;" % self.solid_operand.result())
 
     def generate_post_assignment_code(self, code):
         if self.is_temp:

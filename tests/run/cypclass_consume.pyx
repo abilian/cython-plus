@@ -82,6 +82,37 @@ def test_nogil_consume_aliased_leaf():
         return 0
 
 
+cdef cypclass Convertible:
+    Leaf __Leaf__(self):
+        return Leaf()
+
+def test_consume_isolated_cast_named_leaf():
+    """
+    >>> test_consume_isolated_cast_named_leaf()
+    0
+    """
+    leaf = Leaf()
+    try:
+        l = consume <Leaf> leaf
+        if leaf is not NULL:
+            return -1
+        return 0
+    except TypeError as e:
+        print(e)
+        return -2
+
+def test_consume_isolated_cast_converted_leaf():
+    """
+    >>> test_consume_isolated_cast_converted_leaf()
+    0
+    """
+    try:
+        l = consume <Leaf> Convertible()
+        return 0
+    except TypeError as e:
+        print(e)
+        return -2
+
 cdef cypclass Field:
     Field foo(self, Field other):
         return other

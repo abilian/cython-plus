@@ -144,3 +144,114 @@ def test_consume_and_drop_field():
     print("consumed")
 
     return 0
+
+def test_consume_cast_name():
+    """
+    >>> test_consume_cast_name()
+    Refcounted destroyed
+    0
+    """
+    r0 = Refcounted()
+    if Cy_GETREF(r0) != 2:
+        return -1
+
+    cdef Refcounted r1 = consume <Refcounted> r0
+    if r0 is not NULL:
+        return -2
+    if Cy_GETREF(r1) != 2:
+        return -3
+
+    return 0
+
+def test_consume_cast_constructed():
+    """
+    >>> test_consume_cast_constructed()
+    Refcounted destroyed
+    0
+    """
+    cdef Refcounted r = consume <Refcounted> Refcounted()
+    if Cy_GETREF(r) != 2:
+        return -1
+
+    return 0
+
+def test_consume_cast_field():
+    """
+    >>> test_consume_cast_field()
+    Refcounted destroyed
+    0
+    """
+    cdef Refcounted r = consume <Refcounted> Origin().field
+    if Cy_GETREF(r) != 2:
+        return -1
+
+    return 0
+
+cdef cypclass Convertible:
+    Refcounted __Refcounted__(self):
+        return Refcounted()
+    __dealloc__(self) with gil:
+        print("Convertible destroyed")
+
+def test_consume_converted_name():
+    """
+    >>> test_consume_converted_name()
+    Convertible destroyed
+    Refcounted destroyed
+    0
+    """
+    c = Convertible()
+    if Cy_GETREF(c) != 2:
+        return -1
+
+    cdef Refcounted r = consume <Refcounted> c
+    if c is NULL:
+        return -2
+    if Cy_GETREF(c) != 2:
+        return -3
+    if Cy_GETREF(r) != 2:
+        return -4
+
+    del c
+    return 0
+
+def test_consume_converted_constructed():
+    """
+    >>> test_consume_converted_constructed()
+    Convertible destroyed
+    Refcounted destroyed
+    0
+    """
+    cdef Refcounted r = consume <Refcounted> Convertible()
+    if Cy_GETREF(r) != 2:
+        return -1
+
+    return 0
+
+cdef cypclass OriginConvertible:
+    Convertible field
+
+    __init__(self):
+        self.field = Convertible()
+
+
+def test_consume_converted_field():
+    """
+    >>> test_consume_converted_field()
+    Convertible destroyed
+    Refcounted destroyed
+    0
+    """
+    o = OriginConvertible()
+    if Cy_GETREF(o.field) != 2:
+        return -1
+
+    cdef Refcounted r = consume <Refcounted> o.field
+    if o.field is NULL:
+        return -2
+    if Cy_GETREF(o.field) != 2:
+        return -3
+    if Cy_GETREF(r) != 2:
+        return -4
+
+    return 0

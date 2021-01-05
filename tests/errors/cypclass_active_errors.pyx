@@ -9,7 +9,7 @@ cdef cypclass A activable:
     void f_iso(self, iso A other):
         pass
 
-    void f_locked(self, locked A other):
+    void f_lock(self, lock A other):
         pass
 
     void f_active(self, active A other):
@@ -23,8 +23,8 @@ def test_aliasing():
     cdef iso A iso_a
     iso_a = active_a
 
-    cdef locked A locked_a
-    locked_a = active_a
+    cdef lock A lock_a
+    lock_a = active_a
 
     cdef A ref_a
     ref_a = active_a
@@ -37,7 +37,7 @@ def test_aliasing():
     active_c = consume A()
 
     cdef active A active_d
-    active_d = <locked A> consume A()
+    active_d = <lock A> consume A()
 
 
 def test_calling():
@@ -50,8 +50,8 @@ def test_calling():
     cdef iso A iso_a
     a.f_iso(NULL, consume iso_a)
 
-    cdef locked A locked_a
-    a.f_locked(NULL, locked_a)
+    cdef lock A lock_a
+    a.f_lock(NULL, lock_a)
 
     cdef active A active_a
     a.f_active(NULL, active_a)
@@ -64,8 +64,8 @@ def test_typecast():
     cdef iso A iso_a
     iso_a = consume <iso A> active_a
 
-    cdef locked A locked_a
-    locked_a = <locked A> active_a
+    cdef lock A lock_a
+    lock_a = <lock A> active_a
 
     cdef A ref_a
     ref_a = <A> active_a
@@ -78,20 +78,20 @@ def test_typecast():
     active_c = <active A> <iso A> consume A()
 
     cdef active A active_d
-    active_d = <active A> <locked A> consume A()
+    active_d = <active A> <lock A> consume A()
 
 
 _ERRORS = u'''
 24:12: Cannot assign type 'active A' to 'iso A'
-27:15: Cannot assign type 'active A' to 'locked A'
+27:13: Cannot assign type 'active A' to 'lock A'
 30:12: Cannot assign type 'active A' to 'A'
 34:16: Cannot assign type 'A' to 'active A'
-40:15: Cannot assign type 'locked A' to 'active A'
+40:15: Cannot assign type 'lock A' to 'active A'
 46:15: Cannot assign type 'A' to 'iso-> A'
 65:20: Cannot cast 'active A' to 'iso A'
-68:15: Cannot cast 'active A' to 'locked A'
+68:13: Cannot cast 'active A' to 'lock A'
 71:12: Cannot cast 'active A' to 'A'
 75:15: Cannot cast 'A' to 'active A'
 78:15: Cannot cast 'iso A' to 'active A'
-81:15: Cannot cast 'locked A' to 'active A'
+81:15: Cannot cast 'lock A' to 'active A'
 '''

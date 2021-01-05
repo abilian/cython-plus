@@ -782,8 +782,8 @@ class CFuncDeclaratorNode(CDeclaratorNode):
             exc_check = self.exception_check
         if return_type.is_cfunction:
             error(self.pos, "Function cannot return a function")
-        if return_type.is_qualified_cyp_class and return_type.qualifier in ('locked&',):
-            error(self.pos, "Function cannot return a 'locked&' qualifier")
+        if return_type.is_qualified_cyp_class and return_type.qualifier in ('locked',):
+            error(self.pos, "Function cannot return a 'locked' cypclass instance")
         func_type = PyrexTypes.CFuncType(
             return_type, func_type_args, self.has_varargs,
             optional_arg_count=self.optional_arg_count,
@@ -1372,9 +1372,6 @@ class QualifiedCypclassNode(CBaseTypeNode):
         if not base.is_cyp_class:
             error(self.pos, "Qualifier '%s' can only apply to cypclass types" % self.qualifier)
             return base
-        # if self.qualifier in ('locked&',) and env.return_type is None:
-        #     error(self.pos, "Qualifier '%s' can only be used inside functions" % self.qualifier)
-        #     return base
         return PyrexTypes.cyp_class_qualified_type(base, self.qualifier)
 
 
@@ -1507,8 +1504,8 @@ class CVarDefNode(StatNode):
             else:
                 if self.directive_locals:
                     error(self.pos, "Decorators can only be followed by functions")
-                if base_type.is_qualified_cyp_class and base_type.qualifier in ('locked&', ) and env.return_type is None:
-                    error(self.pos, "'locked&' variables are only allowed inside a function")
+                if base_type.is_qualified_cyp_class and base_type.qualifier in ('locked', ) and env.return_type is None:
+                    error(self.pos, "'locked' variables are only allowed inside a function")
                     return error_type
                 self.entry = dest_scope.declare_var(
                     name, type, declarator.pos,

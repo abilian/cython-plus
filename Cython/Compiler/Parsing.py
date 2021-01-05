@@ -2545,12 +2545,9 @@ def p_c_simple_base_type(s, self_flag, nonempty, templates = None):
             base_type=base_type, is_const=is_const, is_volatile=is_volatile)
 
     # Handle cypclass qualifiers
-    if s.sy == 'IDENT' and s.systring in ('active', 'iso', 'locked'):
+    if s.sy == 'IDENT' and s.systring in ('active', 'iso', 'lock', 'locked'):
         qualifier = s.systring
         s.next()
-        if s.sy == '&' and qualifier in ('locked',):
-            qualifier = "%s&" % qualifier
-            s.next()
         base_type = p_c_base_type(s, self_flag=self_flag, nonempty=nonempty, templates=templates)
         return Nodes.QualifiedCypclassNode(pos, base_type=base_type, qualifier=qualifier)
 

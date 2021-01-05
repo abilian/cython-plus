@@ -514,13 +514,13 @@ def test_consume_template_with_aliased_field():
         print(e)
         return 0
 
-def test_consume_template_with_aliased_locked_field():
+def test_consume_template_with_aliased_lock_field():
     """
-    >>> test_consume_template_with_aliased_locked_field()
+    >>> test_consume_template_with_aliased_lock_field()
     0
     """
-    template = <Template[locked Leaf]> new Template[locked Leaf]()
-    leaf = <locked Leaf> consume Leaf()
+    template = <Template[lock Leaf]> new Template[lock Leaf]()
+    leaf = <lock Leaf> consume Leaf()
     template.field = leaf
 
     try:

@@ -11401,7 +11401,7 @@ class ConsumeNode(ExprNode):
             return self
         if operand_type.is_qualified_cyp_class:
             self.generate_runtime_check = operand_type.qualifier not in ('iso', 'iso~')
-            self.check_refcount_only = operand_type.qualifier in ('active', 'locked')
+            self.check_refcount_only = operand_type.qualifier in ('active', 'lock', 'locked')
             if operand_type.qualifier == 'iso~':
                 self.type = operand_type
             else:

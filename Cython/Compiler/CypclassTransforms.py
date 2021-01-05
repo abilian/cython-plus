@@ -425,11 +425,11 @@ class CypclassLockTransform(Visitor.EnvTransform):
         # that the receiver object will only be read, not that
         # __all__ the reachable subobjects will only be read.
         locally_writing = (field_access and node.is_target) or method_call
-        if objtype.is_qualified_cyp_class and objtype.qualifier == 'locked':
+        if objtype.is_qualified_cyp_class and objtype.qualifier == 'lock':
             old_writing = self.writing
             self.writing = locally_writing
             self.visitchildren(node)
-            if field_access or (method_call and not nodetype.self_qualifier == 'locked'):
+            if field_access or (method_call and not nodetype.self_qualifier == 'lock'):
                 node.obj = ExprNodes.CoerceToLockedNode(node.obj, exclusive=self.writing)
             self.writing = old_writing
         elif objtype.is_cyp_class:

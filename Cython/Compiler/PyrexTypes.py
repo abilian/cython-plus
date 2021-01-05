@@ -4850,8 +4850,9 @@ class QualifiedCypclassType(BaseType):
         'iso': ('iso~',),
         'iso~': (),
         'iso->': ('iso~',),
-        'locked': ('locked', 'locked&', 'iso~'),
-        'locked&': ('locked&', 'iso~'),
+        'lock': ('lock', 'locked', 'iso~'),
+        'locked': ('locked', 'iso~'),
+        'lock->': ('iso~',),
     }
 
     def __new__(cls, base_type, qualifier):
@@ -5902,6 +5903,10 @@ def viewpoint_adaptation(base_type, qualifier = 'iso->'):
     if base_type.is_qualified_cyp_class:
         return base_type
     if base_type.is_cyp_class:
+        if qualifier.startswith('iso'):
+            qualifier = 'iso->'
+        elif qualifier.startswith('lock'):
+            qualifier = 'lock->'
         return QualifiedCypclassType(base_type, qualifier)
     return base_type
 

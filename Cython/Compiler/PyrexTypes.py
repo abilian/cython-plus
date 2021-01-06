@@ -4881,7 +4881,7 @@ class QualifiedCypclassType(BaseType):
             self.scope = qualified_cypclass_scope(base_type.scope, qualifier)
 
     def __repr__(self):
-        return "<QualifiedCypclassType %s%r>" % self.qual_base_type
+        return "<QualifiedCypclassType %r>" % self.qual_base_type
 
     def __str__(self):
         return self.declaration_code("", for_display=1)

@@ -4572,6 +4572,8 @@ class CypClassType(CppClassType):
     is_cyp_class = 1
     to_py_function = None
     from_py_function = None
+    qualifier = None
+    qual_base_type = None
 
     def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0, activable=False):
         CppClassType.__init__(self, name, scope, cname, base_classes, templates, template_type, nogil)
@@ -4581,6 +4583,13 @@ class CypClassType(CppClassType):
         self.wrapper_type = None
         self._wrapped_base_type = None
         self._qualified_types = {}
+
+    def set_scope(self, scope):
+        super(CypClassType, self).set_scope(scope)
+        if scope and self._qualified_types:
+            from .Symtab import qualified_cypclass_scope
+            for qualifier, qualified_type in self._qualified_types.items():
+                qualified_type.scope = qualified_cypclass_scope(scope, qualifier)
 
     # iterate over the direct bases that support wrapping
     def iter_wrapped_base_types(self):
@@ -4835,7 +4844,7 @@ class ConstCypclassType(BaseType):
 class QualifiedCypclassType(BaseType):
     "A qualified cypclass reference"
 
-    # qualifier     string      the qualifier keyword: ('active' | 'iso' | 'iso~' | 'iso->' )
+    # qualifier     string      the qualifier keyword
 
     subtypes = ['qual_base_type']
 
@@ -4846,6 +4855,7 @@ class QualifiedCypclassType(BaseType):
     from_py_function = None
 
     assignable_to = {
+        None: (None, 'iso~'),
         'active': ('active', 'iso~'),
         'iso': ('iso~',),
         'iso~': (),
@@ -4857,28 +4867,22 @@ class QualifiedCypclassType(BaseType):
 
     def __new__(cls, base_type, qualifier):
         # The qualified type is cached in the unqualified type to avoid duplicates.
-        try:
-            return base_type._qualified_types[qualifier]
-        except KeyError:
-            if base_type.is_qualified_cyp_class:
-                base_type = base_type.qual_base_type
-            qualified_type = BaseType.__new__(cls)
-            qualified_type.__init__(base_type, qualifier)
-            base_type._qualified_types[qualifier] = qualified_type
-            return qualified_type
-
-    def __init__(self, base_type, qualifier):
         assert base_type.is_cyp_class
-        self.qual_base_type = base_type
-        self.qualifier = qualifier
-
-        if qualifier == 'active':
-            # TODO: raise a proper compilation error.
-            assert base_type.activable
-
-        if base_type.scope is not None:
-            from .Symtab import qualified_cypclass_scope
-            self.scope = qualified_cypclass_scope(base_type.scope, qualifier)
+        base_type = base_type.qual_base_type or base_type
+        try:
+            qualified_type = base_type._qualified_types[qualifier]
+        except KeyError:
+            qualified_type = BaseType.__new__(cls)
+            qualified_type.qual_base_type = base_type
+            qualified_type.qualifier = qualifier
+            base_type._qualified_types[qualifier] = qualified_type
+            if qualifier == 'active':
+                # TODO: raise a proper compilation error.
+                assert base_type.activable
+            if base_type.scope:
+                from .Symtab import qualified_cypclass_scope
+                qualified_type.scope = qualified_cypclass_scope(base_type.scope, qualifier)
+        return qualified_type
 
     def __repr__(self):
         return "<QualifiedCypclassType %r>" % self.qual_base_type
@@ -4946,8 +4950,8 @@ class QualifiedCypclassType(BaseType):
             return 1
         if src_type.is_null_ptr:
             return 1
-        if src_type.is_qualified_cyp_class and src_type.qualifier in self.assignable_to[self.qualifier]:
-            return self.qual_base_type.assignable_from_resolved_type(src_type.qual_base_type)
+        if src_type.is_cyp_class and src_type.qualifier in self.assignable_to[self.qualifier]:
+            return self.qual_base_type.assignable_from_resolved_type(src_type.qual_base_type or src_type)
         return 0
 
     def same_as(self, other_type):

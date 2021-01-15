@@ -3315,7 +3315,9 @@ class QualifiedCypclassScope(Scope):
         alternatives = []
         for e in base_entry.all_alternatives():
             entry = self.adapt(e)
-            if entry is None:
+            if entry is e:
+                entry = copy.copy(e)
+            elif entry is None:
                 continue
             entry.overloaded_alternatives = alternatives
             alternatives.append(entry)

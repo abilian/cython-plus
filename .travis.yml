@@ -17,13 +17,11 @@ cache:
     - $HOME/.ccache
 
 python:
+  - 3.9
   - 3.8
-  - 2.7
-  - 3.9-dev
   - 3.7
   - 3.6
-  - 3.5
-  - 3.4
+  - 2.7
 
 env:
   global:

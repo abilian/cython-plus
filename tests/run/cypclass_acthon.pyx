@@ -26,10 +26,10 @@ cdef cypclass BasicQueue(ActhonQueueInterface):
   bint is_empty(const self):
     return self._queue.empty()
 
-  void push(self, ActhonMessageInterface message):
+  void push(locked& self, ActhonMessageInterface message):
     self._queue.push_back(message)
     if message._sync_method is not NULL:
-      message._sync_method.insertActivity(message)
+      message._sync_method.insertActivity()
 
   bint activate(self):
     cdef bint one_message_processed
@@ -47,7 +47,7 @@ cdef cypclass BasicQueue(ActhonQueueInterface):
       if next_message._sync_method is not NULL:
         next_sync_method = next_message._sync_method
         with wlocked next_sync_method:
-          next_sync_method.removeActivity(next_message)
+          next_sync_method.removeActivity()
     else:
       self._queue.push_back(next_message)
       # Don't forget to incref to avoid premature deallocation
@@ -106,16 +106,16 @@ cdef cypclass WaitResult(ActhonResultInterface):
 
 cdef cypclass ActivityCounterSync(ActhonSyncInterface):
   int count
-  ActivityCounterSync previous_sync
+  locked ActivityCounterSync previous_sync
 
-  __init__(self, ActivityCounterSync prev = <ActivityCounterSync> NULL):
+  __init__(self, locked ActivityCounterSync prev = NULL):
     self.count = 0
     self.previous_sync = prev
 
-  void insertActivity(self, ActhonMessageInterface msg):
+  void insertActivity(self):
     self.count += 1
 
-  void removeActivity(self, ActhonMessageInterface msg):
+  void removeActivity(self):
     self.count -= 1
 
   bint isCompleted(const self):
@@ -147,8 +147,8 @@ def test_acthon_chain(n):
     """
     cdef ActhonResultInterface res
     cdef locked ActhonQueueInterface queue
-    sync1 = ActivityCounterSync()
-    after_sync1 = ActivityCounterSync(sync1)
+    sync1 = <locked ActivityCounterSync> consume ActivityCounterSync()
+    after_sync1 = <locked ActivityCounterSync> consume ActivityCounterSync(sync1)
 
     obj = A()
     queue = obj._active_queue_class

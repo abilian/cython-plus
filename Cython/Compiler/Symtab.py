@@ -180,6 +180,10 @@ class Entry(object):
     # original_name    string     The original name of a cpp or cypclass method
     #
     # active_entry     Entry      Entry for the active version of an asyncable cypclass method
+    #
+    # is_consumed      boolean    The entry is the operand of a 'consume' expression.
+    #
+    # is_specialised   boolean    The entry is a template specialisation.
 
     # TODO: utility_code and utility_code_definition serves the same purpose...
 
@@ -258,6 +262,8 @@ class Entry(object):
     static_cname = None
     original_name = None
     active_entry = None
+    is_consumed = False
+    is_specialised = False
 
     def __init__(self, name, cname, type, pos = None, init = None):
         self.name = name
@@ -2847,7 +2853,7 @@ class CppClassScope(Scope):
         # create the sync argument type
         activated_method_sync_attr_type = PyrexTypes.CFuncTypeArg(
             EncodedString("sync_method"),
-            PyrexTypes.CConstOrVolatileType(sync_type, is_const=1),
+            PyrexTypes.cyp_class_qualified_type(sync_type, 'locked'),
             entry.pos,
             "sync_method",
         )
@@ -2991,6 +2997,11 @@ class CppClassScope(Scope):
         if (self.parent_type.is_cyp_class and type.is_static_method and name not in ("<alloc>", "__new__")):
             entry.static_cname = "%s__static__%s" % (Naming.func_prefix, cname or name)
 
+        if type.self_qualifier in ('locked&',):
+            reify = False
+        if any(arg.type.is_qualified_cyp_class and arg.type.qualifier in ('locked&',) for arg in type.args):
+            reify = False
+
         if reify:
             self.reify_method(entry)
         #if prev_entry and not defining:
@@ -3128,11 +3139,12 @@ class CppClassScope(Scope):
                                             e.cname,
                                             utility_code=e.utility_code)
             else:
-                scope.declare_var(entry.name,
+                e = scope.declare_var(entry.name,
                                   entry.type.specialize(values),
                                   entry.pos,
                                   entry.cname,
                                   entry.visibility)
+                e.is_specialised = True
 
         return scope
 
@@ -3318,8 +3330,8 @@ def qualified_cypclass_scope(base_type_scope, qualifier):
         return ActiveCypclassScope(base_type_scope)
     elif qualifier.startswith('iso'):
         return IsoCypclassScope(base_type_scope, qualifier)
-    elif qualifier == 'locked':
-        return IsoCypclassScope(base_type_scope, 'locked')
+    elif qualifier.startswith('locked'):
+        return IsoCypclassScope(base_type_scope, qualifier)
     else:
         return QualifiedCypclassScope(base_type_scope, qualifier)
 
@@ -3346,7 +3358,7 @@ class IsoCypclassScope(QualifiedCypclassScope):
         if base_type.self_qualifier:
             if self.qualifier in PyrexTypes.QualifiedCypclassType.assignable_to[base_type.self_qualifier]:
                 return base_entry
-            elif base_type.self_qualifier[-1] == '&' and self.qualifier.startswith(base_type.self_qualifier[:-1]):
+            elif base_type.self_qualifier == 'locked&' and self.qualifier == 'locked':
                 return base_entry
             else:
                 return None

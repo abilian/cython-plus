@@ -849,7 +849,7 @@ class FunctionState(object):
         elif type.is_cfunction:
             from . import PyrexTypes
             type = PyrexTypes.c_ptr_type(type)  # A function itself isn't an l-value
-        if not type.is_pyobject and not type.is_memoryviewslice and not type.is_cyp_class:
+        if not type.is_pyobject and not type.is_memoryviewslice:
             # Make manage_ref canonical, so that manage_ref will always mean
             # a decref is needed.
             manage_ref = False

@@ -92,7 +92,7 @@
 
                 /* Object graph inspection methods */
                 virtual int CyObject_iso() const {
-                    return this->nogil_ob_refcnt == 1;
+                    return this->CyObject_GETREF() == 1;
                 }
                 virtual void CyObject_traverse_iso(void (*visit)(const CyObject *o, void *arg), void *arg) const {
                     return;
@@ -135,19 +135,13 @@
         template <typename T>
         struct Cy_has_hash<T, typename std::enable_if<std::is_convertible<decltype( std::declval<T>().__hash__() ), std::size_t>::value>::type> : std::true_type {};
 
-        template <typename T>
+        template <typename T, bool iso = false>
         struct Cy_Ref_impl {
             T* uobj = nullptr;
 
             constexpr Cy_Ref_impl() noexcept = default;
 
-            // constexpr Cy_Ref_impl(std::nullptr_t null) noexcept : uobj(null) {}
-
-            Cy_Ref_impl(T* const& uobj) : uobj(uobj) {
-                if (uobj != nullptr) {
-                    uobj->CyObject_INCREF();
-                }
-            }
+            constexpr Cy_Ref_impl(T* const& uobj) noexcept : uobj(uobj) {}
 
             constexpr Cy_Ref_impl(T* && uobj) noexcept : uobj(uobj) {}
 
@@ -157,8 +151,8 @@
                 }
             }
 
-            template<typename U, typename std::enable_if<std::is_convertible<U*, T*>::value, int>::type = 0>
-            Cy_Ref_impl(const Cy_Ref_impl<U>& rhs) : uobj(rhs.uobj) {
+            template<typename U, bool _iso, typename std::enable_if<std::is_convertible<U*, T*>::value, int>::type = 0>
+            Cy_Ref_impl(const Cy_Ref_impl<U, _iso>& rhs) : uobj(rhs.uobj) {
                 if (uobj != nullptr) {
                     uobj->CyObject_INCREF();
                 }
@@ -168,8 +162,8 @@
                 rhs.uobj = nullptr;
             }
 
-            template<typename U, typename std::enable_if<std::is_convertible<U*, T*>::value, int>::type = 0>
-            Cy_Ref_impl(Cy_Ref_impl<U>&& rhs) noexcept : uobj(rhs.uobj) {
+            template<typename U, bool _iso, typename std::enable_if<std::is_convertible<U*, T*>::value, int>::type = 0>
+            Cy_Ref_impl(Cy_Ref_impl<U, _iso>&& rhs) noexcept : uobj(rhs.uobj) {
                 rhs.uobj = nullptr;
             }
 
@@ -210,8 +204,8 @@
                 return obj;
             }
 
-            template <typename U>
-            bool operator==(const Cy_Ref_impl<U>& rhs) const noexcept {
+            template <typename U, bool _iso>
+            bool operator==(const Cy_Ref_impl<U, _iso>& rhs) const noexcept {
                 return uobj == rhs.uobj;
             }
 
@@ -221,7 +215,7 @@
             }
 
             template <typename U>
-            friend bool operator==(U* lhs, const Cy_Ref_impl<T>& rhs) noexcept {
+            friend bool operator==(U* lhs, const Cy_Ref_impl<T, iso>& rhs) noexcept {
                 return lhs == rhs.uobj;
             }
 
@@ -229,12 +223,12 @@
                 return uobj == nullptr;
             }
 
-            friend bool operator==(std::nullptr_t, const Cy_Ref_impl<T>& rhs) noexcept {
+            friend bool operator==(std::nullptr_t, const Cy_Ref_impl<T, iso>& rhs) noexcept {
                 return rhs.uobj == nullptr;
             }
 
-            template <typename U>
-            bool operator!=(const Cy_Ref_impl<U>& rhs) const noexcept {
+            template <typename U, bool _iso>
+            bool operator!=(const Cy_Ref_impl<U, _iso>& rhs) const noexcept {
                 return uobj != rhs.uobj;
             }
 
@@ -244,7 +238,7 @@
             }
 
             template <typename U>
-            friend bool operator!=(U* lhs, const Cy_Ref_impl<T>& rhs) noexcept {
+            friend bool operator!=(U* lhs, const Cy_Ref_impl<T, iso>& rhs) noexcept {
                 return lhs != rhs.uobj;
             }
 
@@ -252,51 +246,57 @@
                 return uobj != nullptr;
             }
 
-            friend bool operator!=(std::nullptr_t, const Cy_Ref_impl<T>& rhs) noexcept {
+            friend bool operator!=(std::nullptr_t, const Cy_Ref_impl<T, iso>& rhs) noexcept {
                 return rhs.uobj != nullptr;
             }
         };
 
         namespace std {
-        template <typename T>
-        struct hash<Cy_Ref_impl<T>> {
+        template <typename T, bool iso>
+        struct hash<Cy_Ref_impl<T, iso>> {
             template <typename U = T, typename std::enable_if<!Cy_has_hash<U>::value, int>::type = 0>
-            size_t operator()(const Cy_Ref_impl<T>& ref) const {
+            size_t operator()(const Cy_Ref_impl<T, iso>& ref) const {
                 static_assert(!Cy_has_equality<U>::value, "Cypclasses that define __eq__ must also define __hash__ to be hashable");
                 return std::hash<T*>()(ref.uobj);
             }
             template <typename U = T, typename std::enable_if<Cy_has_hash<U>::value, int>::type = 0>
-            size_t operator()(const Cy_Ref_impl<T>& ref) const {
+            size_t operator()(const Cy_Ref_impl<T, iso>& ref) const {
                 static_assert(Cy_has_equality<U>::value, "Cypclasses that define __hash__ must also define __eq__ to be hashable");
                 return ref.uobj->__hash__();
             }
         };
 
-        template <typename T>
-        struct equal_to<Cy_Ref_impl<T>> {
+        template <typename T, bool iso>
+        struct equal_to<Cy_Ref_impl<T, iso>> {
             template <typename U = T, typename std::enable_if<!Cy_has_equality<U>::value, int>::type = 0>
-            bool operator()(const Cy_Ref_impl<T>& lhs, const Cy_Ref_impl<T>& rhs) const {
+            bool operator()(const Cy_Ref_impl<T, iso>& lhs, const Cy_Ref_impl<T, iso>& rhs) const {
                 return lhs.uobj == rhs.uobj;
             }
             template <typename U = T, typename std::enable_if<Cy_has_equality<U>::value, int>::type = 0>
-            bool operator()(const Cy_Ref_impl<T>& lhs, const Cy_Ref_impl<T>& rhs) const {
+            bool operator()(const Cy_Ref_impl<T, iso>& lhs, const Cy_Ref_impl<T, iso>& rhs) const {
+                Cy_INCREF(rhs.uobj);
                 return lhs.uobj->operator==(rhs.uobj);
             }
         };
         }
 
-        template <typename T>
+        template <typename T, bool iso = false>
         struct Cy_Ref_t {
-            using type = Cy_Ref_impl<T>;
+            using type = Cy_Ref_impl<T, iso>;
         };
 
         template <typename T>
-        struct Cy_Ref_t<Cy_Ref_impl<T>> {
-            using type = Cy_Ref_impl<T>;
+        struct Cy_Ref_t<Cy_Ref_impl<T, false>> {
+            using type = Cy_Ref_impl<T, false>;
         };
 
         template <typename T>
-        using Cy_Ref = typename Cy_Ref_t<T>::type;
+        struct Cy_Ref_t<Cy_Ref_impl<T, true>> {
+            using type = Cy_Ref_impl<T, true>;
+        };
+
+        template <typename T, bool iso = false>
+        using Cy_Ref = typename Cy_Ref_t<T, iso>::type;
 
         template <typename T>
         struct Cy_Raw_t {
@@ -304,7 +304,12 @@
         };
 
         template <typename T>
-        struct Cy_Raw_t<Cy_Ref_impl<T>> {
+        struct Cy_Raw_t<Cy_Ref_impl<T, false>> {
+            using type = T*;
+        };
+
+        template <typename T>
+        struct Cy_Raw_t<Cy_Ref_impl<T, true>> {
             using type = T*;
         };
 
@@ -325,6 +330,7 @@
                 ~Cy_rlock_guard() {
                     if (this->o != NULL) {
                         this->o->CyObject_UNRLOCK();
+                        this->o->CyObject_DECREF();
                     }
                     else {
                         fprintf(stderr, "ERROR: trying to unrlock NULL !\n");
@@ -346,6 +352,7 @@
                 ~Cy_wlock_guard() {
                     if (this->o != NULL) {
                         this->o->CyObject_UNWLOCK();
+                        this->o->CyObject_DECREF();
                     }
                     else {
                         fprintf(stderr, "ERROR: trying to unwlock NULL !\n");
@@ -369,8 +376,8 @@
         struct ActhonSyncInterface : public CyObject {
             virtual int isActivable() const = 0;
             virtual int isCompleted() const = 0;
-            virtual void insertActivity(ActhonMessageInterface* msg) = 0;
-            virtual void removeActivity(ActhonMessageInterface* msg) = 0;
+            virtual void insertActivity() = 0;
+            virtual void removeActivity() = 0;
         };
 
         struct ActhonMessageInterface : public CyObject {
@@ -391,7 +398,6 @@
             ActhonQueueInterface *_active_queue_class = NULL;
             ActhonResultInterface *(*_active_result_class)(void);
             ActhonActivableClass(){} // Used in Activated classes inheritance chain (base Activated calls this, derived calls the 2 args version below)
-            ActhonActivableClass(ActhonQueueInterface * queue_object, ActhonResultInterface *(*result_constructor)(void));
             virtual ~ActhonActivableClass();
         };
 
@@ -418,6 +424,12 @@
 
         static inline int _Cy_GETREF(const CyObject *ob) {
             return ob->CyObject_GETREF();
+        }
+
+        static inline int Cy_GETREF(const CyObject *ob) {
+            int refcnt = ob->CyObject_GETREF();
+            ob->CyObject_DECREF();
+            return refcnt;
         }
 
         static inline void _Cy_RLOCK(const CyObject *ob, const char *context) {
@@ -473,7 +485,9 @@
         template <typename T, typename O>
         static inline int isinstanceof(O ob) {
             static_assert(std::is_convertible<T, CyObject *>::value, "wrong type 'T' for isinstanceof[T]");
-            return dynamic_cast<const typename std::remove_pointer<T>::type *>(ob) != NULL;
+            bool result = dynamic_cast<const typename std::remove_pointer<T>::type *>(ob) != NULL;
+            Cy_DECREF(ob);
+            return result;
         }
 
         /*
@@ -482,9 +496,73 @@
         template <typename T>
         static inline T * activate(T * ob) {
             static_assert(std::is_convertible<T *, ActhonActivableClass *>::value, "wrong type for activate");
-            Cy_INCREF(ob);
             return ob;
         }
+
+        /*
+            * Traverse template fields.
+            */
+        template <typename T>
+        struct Cy_traverse_iso : std::false_type {};
+
+        template <typename T>
+        struct Cy_traverse_iso<Cy_Ref_impl<T, false>> : std::true_type {};
+
+        template <typename T, typename std::enable_if<!Cy_traverse_iso<T>::value, int>::type = 0>
+        static inline void __Pyx_CyObject_visit_template(void (*visit)(const CyObject *o, void*arg), const T& o, void *arg) {
+        }
+
+        template <typename T, typename std::enable_if<Cy_traverse_iso<T>::value, int>::type = 0>
+        static inline void __Pyx_CyObject_visit_template(void (*visit)(const CyObject *o, void*arg), const T& o, void *arg) {
+            visit(o.uobj, arg);
+        }
+
+        /*
+            * Traverse generic containers.
+            */
+        template<typename... Ts> struct Cy_make_void { typedef void type;};
+        template<typename... Ts> using Cy_void_t = typename Cy_make_void<Ts...>::type; // C++11 compatible version of std::void_t
+
+        template <typename T, typename = void>
+        struct Cy_is_iterable : std::false_type {};
+
+        template <typename T>
+        struct Cy_is_iterable<
+            T, Cy_void_t<
+                decltype(std::begin(std::declval<T>()) != std::end(std::declval<T>())),
+                decltype(++std::begin(std::declval<T>())),
+                decltype(*std::begin(std::declval<T>()))
+            >
+        > : std::true_type {};
+
+        template <typename T>
+        struct Cy_is_pair: std::false_type {};
+
+        template <typename ... Ts>
+        struct Cy_is_pair<std::pair<Ts...>> : std::true_type {};
+
+        template <typename T, typename std::enable_if<Cy_traverse_iso<T>::value, int>::type = 0>
+        static inline void __Pyx_CyObject_visit_generic(void (*visit)(const CyObject *o, void*arg), const T& o, void *arg) {
+            visit(o.uobj, arg);
+        }
+
+        template <typename T, typename std::enable_if<Cy_is_iterable<T>::value, int>::type = 0>
+        static inline void __Pyx_CyObject_visit_generic(void (*visit)(const CyObject *o, void*arg), const T& o, void *arg) {
+            for (auto& e : o) {
+                __Pyx_CyObject_visit_generic(visit, e, arg);
+            }
+        }
+
+        template <typename T, typename std::enable_if<Cy_is_pair<T>::value, int>::type = 0>
+        static inline void __Pyx_CyObject_visit_generic(void (*visit)(const CyObject *o, void*arg), const T& o, void *arg) {
+            __Pyx_CyObject_visit_generic(visit, o.first, arg);
+            __Pyx_CyObject_visit_generic(visit, o.second, arg);
+        }
+
+        template <typename T, typename std::enable_if<
+            !Cy_is_pair<T>::value && !Cy_is_iterable<T>::value && !Cy_traverse_iso<T>::value, int
+        >::type = 0>
+        static inline void __Pyx_CyObject_visit_generic(void (*visit)(const CyObject *o, void*arg), const T& o, void *arg) {}
 
         /*
             * Visit callback to collect reachable fields.
@@ -608,7 +686,6 @@
         /* Cast argument to CyObject* type. */
         #define _CyObject_CAST(ob) ob
 
-        #define Cy_GETREF(ob) (_Cy_GETREF(_CyObject_CAST(ob)))
         #define Cy_GOTREF(ob)
         #define Cy_XGOTREF(ob)
         #define Cy_GIVEREF(ob)
@@ -906,7 +983,6 @@ void CyObject::CyObject_UNWLOCK() const
 ActhonMessageInterface::ActhonMessageInterface(ActhonSyncInterface* sync_method,
     ActhonResultInterface* result_object) : _sync_method(sync_method), _result(result_object)
 {
-    Cy_INCREF(this->_sync_method);
     Cy_INCREF(this->_result);
 }
 
@@ -914,12 +990,6 @@ ActhonMessageInterface::~ActhonMessageInterface()
 {
     Cy_XDECREF(this->_sync_method);
     Cy_XDECREF(this->_result);
-}
-
-ActhonActivableClass::ActhonActivableClass(ActhonQueueInterface * queue_object, ActhonResultInterface *(*result_constructor)(void))
-    : _active_queue_class(queue_object), _active_result_class(result_constructor)
-{
-    Cy_INCREF(this->_active_queue_class);
 }
 
 ActhonActivableClass::~ActhonActivableClass()

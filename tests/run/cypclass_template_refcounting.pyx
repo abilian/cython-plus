@@ -129,3 +129,57 @@ def test_getting_and_setting():
         if Cy_GETREF(v) != 3:
             return -(i+2)
     return 0
+
+def test_field_getting():
+    """
+    >>> test_field_getting()
+    Template destroyed
+    Value destroyed
+    0
+    """
+    v = Value()
+    h = Template[Value](v)
+    if Cy_GETREF(v) != 3:
+        return -1
+
+    for i in range(10):
+        v = h.value
+        if Cy_GETREF(v) != 3:
+            return -(i+2)
+    return 0
+
+def test_field_setting():
+    """
+    >>> test_field_setting()
+    Template destroyed
+    Value destroyed
+    0
+    """
+    h = Template[Value](NULL)
+    v = Value()
+
+    for i in range(10):
+        h.value = v
+        if Cy_GETREF(v) != 3:
+            return -(i+1)
+    return 0
+
+def test_field_deleting():
+    """
+    >>> test_field_deleting()
+    Template destroyed
+    Value destroyed
+    0
+    """
+    v = Value()
+    h = Template[Value](v)
+    if Cy_GETREF(v) != 3:
+        return -1
+
+    del h.value
+    if Cy_GETREF(v) != 2:
+        return -1
+
+    del h
+
+    return 0

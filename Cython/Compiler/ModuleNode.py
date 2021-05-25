@@ -1197,7 +1197,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             if does_return:
                 code.putln("Cy_WLOCK(this->%s);" % result_attr_cname)
-                if reified_function_entry.type.return_type is PyrexTypes.c_int_type:
+                if reified_function_entry.type.return_type.resolve() is PyrexTypes.c_int_type:
                     code.putln("this->%s->pushIntResult(result);" % result_attr_cname)
                 else:
                     code.putln("this->%s->pushVoidStarResult((void*)result);" % result_attr_cname)

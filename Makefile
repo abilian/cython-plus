@@ -44,6 +44,7 @@ clean:
 	@echo Cleaning Source
 	@rm -fr build
 	@rm -f *.py[co] */*.py[co] */*/*.py[co] */*/*/*.py[co]
+	@rm -rf __pycache__ */__pycache__ */*/__pycache__
 	@rm -f *.so */*.so */*/*.so
 	@rm -f *.pyd */*.pyd */*/*.pyd
 	@rm -f *~ */*~ */*/*~

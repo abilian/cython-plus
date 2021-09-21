@@ -147,6 +147,39 @@ def test_len():
         return -2
     return 0
 
+def test_delitem():
+    """
+    >>> test_delitem()
+    (1, 10)
+    (2, 20)
+    (3, 30)
+    (4, 40)
+    (5, 50)
+    -------
+    (1, 10)
+    (2, 20)
+    (5, 50)
+    (4, 40)
+    -------
+    (4, 40)
+    (2, 20)
+    (5, 50)
+    """
+    d = cypdict[int, int]()
+    for i in range(1, 7):
+        d[i] = i * 10
+    del d[6]
+    for item in d.items():
+        print(item)
+    print("-------")
+    del d[3]
+    for item in d.items():
+        print(item)
+    print("-------")
+    del d[1]
+    for item in d.items():
+        print(item)
+
 def test_clear():
     """
     >>> test_clear()

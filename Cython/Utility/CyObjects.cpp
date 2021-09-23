@@ -19,8 +19,6 @@
         #define CyObject_CONTENDING_WRITER_FLAG (1 << 0)
         #define CyObject_CONTENDING_READER_FLAG (1 << 1)
 
-        #define CyObject_RAISE_ON_CONTENTION 0
-
         #include <atomic>
 
         #include <pthread.h>
@@ -37,7 +35,6 @@
         #include <type_traits>
 
         class CyLock {
-            static pthread_mutex_t log_guard;
             protected:
                 pthread_mutex_t guard;
                 pthread_cond_t readers_have_left;
@@ -67,9 +64,6 @@
                 int tryrlock();
                 int trywlock();
         };
-        #if CyObject_RAISE_ON_CONTENTION == 0
-        pthread_mutex_t CyLock::log_guard = PTHREAD_MUTEX_INITIALIZER;
-        #endif
 
         struct CyPyObject {
             PyObject_HEAD
@@ -724,37 +718,6 @@ void CyLock::rlock(const char *context) {
 
     pthread_mutex_lock(&this->guard);
 
-    if (this->write_count > 0) {
-        #if CyObject_RAISE_ON_CONTENTION
-        pid_t owner_id = this->owner_id;
-        std::ostringstream msg;
-        msg << "Data Race between [this] reader #" <<  caller_id
-            << " and [other] writer #" << owner_id
-            << " on lock " << this;
-        if (context != NULL) {
-            msg << std::endl << "In [this] context: " << context;
-        }
-        if (this->owner_context != NULL) {
-            msg << std::endl << "In [other] context: " << this->owner_context;
-        }
-        throw std::runtime_error(msg.str());
-        #else
-        pid_t owner_id = this->owner_id;
-        pthread_mutex_lock(&(CyLock::log_guard));
-        std::cerr
-            << "Data Race between [this] reader #" <<  caller_id
-            << " and [other] writer #" << owner_id
-            << " on lock " << this << std::endl;
-        if (context != NULL) {
-            std::cerr << "In [this] context: " << context << std::endl;
-        }
-        if (this->owner_context != NULL) {
-            std::cerr << "In [other] context: " << this->owner_context << std::endl;
-        }
-        pthread_mutex_unlock(&(CyLock::log_guard));
-        #endif
-    }
-
     while (this->write_count > 0) {
         pthread_cond_wait(&this->writer_has_left, &this->guard);
     }
@@ -824,68 +787,8 @@ void CyLock::wlock(const char *context) {
         // Since we use a reader-preferring approach, we wait first for all readers to leave, and then all writers.
         // The other way around could result in several writers acquiring the lock.
 
-        if (this->readers_nb > 0) {
-            #if CyObject_RAISE_ON_CONTENTION
-            pid_t owner_id = this->owner_id;
-            std::ostringstream msg;
-            msg << "Data Race between [this] writer #" <<  caller_id
-                << " and [other] reader #" << owner_id
-                << " on lock " << this;
-            if (context != NULL) {
-                msg << std::endl << "In [this] context: " << context;
-            }
-            if (this->owner_context != NULL) {
-                msg << std::endl << "In [other] context: " << this->owner_context;
-            }
-            throw std::runtime_error(msg.str());
-            #else
-            pthread_mutex_lock(&(CyLock::log_guard));
-            std::cerr
-                << "Data Race between [this] writer #" <<  caller_id
-                << " and [other] reader #" << owner_id
-                << " on lock " << this << std::endl;
-            if (context != NULL) {
-                std::cerr << "In [this] context: " << context << std::endl;
-            }
-            if (this->owner_context != NULL) {
-                std::cerr << "In [other] context: " << this->owner_context << std::endl;
-            }
-            pthread_mutex_unlock(&(CyLock::log_guard));
-            #endif
-        }
-
         while (this->readers_nb > 0) {
             pthread_cond_wait(&this->readers_have_left, &this->guard);
-        }
-
-        if (this->write_count > 0) {
-            #if CyObject_RAISE_ON_CONTENTION
-            pid_t owner_id = this->owner_id;
-            std::ostringstream msg;
-            msg << "Data Race between [this] writer #" <<  caller_id
-                << " and [other] writer #" << owner_id
-                << " on lock " << this;
-            if (context != NULL) {
-                msg << std::endl << "In [this] context: " << context;
-            }
-            if (this->owner_context != NULL) {
-                msg << std::endl << "In [other] context: " << this->owner_context;
-            }
-            throw std::runtime_error(msg.str());
-            #else
-            pthread_mutex_lock(&(CyLock::log_guard));
-            std::cerr
-                << "Data Race between [this] writer #" <<  caller_id
-                << " and [other] writer #" << owner_id
-                << " on lock " << this << std::endl;
-            if (context != NULL) {
-                std::cerr << "In [this] context: " << context << std::endl;
-            }
-            if (this->owner_context != NULL) {
-                std::cerr << "In [other] context: " << this->owner_context << std::endl;
-            }
-            pthread_mutex_unlock(&(CyLock::log_guard));
-            #endif
         }
 
         while (this->write_count > 0) {

@@ -59,12 +59,16 @@ that Python has become.
 Installation and basic use
 --------------------------
 
-::
+Simply run::
 
     pip install cython-plus
 
 Then you can use the habitual Cython commands: ``cython``, ``cythonize`` and
 ``cygdb``, as well as import the ``cython`` module from your Python code.
+
+It should work on Linux with Python 3.7 to 3.10.
+
+**It doesn't (currently) work on MacOS or Windows.**
 
 
 Documentation

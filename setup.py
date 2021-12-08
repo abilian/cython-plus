@@ -20,12 +20,12 @@ PYTHON_REQUIRES = '>=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*'
 # Metadata for the Cython+ project
 #
 NAME = "cython-plus"
-VERSION = "0.1.0"
+VERSION = "0.1.0.post2"
 HOME = "https://cython.plus/"
 AUTHOR = 'The Cython+ consortium + the original Cython authors'
 AUTHOR_EMAIL = 'contact@cython.plus'
 DESCRIPTION = "Multi-core concurrent programming in Python, based on the Cython language"
-
+LONG_DESCRIPTION = open("README.rst").read()
 
 #
 # Original setup.py
@@ -256,6 +256,7 @@ def run_build():
         author=AUTHOR,
         author_email=AUTHOR_EMAIL,
         description=DESCRIPTION,
+        long_description=LONG_DESCRIPTION,
         license='Apache',
         classifiers=[
             dev_status(version),

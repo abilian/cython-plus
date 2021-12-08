@@ -1,6 +1,12 @@
 Cython+ - Multi-core concurrent programming in Python
 ======================================================
 
+.. warning::
+    This is the README for the `Cython+ <https://cython.plus/>`_.
+    Since Cython+ is heavily based on `Cython <https://cython.org/>`_,
+    you may with to read also the `README for Cython <./README-Cython.rst>`_.*
+
+
 What's Cython?
 --------------
 

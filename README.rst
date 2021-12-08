@@ -1,6 +1,9 @@
 Cython+ - Multi-core concurrent programming in Python
 ======================================================
 
+What's Cython?
+--------------
+
 The aim of the "Cython+" project is to ensure that all the cores
 of a microprocessor can be efficiently exploited with a program
 written in Python in the field of system or network programming,
@@ -46,35 +49,47 @@ strengthening the community of the leading development language
 that Python has become.
 
 
-Installation
-------------
+Installation and basic use
+--------------------------
 
 ::
-   pip install cython-plus
+
+    pip install cython-plus
+
+Then you can use the habitual Cython commands: ``cython``, ``cythonize`` and
+``cygdb``, as well as import the ``cython`` module from your Python code.
 
 
-
-Documentation:
---------------
+Documentation
+-------------
 
 - Project Website: <https://www.cython.plus/>
+
+- Documentation:
+
+  - `Motivation <https://www.cython.plus/P-CYP-Documentation.Motivation>`_
+  - `Basic Syntax (by example) <https://www.cython.plus/P-CYP-Documentation.Basic.Syntax>`_
+  - `Interacting with Python (by example) <https://www.cython.plus/P-CYP-Documentation.Interacting.With.Python>`_
+  - `Concurrency <https://www.cython.plus/P-CYP-Documentation.Concurrency>`_
+
 - Blog posts and articles:
-    - `Automatic multithreaded-safe memory managed classes in Cython <https://www.nexedi.com/blog/NXD-Document.Blog.Cypclass>`_
-    - `HowTo Use Cython+ in Jupyter Notebook" <https://www.cython.plus/P-CYP-Howto.Jupyter>`_
+
+  - `Automatic multithreaded-safe memory managed classes in Cython <https://www.nexedi.com/blog/NXD-Document.Blog.Cypclass>`_
+  - `HowTo Use Cython+ in Jupyter Notebook <https://www.cython.plus/P-CYP-Howto.Jupyter>`_
+
 - Sandbox (various code snippets and benchmark to help you get started): <https://github.com/abilian/cythonplus-sandbox>
 
 
-Development:
-------------
+Development
+-----------
 
 - Project repository: <https://lab.nexedi.com/nexedi/cython>
-
 - Alternate repository (read-only): <https://github.com/abilian/cythonplus>
-- CI <https://github.com/abilian/cythonplus/actions>
+- CI: <https://github.com/abilian/cythonplus/actions>
 
 
-License & Copyright:
---------------------
+License & Copyright
+-------------------
 
 Cython+ is a (friendly) fork of `Cython <https://cython.org/>`_.
 
@@ -88,9 +103,18 @@ consortium <https://www.cython.plus/consortium/>`_: `Nexedi
 Cython+ is licensed under the permissive **Apache License**. See `LICENSE.txt <./LICENSE.txt>`_.
 
 
-Contributing:
--------------
+Contributing
+------------
 
 Want to contribute to the Cython+ project?
 
 Please contact us at <https://www.cython.plus/contact/>.
+
+
+Acknowledgements
+----------------
+
+Cython+ is based on the work of the `Cython authors <https://cython.org/#community>`_.
+
+The Cython+ project has been selected to receive funding from the PSPC-Régions 1.
+It is supported by `Cap Digital <https://capdigital.com/>`_ and the `Paris Region <https://www.iledefrance.fr/>`_.

@@ -1,94 +1,96 @@
-Welcome to Cython!
-==================
+Cython+ - Multi-core concurrent programming in Python
+======================================================
 
-Cython is a language that makes writing C extensions for
-Python as easy as Python itself.  Cython is based on
-Pyrex, but supports more cutting edge functionality and
-optimizations.
+The aim of the "Cython+" project is to ensure that all the cores
+of a microprocessor can be efficiently exploited with a program
+written in Python in the field of system or network programming,
+so as to correct the main shortcoming of the Python language and
+increase the competitiveness of its ecosystem.  The envisaged
+approach consists in transferring the extremely powerful multi-core
+concurrent programming model of the Go language to the Python
+language by relying on innovative scientific and technological
+approaches stemming from three decades of French know-how in the
+field of concurrent object programming around `Actalk
+<http://www-poleia.lip6.fr/~briot/actalk/actalk.html>`_, and
+leveraging the existing `Cython <https://cython.org/>`_ language.
 
-The Cython language is very close to the Python language, but Cython
-additionally supports calling C functions and declaring C types on variables
-and class attributes.  This allows the compiler to generate very efficient C
-code from Cython code.
+Cython is actually a superset of the Python language that brings
+together the strong typing of Python, performance equivalent to C
+and a form of low-level parallelism well suited to scientific
+computing. It is with Cython that the `scikit-learn
+<https://scikit-learn.org/stable/>`_ libraries or certain components
+of the NEO transactional distributed database are developed. Cython
+corrects the shortcomings of the Python language in terms of typing
+or performance. Cython also corrects the Global Interpreter Lock
+(GIL) problem which is at the origin of the poor support of multi-core
+microprocessors in Python.
 
-This makes Cython the ideal language for wrapping external C libraries, and
-for fast C modules that speed up the execution of Python code.
+In the "Cython+" project, we propose to remove the GIL in a very
+specific way: only at the level of asynchronous Cython functions
+not calling Python objects. So nothing is changed in the Python
+language nor in the "CPython" runtime which is the reference
+implementation of the Python language in C. All programs already
+developed in Python remain compatible. We only modify the Cython
+compiler and the subpart of the Cython language disjoint from Python,
+which we extend with a garbage collector and coroutines that can
+be used on a multi-core architecture.
 
-* Official website: https://cython.org/
-* Documentation: http://docs.cython.org/
-* Github repository: https://github.com/cython/cython
-* Wiki: https://github.com/cython/cython/wiki
-
-You can **support the Cython project** via
-`Github Sponsors <https://github.com/users/scoder/sponsorship>`_ or
-`Tidelift <https://tidelift.com/subscription/pkg/pypi-cython>`_.
-
-
-Installation:
--------------
-
-If you already have a C compiler, just do::
-
-   pip install Cython
-
-otherwise, see `the installation page <http://docs.cython.org/en/latest/src/quickstart/install.html>`_.
+Thus, "Cython+" will offer the same kind of coroutine programming
+as Go, the same level of parallelism, the same kind of memory
+management, the same kind of performance, exception handling that
+Go does not fully benefit from, a better concurrent programming
+model than Go, a very well-stocked standard library with much broader
+community support, and guaranteed memory isolation between threads.
+"Cython+" will become an alternative to Go with many advantages,
+strengthening the community of the leading development language
+that Python has become.
 
 
-License:
---------
+Installation
+------------
 
-The original Pyrex program was licensed "free of restrictions" (see below).
-Cython itself is licensed under the permissive **Apache License**.
+::
+   pip install cython-plus
 
-See `LICENSE.txt <https://github.com/cython/cython/blob/master/LICENSE.txt>`_.
+
+
+Documentation:
+--------------
+
+- Project Website: <https://www.cython.plus/>
+- Blog posts and articles:
+    - `Automatic multithreaded-safe memory managed classes in Cython <https://www.nexedi.com/blog/NXD-Document.Blog.Cypclass>`_
+    - `HowTo Use Cython+ in Jupyter Notebook" <https://www.cython.plus/P-CYP-Howto.Jupyter>`_
+- Sandbox (various code snippets and benchmark to help you get started): <https://github.com/abilian/cythonplus-sandbox>
+
+
+Development:
+------------
+
+- Project repository: <https://lab.nexedi.com/nexedi/cython>
+
+- Alternate repository (read-only): <https://github.com/abilian/cythonplus>
+- CI <https://github.com/abilian/cythonplus/actions>
+
+
+License & Copyright:
+--------------------
+
+Cython+ is a (friendly) fork of `Cython <https://cython.org/>`_.
+
+Its copyright belongs to the Cython original authors (as listed
+`Here <https://cython.org/#community>`_) as well as the `Cython+
+consortium <https://www.cython.plus/consortium/>`_: `Nexedi
+<https://nexedi.com/>`_, `Abilian <https://abilian.com/>`_, `Teralab
+<https://www.teralab-datascience.fr/?lang=en>`_ and `Inria
+<https://inria.fr/>`_.
+
+Cython+ is licensed under the permissive **Apache License**. See `LICENSE.txt <./LICENSE.txt>`_.
 
 
 Contributing:
 -------------
 
-Want to contribute to the Cython project?
-Here is some `help to get you started <https://github.com/cython/cython/blob/master/docs/CONTRIBUTING.rst>`_.
+Want to contribute to the Cython+ project?
 
-We are currently building the next great Cython edition:
-`Cython 3.0 <https://github.com/cython/cython/milestone/58>`_.
-You can help us make the life of Python 3.x users easier.
-
-
-Get the full source history:
-----------------------------
-
-Note that Cython used to ship the full version control repository in its source
-distribution, but no longer does so due to space constraints.  To get the
-full source history from a downloaded source archive, make sure you have git
-installed, then step into the base directory of the Cython source distribution
-and type::
-
-    make repo
-
-
-The following is from Pyrex:
-------------------------------------------------------
-This is a development version of Pyrex, a language
-for writing Python extension modules.
-
-For more info, see:
-
-* Doc/About.html for a description of the language
-* INSTALL.txt    for installation instructions
-* USAGE.txt      for usage instructions
-* Demos          for usage examples
-
-Comments, suggestions, bug reports, etc. are
-welcome!
-
-Copyright stuff: Pyrex is free of restrictions. You
-may use, redistribute, modify and distribute modified
-versions.
-
-The latest version of Pyrex can be found `here <http://www.cosc.canterbury.ac.nz/~greg/python/Pyrex/>`_.
-
-| Greg Ewing, Computer Science Dept
-| University of Canterbury
-| Christchurch, New Zealand
-
- A citizen of NewZealandCorp, a wholly-owned subsidiary of USA Inc.
+Please contact us at <https://www.cython.plus/contact/>.

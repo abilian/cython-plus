@@ -8,8 +8,8 @@ Cython+ - Multi-core concurrent programming in Python
     you may want to read also the `README for Cython <./README-Cython.rst>`_.*
 
 
-What's Cython?
---------------
+What's Cython+?
+---------------
 
 The aim of the "Cython+" project is to ensure that all the cores
 of a microprocessor can be efficiently exploited with a program
@@ -105,8 +105,8 @@ License & Copyright
 Cython+ is a (friendly) fork of `Cython <https://cython.org/>`_.
 
 Its copyright belongs to the Cython original authors (as listed
-`Here <https://cython.org/#community>`_) as well as the `Cython+
-consortium <https://www.cython.plus/consortium/>`_: `Nexedi
+`Here <https://cython.org/#community>`_) as well as to the members of the
+`Cython+ consortium <https://www.cython.plus/consortium/>`_: `Nexedi
 <https://nexedi.com/>`_, `Abilian <https://abilian.com/>`_, `Teralab
 <https://www.teralab-datascience.fr/?lang=en>`_ and `Inria
 <https://inria.fr/>`_.
@@ -128,4 +128,5 @@ Acknowledgements
 Cython+ is based on the work of the `Cython authors <https://cython.org/#community>`_.
 
 The Cython+ project has been selected to receive funding from the PSPC-Régions 1.
-It is supported by `Cap Digital <https://capdigital.com/>`_ and the `Paris Region <https://www.iledefrance.fr/>`_.
+It is supported by `Cap Digital <https://capdigital.com/>`_ and financed by
+the `PIA <https://www.gouvernement.fr/le-programme-d-investissements-d-avenir>`_ and the `Paris Region <https://www.iledefrance.fr/>`_.

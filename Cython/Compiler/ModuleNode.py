@@ -1394,8 +1394,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         objstruct_cname = wrapper_type.objstruct_cname
         code.putln("if (self) {")
         code.putln("%s * wrapper = (%s *) self;" % (objstruct_cname, objstruct_cname))
-        code.putln("Py_REFCNT(wrapper) = 0;")
-        code.putln("Py_TYPE(wrapper) = %s;" % wrapper_type.typeptr_cname)
+        code.putln("__Pyx_SET_REFCNT(wrapper, 0);")
+        code.putln("__Pyx_SET_TYPE(wrapper, %s);" % wrapper_type.typeptr_cname)
         code.putln("}")
 
     def generate_typedef(self, entry, code):

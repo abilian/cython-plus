@@ -832,9 +832,11 @@ static CYTHON_INLINE PyObject * __Pyx_PyDict_GetItemStrWithError(PyObject *dict,
 #if PY_VERSION_HEX >= 0x030900A4
   #define __Pyx_SET_REFCNT(obj, refcnt) Py_SET_REFCNT(obj, refcnt)
   #define __Pyx_SET_SIZE(obj, size) Py_SET_SIZE(obj, size)
+  #define __Pyx_SET_TYPE(obj, type) Py_SET_TYPE(obj, type)
 #else
   #define __Pyx_SET_REFCNT(obj, refcnt) Py_REFCNT(obj) = (refcnt)
   #define __Pyx_SET_SIZE(obj, size) Py_SIZE(obj) = (size)
+  #define __Pyx_SET_TYPE(obj, type) Py_TYPE(obj) = (type)
 #endif
 
 #if CYTHON_ASSUME_SAFE_MACROS

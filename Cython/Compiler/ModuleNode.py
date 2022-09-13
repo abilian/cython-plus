@@ -1055,7 +1055,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 templates_code = "template <typename %s>" % ", typename ".join(t.name for t in entry.type.templates)
                 code.putln(templates_code)
             code.putln("%s {" % function_code)
-            code.putln("%s = this->%s();" % (result_interface_type.declaration_code("result_object"), result_attr_cname))
+            result_declaration = result_interface_type.declaration_code("result_object")
+            code.putln("%s = this->%s ? this->%s() : NULL;" % (result_declaration, result_attr_cname, result_attr_cname))
 
             message_constructor_args_list = ["this", "sync_object", "result_object"] + reified_arg_cname_list
             message_constructor_args_code = ", ".join(message_constructor_args_list)
@@ -1196,12 +1197,14 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             )
 
             if does_return:
+                code.putln("if (this->%s != NULL) {" % result_attr_cname)
                 code.putln("Cy_WLOCK(this->%s);" % result_attr_cname)
                 if reified_function_entry.type.return_type.resolve() is PyrexTypes.c_int_type:
                     code.putln("this->%s->pushIntResult(result);" % result_attr_cname)
                 else:
                     code.putln("this->%s->pushVoidStarResult((void*)result);" % result_attr_cname)
                 code.putln("Cy_UNWLOCK(this->%s);" % result_attr_cname)
+                code.putln("}")
             code.putln("return 1;")
             code.putln("}")
 

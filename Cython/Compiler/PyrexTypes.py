@@ -445,7 +445,7 @@ class CTypedefType(BaseType):
         return self.typedef_base_type.resolve()
 
     def declaration_code(self, entity_code,
-            for_display = 0, dll_linkage = None, pyrex = 0):
+            for_display = 0, dll_linkage = None, pyrex = 0, *_unused_):
         if pyrex or for_display:
             base_code = self.typedef_name
         else:
@@ -1893,12 +1893,12 @@ class CConstOrVolatileType(BaseType):
         return self.declaration_code("", for_display=1)
 
     def declaration_code(self, entity_code,
-            for_display = 0, dll_linkage = None, pyrex = 0):
+            for_display = 0, dll_linkage = None, pyrex = 0, *args):
         cv = self.cv_string()
         if for_display or pyrex:
-            return cv + self.cv_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex)
+            return cv + self.cv_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex, *args)
         else:
-            return self.cv_base_type.declaration_code(cv + entity_code, for_display, dll_linkage, pyrex)
+            return self.cv_base_type.declaration_code(cv + entity_code, for_display, dll_linkage, pyrex, *args)
 
     def specialize(self, values):
         base_type = self.cv_base_type.specialize(values)

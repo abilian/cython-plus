@@ -1031,7 +1031,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
         for reified_function_entry in entry.type.scope.reified_entries:
             reifying_class_name = "%s%s" % (Naming.cypclass_reified_prefix, reified_function_entry.name)
-            reifying_class_full_name = "%s::%s" % (PyrexTypes.namespace_declaration_code(entry.type), reifying_class_name)
+            reifying_class_full_name = PyrexTypes.namespace_declaration_code(entry.type, reifying_class_name)
 
             code.putln("// generating reified of %s" % reified_function_entry.name)
             reified_arg_cname_list = []

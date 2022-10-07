@@ -451,8 +451,8 @@ class CTypedefType(BaseType):
         else:
             base_code = public_decl(self.typedef_cname, dll_linkage)
         if self.typedef_namespace is not None and not pyrex:
-            base_code = "%s::%s" % (namespace_declaration_code(self.typedef_namespace), base_code)
-        if self.is_specialised and self.is_cyp_class and entity_code:
+            base_code = namespace_declaration_code(self.typedef_namespace, base_code, for_display)
+        if self.is_specialised and self.is_cyp_class and entity_code and not for_display:
             base_code = "Cy_Raw<%s>" % base_code
         return self.base_declaration_code(base_code, entity_code)
 
@@ -4343,7 +4343,7 @@ class CppClassType(CType):
         else:
             base_code = "%s%s" % (self.cname, templates)
             if self.namespace is not None:
-                base_code = "%s::%s" % (namespace_declaration_code(self.namespace), base_code)
+                base_code = namespace_declaration_code(self.namespace, base_code, for_display)
             base_code = public_decl(base_code, dll_linkage)
         return self.base_declaration_code(base_code, entity_code)
 
@@ -5053,8 +5053,7 @@ class CEnumType(CIntLike, CType):
             base_code = self.name
         else:
             if self.namespace:
-                base_code = "%s::%s" % (
-                    namespace_declaration_code(self.namespace), self.cname)
+                base_code = namespace_declaration_code(self.namespace, self.cname, for_display)
             elif self.typedef_flag:
                 base_code = self.cname
             else:
@@ -5116,7 +5115,7 @@ class CTupleType(CType):
         else:
             base_code = self.base_declaration_code(self.cname, entity_code)
             if self.templated_namespace is not None:
-                return "%s::%s" % (namespace_declaration_code(self.templated_namespace), base_code)
+                return namespace_declaration_code(self.templated_namespace, base_code, for_display)
             else:
                 return base_code
 
@@ -6003,16 +6002,18 @@ def cap_length(s, max_prefix=63, max_len=1024):
     else:
         return '%x__%s__etc' % (abs(hash(s)) % (1<<20), s[:max_len-17])
 
-def namespace_declaration_code(namespace):
+def namespace_declaration_code(namespace, entity_code, for_display=0):
     """
     Add 'typename' to the beginning of the declaration code when the namespace is template-dependent.
     """
+    if for_display:
+        return "%s.%s" % (namespace.declaration_code('', for_display=1), entity_code)
     base_code = namespace.empty_declaration_code()
     if not base_code.startswith("typename "):
         if hasattr(namespace, 'templates') and namespace.templates is not None:
             if any(isinstance(t, TemplatePlaceholderType) for t in namespace.templates):
                 base_code = "typename %s" % base_code
-    return base_code
+    return "%s::%s" % (base_code, entity_code)
 
 def template_parameter_code(T, for_display = 0, pyrex = 0):
     """

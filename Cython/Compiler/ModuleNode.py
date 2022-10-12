@@ -1302,6 +1302,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                         )
 
         if init_entry and is_new_return_type:
+            code.putln("if (self) {")
 
             # Calling __init__
 
@@ -1384,6 +1385,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             init_arg_string = ','.join(arg_names)
             code.putln("self->%s(%s);" % (init_entry.cname, init_arg_string))
+            code.putln("}")
         code.putln("return self;")
         code.putln("}")
 

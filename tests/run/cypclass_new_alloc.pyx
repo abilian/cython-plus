@@ -109,3 +109,29 @@ def test_new_args_unpacking():
     print obj1.b
     print obj2.a
     print obj2.b
+
+
+cdef cypclass NullNew:
+    int a
+
+    NullNew __new__(alloc, int a):
+        if a < 0:
+            with gil:
+                print("nil")
+            return NULL
+        return alloc()
+
+    __init__(self, int a):
+        with gil:
+            print(a)
+        self.a = a
+
+def test_null_new():
+    """
+    >>> test_null_new()
+    nil
+    1
+    """
+    cdef NullNew nil = NullNew(-1)
+    cdef NullNew one = NullNew(1)
+

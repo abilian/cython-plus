@@ -44,6 +44,7 @@ clean:
 	@echo Cleaning Source
 	@rm -fr build
 	@rm -f *.py[co] */*.py[co] */*/*.py[co] */*/*/*.py[co]
+	@rm -rf __pycache__ */__pycache__ */*/__pycache__
 	@rm -f *.so */*.so */*/*.so
 	@rm -f *.pyd */*.pyd */*/*.pyd
 	@rm -f *~ */*~ */*/*~
@@ -80,3 +81,14 @@ wheel_manylinux32 wheel_manylinux64: dist/$(PACKAGENAME)-$(VERSION).tar.gz
 		    { $$PYBIN/pip wheel -w /io/$$WHEELHOUSE /io/$< & } ; \
 		    done; wait; \
 		    for whl in /io/$$WHEELHOUSE/$(PACKAGENAME)-$(VERSION)-*-linux_*.whl; do auditwheel repair $$whl -w /io/$$WHEELHOUSE; done'
+
+
+#
+# Additional targets by sfermigier 
+#
+.PHONY: release
+release:
+	@make clean
+	rm -rf dist
+	python setup.py sdist
+	twine upload dist/*

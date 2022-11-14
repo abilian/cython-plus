@@ -532,12 +532,12 @@ def inject_acthon_interfaces(self):
     message_entry.is_type = 1
 
     message_sync_attr_entry = message_scope.declare("_sync_method", "_sync_method",
-        PyrexTypes.cyp_class_qualified_type(sync_type, 'locked'), None, "extern")
+        PyrexTypes.cyp_class_qualified_type(sync_type, 'lock'), None, "extern")
     message_sync_attr_entry.is_variable = 1
     message_scope.var_entries.append(message_sync_attr_entry)
 
     message_result_attr_entry = message_scope.declare("_result", "_result",
-        PyrexTypes.cyp_class_qualified_type(result_type, 'locked'), None, "extern")
+        PyrexTypes.cyp_class_qualified_type(result_type, 'lock'), None, "extern")
     message_result_attr_entry.is_variable = 1
     message_scope.var_entries.append(message_result_attr_entry)
 
@@ -563,7 +563,7 @@ def inject_acthon_interfaces(self):
     queue_entry.is_type = 1
 
     queue_msg_arg = PyrexTypes.CFuncTypeArg("msg", message_type, None)
-    queue_push_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [queue_msg_arg], nogil = 1, self_qualifier = 'locked&')
+    queue_push_type = PyrexTypes.CFuncType(PyrexTypes.c_void_type, [queue_msg_arg], nogil = 1, self_qualifier = 'locked')
     queue_push_entry = queue_scope.declare("push", "push", queue_push_type,
         None, "extern")
     queue_push_entry.is_cfunction = 1
@@ -605,7 +605,7 @@ def inject_acthon_interfaces(self):
     activable_scope.var_entries.append(activable_result_attr_entry)
 
     activable_queue_attr_entry = activable_scope.declare("_active_queue_class", "_active_queue_class",
-        PyrexTypes.cyp_class_qualified_type(queue_type, 'locked'), None, "extern")
+        PyrexTypes.cyp_class_qualified_type(queue_type, 'lock'), None, "extern")
     activable_queue_attr_entry.is_variable = 1
     activable_scope.var_entries.append(activable_queue_attr_entry)
 

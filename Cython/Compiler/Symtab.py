@@ -2853,7 +2853,7 @@ class CppClassScope(Scope):
         # create the sync argument type
         activated_method_sync_attr_type = PyrexTypes.CFuncTypeArg(
             EncodedString("sync_method"),
-            PyrexTypes.cyp_class_qualified_type(sync_type, 'locked'),
+            PyrexTypes.cyp_class_qualified_type(sync_type, 'lock'),
             entry.pos,
             "sync_method",
         )
@@ -2997,9 +2997,9 @@ class CppClassScope(Scope):
         if (self.parent_type.is_cyp_class and type.is_static_method and name not in ("<alloc>", "__new__")):
             entry.static_cname = "%s__static__%s" % (Naming.func_prefix, cname or name)
 
-        if type.self_qualifier in ('locked&',):
+        if type.self_qualifier in ('locked',):
             reify = False
-        if any(arg.type.is_qualified_cyp_class and arg.type.qualifier in ('locked&',) for arg in type.args):
+        if any(arg.type.is_qualified_cyp_class and arg.type.qualifier in ('locked',) for arg in type.args):
             reify = False
 
         if reify:
@@ -3315,7 +3315,9 @@ class QualifiedCypclassScope(Scope):
         alternatives = []
         for e in base_entry.all_alternatives():
             entry = self.adapt(e)
-            if entry is None:
+            if entry is e:
+                entry = copy.copy(e)
+            elif entry is None:
                 continue
             entry.overloaded_alternatives = alternatives
             alternatives.append(entry)
@@ -3330,7 +3332,7 @@ def qualified_cypclass_scope(base_type_scope, qualifier):
         return ActiveCypclassScope(base_type_scope)
     elif qualifier.startswith('iso'):
         return IsoCypclassScope(base_type_scope, qualifier)
-    elif qualifier.startswith('locked'):
+    elif qualifier.startswith('lock'):
         return IsoCypclassScope(base_type_scope, qualifier)
     else:
         return QualifiedCypclassScope(base_type_scope, qualifier)
@@ -3350,7 +3352,7 @@ class IsoCypclassScope(QualifiedCypclassScope):
 
     def adapt_arg_type(self, arg):
         arg = copy.copy(arg)
-        arg.type = viewpoint_adaptation(arg.type)
+        arg.type = viewpoint_adaptation(arg.type, self.qualifier)
         return arg
 
     def adapt_method_entry(self, base_entry):
@@ -3358,12 +3360,12 @@ class IsoCypclassScope(QualifiedCypclassScope):
         if base_type.self_qualifier:
             if self.qualifier in PyrexTypes.QualifiedCypclassType.assignable_to[base_type.self_qualifier]:
                 return base_entry
-            elif base_type.self_qualifier == 'locked&' and self.qualifier == 'locked':
+            elif base_type.self_qualifier == 'locked' and self.qualifier == 'lock':
                 return base_entry
             else:
                 return None
         iso_method_type = copy.copy(base_type)
-        return_type = viewpoint_adaptation(base_type.return_type)
+        return_type = viewpoint_adaptation(base_type.return_type, self.qualifier)
         iso_method_type.return_type = return_type
         iso_method_type.args = [self.adapt_arg_type(arg) for arg in base_type.args]
         entry = copy.copy(base_entry)
@@ -3377,7 +3379,7 @@ class IsoCypclassScope(QualifiedCypclassScope):
             return self.adapt_method_entry(base_entry)
         else:
             base_entry_type = base_entry.type
-            adapted_type = viewpoint_adaptation(base_entry_type)
+            adapted_type = viewpoint_adaptation(base_entry_type, self.qualifier)
             if adapted_type is base_entry_type:
                 return base_entry
             else:

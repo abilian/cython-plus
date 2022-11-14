@@ -1031,7 +1031,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
         for reified_function_entry in entry.type.scope.reified_entries:
             reifying_class_name = "%s%s" % (Naming.cypclass_reified_prefix, reified_function_entry.name)
-            reifying_class_full_name = "%s::%s" % (PyrexTypes.namespace_declaration_code(entry.type), reifying_class_name)
+            reifying_class_full_name = PyrexTypes.namespace_declaration_code(entry.type, reifying_class_name)
 
             code.putln("// generating reified of %s" % reified_function_entry.name)
             reified_arg_cname_list = []
@@ -1055,7 +1055,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                 templates_code = "template <typename %s>" % ", typename ".join(t.name for t in entry.type.templates)
                 code.putln(templates_code)
             code.putln("%s {" % function_code)
-            code.putln("%s = this->%s();" % (result_interface_type.declaration_code("result_object"), result_attr_cname))
+            result_declaration = result_interface_type.declaration_code("result_object")
+            code.putln("%s = this->%s ? this->%s() : NULL;" % (result_declaration, result_attr_cname, result_attr_cname))
 
             message_constructor_args_list = ["this", "sync_object", "result_object"] + reified_arg_cname_list
             message_constructor_args_code = ", ".join(message_constructor_args_list)
@@ -1196,12 +1197,14 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
             )
 
             if does_return:
+                code.putln("if (this->%s != NULL) {" % result_attr_cname)
                 code.putln("Cy_WLOCK(this->%s);" % result_attr_cname)
-                if reified_function_entry.type.return_type is PyrexTypes.c_int_type:
+                if reified_function_entry.type.return_type.resolve() is PyrexTypes.c_int_type:
                     code.putln("this->%s->pushIntResult(result);" % result_attr_cname)
                 else:
                     code.putln("this->%s->pushVoidStarResult((void*)result);" % result_attr_cname)
                 code.putln("Cy_UNWLOCK(this->%s);" % result_attr_cname)
+                code.putln("}")
             code.putln("return 1;")
             code.putln("}")
 
@@ -1299,6 +1302,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
                         )
 
         if init_entry and is_new_return_type:
+            code.putln("if (self) {")
 
             # Calling __init__
 
@@ -1381,6 +1385,7 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
 
             init_arg_string = ','.join(arg_names)
             code.putln("self->%s(%s);" % (init_entry.cname, init_arg_string))
+            code.putln("}")
         code.putln("return self;")
         code.putln("}")
 
@@ -1394,8 +1399,8 @@ class ModuleNode(Nodes.Node, Nodes.BlockNode):
         objstruct_cname = wrapper_type.objstruct_cname
         code.putln("if (self) {")
         code.putln("%s * wrapper = (%s *) self;" % (objstruct_cname, objstruct_cname))
-        code.putln("Py_REFCNT(wrapper) = 0;")
-        code.putln("Py_TYPE(wrapper) = %s;" % wrapper_type.typeptr_cname)
+        code.putln("__Pyx_SET_REFCNT(wrapper, 0);")
+        code.putln("__Pyx_SET_TYPE(wrapper, %s);" % wrapper_type.typeptr_cname)
         code.putln("}")
 
     def generate_typedef(self, entry, code):

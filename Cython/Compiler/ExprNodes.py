@@ -10921,6 +10921,8 @@ class TypecastNode(ExprNode):
                 if self.operand.type.is_ptr:
                     if not (self.operand.type.base_type.is_void or self.operand.type.base_type.is_struct):
                         error(self.pos, "Python objects cannot be cast from pointers of primitive types")
+                elif self.operand.type.is_qualified_cyp_class:
+                    error(self.pos, "Cannot cast '%s' to '%s'" % (self.operand.type, self.type))
                 else:
                     # Should this be an error?
                     warning(self.pos, "No conversion from %s to %s, python object pointer used." % (
@@ -10954,9 +10956,10 @@ class TypecastNode(ExprNode):
                 self.op_func_type = entry.type
             if self.type.is_cyp_class:
                 self.is_temp = self.overloaded
-                if self.type.is_qualified_cyp_class:
-                    if not self.type.assignable_from(self.operand.type):
-                        error(self.pos, "Cannot cast %s to %s" % (self.operand.type, self.type))
+            if self.type.is_cyp_class and self.operand.type.is_cyp_class:
+                if self.operand.type.is_qualified_cyp_class or self.type.is_qualified_cyp_class:
+                    if not (self.type.same_as(self.operand.type) or self.type.assignable_from(self.operand.type)):
+                        error(self.pos, "Cannot cast '%s' to '%s'" % (self.operand.type, self.type))
         if self.type.is_ptr and self.type.base_type.is_cfunction and self.type.base_type.nogil:
             op_type = self.operand.type
             if op_type.is_ptr:
@@ -11004,11 +11007,11 @@ class TypecastNode(ExprNode):
                     imag_part)
         else:
             operand_type = self.operand.type
-            if operand_type.is_cyp_class:
-                if self.overloaded:
+            if self.overloaded:
+                if operand_type.is_cyp_class:
                     operand_result = '(*%s)' % operand_result
-            # use dynamic cast when dowcasting from a base to a cypclass
-            if self.type.is_cyp_class and operand_type in self.type.mro() and not self.type.same_as(operand_type):
+            elif self.type.is_cyp_class and operand_type in self.type.mro() and not self.type.same_as(operand_type):
+                # use dynamic cast when dowcasting from a base to a cypclass
                 return self.type.dynamic_cast_code(operand_result)
             return self.type.cast_code(operand_result)
 
@@ -11033,22 +11036,17 @@ class TypecastNode(ExprNode):
                         self.operand.result()))
                 code.put_incref(self.result(), self.ctype())
             elif self.type.is_cyp_class:
-                star = "*" if self.overloaded else ""
-                operand_result = "%s%s" % (star, self.operand.result())
-                # use dynamic cast when dowcasting from a base to a cypclass
-                if self.operand.type in self.type.mro() and not self.type.same_as(self.operand.type):
-                    code.putln(
-                        "%s = dynamic_cast<%s>(%s);" % (
-                            self.result(),
-                            self.type.declaration_code(''),
-                            operand_result))
-                else:
-                    code.putln(
-                        "%s = (%s)(%s);" % (
-                            self.result(),
-                            self.type.declaration_code(''),
-                            operand_result))
-                code.put_incref(self.result(), self.type)
+                # self.overloaded is True
+                operand_type = self.operand.type
+                operand_result = self.operand.result()
+                if operand_type.is_cyp_class:
+                    operand_result = "*%s" % operand_result
+                code.putln(
+                    "%s = (%s)(%s);" % (
+                        self.result(),
+                        self.type.declaration_code(''),
+                        operand_result))
+                # the result is already a new reference
 
 
 ERR_START = "Start may not be given"
@@ -11380,6 +11378,7 @@ class ConsumeNode(ExprNode):
     #  generate_runtime_check   boolean     used internally
     #  check_refcount_only      boolean     used internally
     #  operand_is_named         boolean     used internally
+    #  solid_operand            ExprNode    used internally
 
     subexprs = ['operand']
 
@@ -11401,12 +11400,8 @@ class ConsumeNode(ExprNode):
             self.type = PyrexTypes.error_type
             return self
         if operand_type.is_qualified_cyp_class:
-            if operand_type.qualifier == 'iso->':
-                error(self.pos, "Cannot consume iso->")
-                self.type = PyrexTypes.error_type
-                return self
             self.generate_runtime_check = operand_type.qualifier not in ('iso', 'iso~')
-            self.check_refcount_only = operand_type.qualifier in ('active', 'locked')
+            self.check_refcount_only = operand_type.qualifier in ('active', 'lock', 'locked')
             if operand_type.qualifier == 'iso~':
                 self.type = operand_type
             else:
@@ -11415,12 +11410,16 @@ class ConsumeNode(ExprNode):
             self.generate_runtime_check = True
             self.check_refcount_only = False
             self.type = PyrexTypes.cyp_class_qualified_type(operand_type, 'iso~')
-        self.operand_is_named = self.operand.is_name or self.operand.is_attribute
-        self.is_temp = self.operand_is_named or (self.generate_runtime_check and not self.operand.is_temp)
+        solid_operand = self.operand
+        while isinstance(solid_operand, TypecastNode) and not solid_operand.is_temp:
+            if not solid_operand.operand.type.is_cyp_class:
+                break
+            solid_operand = solid_operand.operand
+        self.operand_is_named = solid_operand.is_name or solid_operand.is_attribute
+        self.is_temp = self.operand_is_named or (self.generate_runtime_check and not solid_operand.is_temp)
+        self.solid_operand = solid_operand
         if self.operand_is_named:
-            self.operand.entry.is_consumed = True
-        if not self.operand_is_named and not self.generate_runtime_check:
-            return self.operand
+            solid_operand.entry.is_consumed = True
         return self
 
     def may_be_none(self):
@@ -11461,10 +11460,13 @@ class ConsumeNode(ExprNode):
                 code.error_goto(self.pos))
             code.putln("}")
         if self.operand_is_named:
-            code.putln("%s = NULL;" % self.operand.result())
+            code.putln("%s = NULL;" % self.solid_operand.result())
 
     def generate_post_assignment_code(self, code):
-        self.operand.generate_post_assignment_code(code)
+        if self.is_temp:
+            ExprNode.generate_post_assignment_code(self, code)
+        else:
+            self.operand.generate_post_assignment_code(code)
 
 
 class TypeidNode(ExprNode):

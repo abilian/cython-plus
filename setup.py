@@ -16,6 +16,20 @@ is_cpython = platform.python_implementation() == 'CPython'
 # versions of packages which are not compatible with the running python
 PYTHON_REQUIRES = '>=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*'
 
+#
+# Metadata for the Cython+ project
+#
+NAME = "cython-plus"
+VERSION = "0.1.0.post2"
+HOME = "https://cython.plus/"
+AUTHOR = 'The Cython+ consortium + the original Cython authors'
+AUTHOR_EMAIL = 'contact@cython.plus'
+DESCRIPTION = "Multi-core concurrent programming in Python, based on the Cython language"
+LONG_DESCRIPTION = open("README.rst").read()
+
+#
+# Original setup.py
+#
 if sys.platform == "darwin":
     # Don't create resource files on OS X tar.
     os.environ['COPY_EXTENDED_ATTRIBUTES_DISABLE'] = 'true'
@@ -232,38 +246,17 @@ def run_build():
     if compile_cython_itself and (is_cpython or cython_compile_more):
         compile_cython_modules(cython_profile, cython_compile_more, cython_with_refnanny)
 
-    from Cython import __version__ as version
+    # from Cython import __version__ as version
+    version = VERSION
+
     setup(
-        name='Cython',
+        name=NAME,
         version=version,
-        url='https://cython.org/',
-        author='Robert Bradshaw, Stefan Behnel, Dag Seljebotn, Greg Ewing, et al.',
-        author_email='cython-devel@python.org',
-        description="The Cython compiler for writing C extensions for the Python language.",
-        long_description=textwrap.dedent("""\
-        The Cython language makes writing C extensions for the Python language as
-        easy as Python itself.  Cython is a source code translator based on Pyrex_,
-        but supports more cutting edge functionality and optimizations.
-
-        The Cython language is a superset of the Python language (almost all Python
-        code is also valid Cython code), but Cython additionally supports optional
-        static typing to natively call C functions, operate with C++ classes and
-        declare fast C types on variables and class attributes.  This allows the
-        compiler to generate very efficient C code from Cython code.
-
-        This makes Cython the ideal language for writing glue code for external
-        C/C++ libraries, and for fast C modules that speed up the execution of
-        Python code.
-
-        Note that for one-time builds, e.g. for CI/testing, on platforms that are not
-        covered by one of the wheel packages provided on PyPI *and* the pure Python wheel
-        that we provide is not used, it is substantially faster than a full source build
-        to install an uncompiled (slower) version of Cython with::
-
-            pip install Cython --install-option="--no-cython-compile"
-
-        .. _Pyrex: https://www.cosc.canterbury.ac.nz/greg.ewing/python/Pyrex/
-        """),
+        url=HOME,
+        author=AUTHOR,
+        author_email=AUTHOR_EMAIL,
+        description=DESCRIPTION,
+        long_description=LONG_DESCRIPTION,
         license='Apache',
         classifiers=[
             dev_status(version),
@@ -274,11 +267,9 @@ def run_build():
             "Programming Language :: Python :: 2",
             "Programming Language :: Python :: 2.7",
             "Programming Language :: Python :: 3",
-            "Programming Language :: Python :: 3.4",
-            "Programming Language :: Python :: 3.5",
-            "Programming Language :: Python :: 3.6",
             "Programming Language :: Python :: 3.7",
             "Programming Language :: Python :: 3.8",
+            "Programming Language :: Python :: 3.9",
             "Programming Language :: Python :: Implementation :: CPython",
             "Programming Language :: Python :: Implementation :: PyPy",
             "Programming Language :: C",

@@ -445,14 +445,14 @@ class CTypedefType(BaseType):
         return self.typedef_base_type.resolve()
 
     def declaration_code(self, entity_code,
-            for_display = 0, dll_linkage = None, pyrex = 0):
+            for_display = 0, dll_linkage = None, pyrex = 0, *_unused_):
         if pyrex or for_display:
             base_code = self.typedef_name
         else:
             base_code = public_decl(self.typedef_cname, dll_linkage)
         if self.typedef_namespace is not None and not pyrex:
-            base_code = "%s::%s" % (namespace_declaration_code(self.typedef_namespace), base_code)
-        if self.is_specialised and self.is_cyp_class and entity_code:
+            base_code = namespace_declaration_code(self.typedef_namespace, base_code, for_display)
+        if self.is_specialised and self.is_cyp_class and entity_code and not for_display:
             base_code = "Cy_Raw<%s>" % base_code
         return self.base_declaration_code(base_code, entity_code)
 
@@ -1893,12 +1893,12 @@ class CConstOrVolatileType(BaseType):
         return self.declaration_code("", for_display=1)
 
     def declaration_code(self, entity_code,
-            for_display = 0, dll_linkage = None, pyrex = 0):
+            for_display = 0, dll_linkage = None, pyrex = 0, *args):
         cv = self.cv_string()
         if for_display or pyrex:
-            return cv + self.cv_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex)
+            return cv + self.cv_base_type.declaration_code(entity_code, for_display, dll_linkage, pyrex, *args)
         else:
-            return self.cv_base_type.declaration_code(cv + entity_code, for_display, dll_linkage, pyrex)
+            return self.cv_base_type.declaration_code(cv + entity_code, for_display, dll_linkage, pyrex, *args)
 
     def specialize(self, values):
         base_type = self.cv_base_type.specialize(values)
@@ -4364,7 +4364,7 @@ class CppClassType(CType):
         else:
             base_code = "%s%s" % (self.cname, templates)
             if self.namespace is not None:
-                base_code = "%s::%s" % (namespace_declaration_code(self.namespace), base_code)
+                base_code = namespace_declaration_code(self.namespace, base_code, for_display)
             base_code = public_decl(base_code, dll_linkage)
         return self.base_declaration_code(base_code, entity_code)
 
@@ -4593,6 +4593,8 @@ class CypClassType(CppClassType):
     is_cyp_class = 1
     to_py_function = None
     from_py_function = None
+    qualifier = None
+    qual_base_type = None
 
     def __init__(self, name, scope, cname, base_classes, templates=None, template_type=None, nogil=0, activable=False):
         CppClassType.__init__(self, name, scope, cname, base_classes, templates, template_type, nogil)
@@ -4602,6 +4604,13 @@ class CypClassType(CppClassType):
         self.wrapper_type = None
         self._wrapped_base_type = None
         self._qualified_types = {}
+
+    def set_scope(self, scope):
+        super(CypClassType, self).set_scope(scope)
+        if scope and self._qualified_types:
+            from .Symtab import qualified_cypclass_scope
+            for qualifier, qualified_type in self._qualified_types.items():
+                qualified_type.scope = qualified_cypclass_scope(scope, qualifier)
 
     # iterate over the direct bases that support wrapping
     def iter_wrapped_base_types(self):
@@ -4666,7 +4675,7 @@ class CypClassType(CppClassType):
     def declaration_code(self, entity_code,
             for_display = 0, dll_linkage = None, pyrex = 0,
             template_params = None, deref = 0):
-        if not deref:
+        if not deref and not for_display:
             entity_code = "*%s" % entity_code
         return super(CypClassType, self).declaration_code(entity_code,
                 for_display=for_display, dll_linkage=dll_linkage,
@@ -4856,7 +4865,7 @@ class ConstCypclassType(BaseType):
 class QualifiedCypclassType(BaseType):
     "A qualified cypclass reference"
 
-    # qualifier     string      the qualifier keyword: ('active' | 'iso' | 'iso~' | 'iso->' )
+    # qualifier     string      the qualifier keyword
 
     subtypes = ['qual_base_type']
 
@@ -4867,41 +4876,37 @@ class QualifiedCypclassType(BaseType):
     from_py_function = None
 
     assignable_to = {
+        None: (None, 'iso~'),
         'active': ('active', 'iso~'),
         'iso': ('iso~',),
         'iso~': (),
         'iso->': ('iso~',),
-        'locked': ('locked', 'locked&', 'iso~'),
-        'locked&': ('locked&', 'iso~'),
+        'lock': ('lock', 'locked', 'iso~'),
+        'locked': ('locked', 'iso~'),
+        'lock->': ('iso~',),
     }
 
     def __new__(cls, base_type, qualifier):
         # The qualified type is cached in the unqualified type to avoid duplicates.
-        try:
-            return base_type._qualified_types[qualifier]
-        except KeyError:
-            if base_type.is_qualified_cyp_class:
-                base_type = base_type.qual_base_type
-            qualified_type = BaseType.__new__(cls)
-            qualified_type.__init__(base_type, qualifier)
-            base_type._qualified_types[qualifier] = qualified_type
-            return qualified_type
-
-    def __init__(self, base_type, qualifier):
         assert base_type.is_cyp_class
-        self.qual_base_type = base_type
-        self.qualifier = qualifier
-
-        if qualifier == 'active':
-            # TODO: raise a proper compilation error.
-            assert base_type.activable
-
-        if base_type.scope is not None:
-            from .Symtab import qualified_cypclass_scope
-            self.scope = qualified_cypclass_scope(base_type.scope, qualifier)
+        base_type = base_type.qual_base_type or base_type
+        try:
+            qualified_type = base_type._qualified_types[qualifier]
+        except KeyError:
+            qualified_type = BaseType.__new__(cls)
+            qualified_type.qual_base_type = base_type
+            qualified_type.qualifier = qualifier
+            base_type._qualified_types[qualifier] = qualified_type
+            if qualifier == 'active':
+                # TODO: raise a proper compilation error.
+                assert base_type.activable
+            if base_type.scope:
+                from .Symtab import qualified_cypclass_scope
+                qualified_type.scope = qualified_cypclass_scope(base_type.scope, qualifier)
+        return qualified_type
 
     def __repr__(self):
-        return "<QualifiedCypclassType %s%r>" % self.qual_base_type
+        return "<QualifiedCypclassType %r>" % self.qual_base_type
 
     def __str__(self):
         return self.declaration_code("", for_display=1)
@@ -4966,8 +4971,8 @@ class QualifiedCypclassType(BaseType):
             return 1
         if src_type.is_null_ptr:
             return 1
-        if src_type.is_qualified_cyp_class and src_type.qualifier in self.assignable_to[self.qualifier]:
-            return self.qual_base_type.assignable_from_resolved_type(src_type.qual_base_type)
+        if src_type.is_cyp_class and src_type.qualifier in self.assignable_to[self.qualifier]:
+            return self.qual_base_type.assignable_from_resolved_type(src_type.qual_base_type or src_type)
         return 0
 
     def same_as(self, other_type):
@@ -5069,8 +5074,7 @@ class CEnumType(CIntLike, CType):
             base_code = self.name
         else:
             if self.namespace:
-                base_code = "%s::%s" % (
-                    namespace_declaration_code(self.namespace), self.cname)
+                base_code = namespace_declaration_code(self.namespace, self.cname, for_display)
             elif self.typedef_flag:
                 base_code = self.cname
             else:
@@ -5132,7 +5136,7 @@ class CTupleType(CType):
         else:
             base_code = self.base_declaration_code(self.cname, entity_code)
             if self.templated_namespace is not None:
-                return "%s::%s" % (namespace_declaration_code(self.templated_namespace), base_code)
+                return namespace_declaration_code(self.templated_namespace, base_code, for_display)
             else:
                 return base_code
 
@@ -5923,6 +5927,10 @@ def viewpoint_adaptation(base_type, qualifier = 'iso->'):
     if base_type.is_qualified_cyp_class:
         return base_type
     if base_type.is_cyp_class:
+        if qualifier.startswith('iso'):
+            qualifier = 'iso->'
+        elif qualifier.startswith('lock'):
+            qualifier = 'lock->'
         return QualifiedCypclassType(base_type, qualifier)
     return base_type
 
@@ -6015,16 +6023,18 @@ def cap_length(s, max_prefix=63, max_len=1024):
     else:
         return '%x__%s__etc' % (abs(hash(s)) % (1<<20), s[:max_len-17])
 
-def namespace_declaration_code(namespace):
+def namespace_declaration_code(namespace, entity_code, for_display=0):
     """
     Add 'typename' to the beginning of the declaration code when the namespace is template-dependent.
     """
+    if for_display:
+        return "%s.%s" % (namespace.declaration_code('', for_display=1), entity_code)
     base_code = namespace.empty_declaration_code()
     if not base_code.startswith("typename "):
         if hasattr(namespace, 'templates') and namespace.templates is not None:
             if any(isinstance(t, TemplatePlaceholderType) for t in namespace.templates):
                 base_code = "typename %s" % base_code
-    return base_code
+    return "%s::%s" % (base_code, entity_code)
 
 def template_parameter_code(T, for_display = 0, pyrex = 0):
     """

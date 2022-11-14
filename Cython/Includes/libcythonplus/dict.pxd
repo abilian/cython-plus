@@ -167,7 +167,7 @@ cdef cypclass cypdict[K, V]:
         index = dereference(it).second
         self._indices.erase(it)
         if index < self._items.size() - 1:
-            self._items[index] = self._items[self._indices.size() - 1]
+            self._items[index] = self._items[self._items.size() - 1]
         self._items.pop_back()
 
     void update(self, const cypdict[K, V] other) except ~:

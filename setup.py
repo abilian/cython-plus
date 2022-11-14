@@ -20,7 +20,7 @@ PYTHON_REQUIRES = '>=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*'
 # Metadata for the Cython+ project
 #
 NAME = "cython-plus"
-VERSION = "0.1.0.post2"
+VERSION = "0.1.0.post3"
 HOME = "https://cython.plus/"
 AUTHOR = 'The Cython+ consortium + the original Cython authors'
 AUTHOR_EMAIL = 'contact@cython.plus'
